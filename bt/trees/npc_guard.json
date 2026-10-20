@@ -1,0 +1,153 @@
+{
+  "type": "Selector",
+  "label": "守卫",
+  "comment": "巡逻村庄，攻击靠近的怪物，残血自疗",
+  "services": [
+    {
+      "type": "UpdateTarget",
+      "label": "警戒",
+      "properties": [
+        {
+          "name": "Range",
+          "value": 260
+        }
+      ],
+      "timeBetweenTicks": 0.5
+    }
+  ],
+  "childNodes": [
+    {
+      "type": "CastSkill",
+      "label": "自我治疗",
+      "properties": [
+        {
+          "name": "Slot",
+          "value": 2
+        }
+      ],
+      "decorators": [
+        {
+          "type": "HpBelow",
+          "properties": [
+            {
+              "name": "Percent",
+              "value": 40
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "回岗",
+      "decorators": [
+        {
+          "type": "FarFromHome",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 400
+            }
+          ]
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "ClearTarget"
+        },
+        {
+          "type": "ReturnHome"
+        }
+      ]
+    },
+    {
+      "type": "Selector",
+      "label": "战斗",
+      "decorators": [
+        {
+          "type": "HasTarget"
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "CastSkill",
+          "label": "攻击",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 1
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 60
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "ChaseTarget",
+          "properties": [
+            {
+              "name": "StopRange",
+              "value": 45
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "巡逻",
+      "childNodes": [
+        {
+          "type": "Wander",
+          "properties": [
+            {
+              "name": "Radius",
+              "value": 160
+            }
+          ]
+        },
+        {
+          "type": "Say",
+          "properties": [
+            {
+              "name": "Text",
+              "value": "一切正常。"
+            }
+          ],
+          "decorators": [
+            {
+              "type": "Cooldown",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 12
+                }
+              ]
+            },
+            {
+              "type": "ForceSuccess",
+              "comment": "说话冷却中也继续执行后面的节点"
+            }
+          ]
+        },
+        {
+          "type": "Wait",
+          "properties": [
+            {
+              "name": "Seconds",
+              "value": 1.5
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

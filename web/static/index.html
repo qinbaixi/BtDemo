@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BtDemo · 行为树小游戏</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" aria-label="游戏画面"></canvas>
+
+<div id="hud">
+  <section id="panel-self" class="panel">
+    <div class="head"><span id="self-name">连接中…</span><span id="self-lv" class="lv">Lv -</span></div>
+    <div class="bar hp"><div id="self-hp-fill" class="fill"></div><span id="self-hp-text" class="txt">-</span></div>
+    <div class="bar exp"><div id="self-exp-fill" class="fill"></div><span id="self-exp-text" class="txt">-</span></div>
+    <div class="cols">
+      <div>
+        <h4>基础属性</h4>
+        <div id="base-attrs" class="kvs"></div>
+      </div>
+      <div>
+        <h4>派生属性</h4>
+        <div id="derived-attrs" class="kvs"></div>
+      </div>
+    </div>
+    <h4>状态</h4>
+    <div id="buffs" class="buffs"></div>
+  </section>
+
+  <section id="panel-target" class="panel target hidden">
+    <div class="head"><span id="tgt-name">-</span><span id="tgt-lv" class="lv"></span></div>
+    <div class="bar hp"><div id="tgt-hp-fill" class="fill"></div><span id="tgt-hp-text" class="txt">-</span></div>
+  </section>
+
+  <div id="skillbar" class="skillbar"></div>
+  <div id="help" class="help">WASD 移动 · 点击选择目标 · 1-5 释放技能 · G 切换 AOI 网格</div>
+  <div id="conn" class="conn wait">连接中…</div>
+  <div id="toast" class="toast hidden" role="status"></div>
+  <div id="death" class="overlay hidden"><div id="death-text"></div></div>
+</div>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>

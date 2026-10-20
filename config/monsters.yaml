@@ -1,0 +1,92 @@
+# 怪物 / NPC 模板
+#   tree:   使用的行为树，对应 bt/trees/<tree>.json 导出的 Go 文件（internal/ai/trees/<tree>.go）
+#   skills: 技能槽，行为树里 CastSkill 的 Slot 从 1 开始对应这里的顺序
+#   faction: 阵营，敌对关系见 world.yaml 的 hostile
+templates:
+  slime:
+    name: 史莱姆
+    kind: monster
+    faction: monster
+    tree: monster_melee
+    level: 1
+    attrs: { str: 3, agi: 3, int: 1, vit: 5 }
+    speed: 80
+    radius: 14
+    color: "#6ccf6c"
+    skills: [bite, heavy_bite]
+    respawn: 5
+    exp: 25
+  wolf:
+    name: 灰狼
+    kind: monster
+    faction: monster
+    tree: monster_melee
+    level: 3
+    attrs: { str: 8, agi: 10, int: 1, vit: 6 }
+    speed: 130
+    radius: 15
+    color: "#9a9a9a"
+    skills: [bite, heavy_bite]
+    respawn: 6
+    exp: 45
+  skeleton_archer:
+    name: 骷髅弓手
+    kind: monster
+    faction: monster
+    tree: monster_ranged
+    level: 4
+    attrs: { str: 8, agi: 9, int: 2, vit: 5 }
+    speed: 95
+    radius: 14
+    color: "#e8e3d0"
+    skills: [arrow]
+    respawn: 7
+    exp: 55
+  ogre_chief:
+    name: 食人魔首领
+    kind: monster
+    faction: monster
+    tree: monster_boss
+    level: 8
+    attrs: { str: 22, agi: 6, int: 4, vit: 30 }
+    speed: 100
+    radius: 26
+    color: "#c0392b"
+    skills: [smash, boss_whirl, enrage]
+    respawn: 20
+    exp: 300
+  guard:
+    name: 村庄守卫
+    kind: npc
+    faction: guard
+    tree: npc_guard
+    level: 5
+    attrs: { str: 14, agi: 8, int: 3, vit: 14 }
+    speed: 120
+    radius: 16
+    color: "#3b82f6"
+    skills: [guard_hit, guard_heal]
+    respawn: 10
+    exp: 0
+  villager:
+    name: 村民
+    kind: npc
+    faction: villager
+    tree: npc_villager
+    level: 1
+    attrs: { str: 3, agi: 5, int: 3, vit: 4 }
+    speed: 90
+    radius: 13
+    color: "#f4c27a"
+    skills: []
+    respawn: 8
+    exp: 5
+
+# 刷怪点：在 (x, y) 周围 spread 半径内随机生成 count 个
+spawns:
+  - { template: villager,        x: 520,  y: 760,  count: 4, spread: 140 }
+  - { template: guard,           x: 640,  y: 700,  count: 2, spread: 120 }
+  - { template: slime,           x: 1000, y: 900,  count: 5, spread: 200 }
+  - { template: wolf,            x: 900,  y: 330,  count: 4, spread: 160 }
+  - { template: skeleton_archer, x: 1600, y: 800,  count: 4, spread: 200 }
+  - { template: ogre_chief,      x: 2050, y: 1300, count: 1, spread: 0 }

@@ -1,0 +1,55 @@
+{
+  "type": "Selector",
+  "label": "远程怪物",
+  "comment": "保持距离放风筝",
+  "services": [
+    {
+      "type": "UpdateTarget",
+      "label": "刷新仇恨",
+      "properties": [{ "name": "Range", "value": 300 }],
+      "timeBetweenTicks": 0.5
+    }
+  ],
+  "childNodes": [
+    {
+      "type": "Sequence",
+      "label": "脱战回家",
+      "decorators": [{ "type": "FarFromHome", "properties": [{ "name": "Distance", "value": 500 }] }],
+      "childNodes": [
+        { "type": "ClearTarget" },
+        { "type": "ReturnHome" }
+      ]
+    },
+    {
+      "type": "Selector",
+      "label": "战斗",
+      "decorators": [{ "type": "HasTarget" }],
+      "childNodes": [
+        {
+          "type": "Flee",
+          "label": "拉开距离",
+          "properties": [{ "name": "Distance", "value": 140 }],
+          "decorators": [
+            { "type": "TargetInRange", "properties": [{ "name": "Range", "value": 90 }] },
+            { "type": "Cooldown", "properties": [{ "name": "Seconds", "value": 4 }] }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "射击",
+          "properties": [{ "name": "Slot", "value": 1 }],
+          "decorators": [{ "type": "TargetInRange", "properties": [{ "name": "Range", "value": 240 }] }]
+        },
+        { "type": "ChaseTarget", "label": "靠近", "properties": [{ "name": "StopRange", "value": 200 }] }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "闲逛",
+      "childNodes": [
+        { "type": "Wander", "properties": [{ "name": "Radius", "value": 80 }] },
+        { "type": "Wait", "properties": [{ "name": "Seconds", "value": 3 }] }
+      ]
+    }
+  ]
+}

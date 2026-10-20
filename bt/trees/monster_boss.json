@@ -1,0 +1,58 @@
+{
+  "type": "Selector",
+  "label": "首领",
+  "comment": "半血以下狂暴，近身旋风斩",
+  "services": [
+    {
+      "type": "UpdateTarget",
+      "label": "刷新仇恨",
+      "properties": [{ "name": "Range", "value": 260 }],
+      "timeBetweenTicks": 0.5
+    }
+  ],
+  "childNodes": [
+    {
+      "type": "Sequence",
+      "label": "脱战回家",
+      "decorators": [{ "type": "FarFromHome", "properties": [{ "name": "Distance", "value": 500 }] }],
+      "childNodes": [
+        { "type": "ClearTarget" },
+        { "type": "Say", "properties": [{ "name": "Text", "value": "懦夫！" }] },
+        { "type": "ReturnHome" }
+      ]
+    },
+    {
+      "type": "Selector",
+      "label": "战斗",
+      "decorators": [{ "type": "HasTarget" }],
+      "childNodes": [
+        {
+          "type": "Sequence",
+          "label": "狂暴",
+          "decorators": [
+            { "type": "HpBelow", "properties": [{ "name": "Percent", "value": 50 }] },
+            { "type": "Cooldown", "properties": [{ "name": "Seconds", "value": 15 }] }
+          ],
+          "childNodes": [
+            { "type": "CastSkill", "label": "狂暴", "properties": [{ "name": "Slot", "value": 3 }] },
+            { "type": "Say", "properties": [{ "name": "Text", "value": "你激怒我了！" }] }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "旋风斩",
+          "properties": [{ "name": "Slot", "value": 2 }],
+          "decorators": [{ "type": "TargetInRange", "properties": [{ "name": "Range", "value": 90 }] }]
+        },
+        {
+          "type": "CastSkill",
+          "label": "普攻",
+          "properties": [{ "name": "Slot", "value": 1 }],
+          "decorators": [{ "type": "TargetInRange", "properties": [{ "name": "Range", "value": 70 }] }]
+        },
+        { "type": "ChaseTarget", "label": "追击", "properties": [{ "name": "StopRange", "value": 55 }] }
+      ]
+    },
+    { "type": "Wait", "label": "待机", "properties": [{ "name": "Seconds", "value": 1 }] }
+  ]
+}

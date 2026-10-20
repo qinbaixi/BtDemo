@@ -1,0 +1,155 @@
+{
+  "type": "Selector",
+  "label": "村民",
+  "comment": "被攻击就逃跑呼救，平时闲逛聊天",
+  "childNodes": [
+    {
+      "type": "Sequence",
+      "label": "逃跑",
+      "decorators": [
+        {
+          "type": "WasAttacked",
+          "properties": [
+            {
+              "name": "Seconds",
+              "value": 4
+            }
+          ]
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "Say",
+          "properties": [
+            {
+              "name": "Text",
+              "value": "救命啊！"
+            }
+          ],
+          "decorators": [
+            {
+              "type": "Cooldown",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 3
+                }
+              ]
+            },
+            {
+              "type": "ForceSuccess",
+              "comment": "说话冷却中也继续执行后面的节点"
+            }
+          ]
+        },
+        {
+          "type": "Flee",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 200
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "回家",
+      "decorators": [
+        {
+          "type": "FarFromHome",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 300
+            }
+          ]
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "ReturnHome"
+        }
+      ]
+    },
+    {
+      "type": "RandomSelector",
+      "label": "日常",
+      "childNodes": [
+        {
+          "type": "Sequence",
+          "label": "散步",
+          "childNodes": [
+            {
+              "type": "Wander",
+              "properties": [
+                {
+                  "name": "Radius",
+                  "value": 100
+                }
+              ]
+            },
+            {
+              "type": "Wait",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Sequence",
+          "label": "闲聊",
+          "childNodes": [
+            {
+              "type": "Say",
+              "properties": [
+                {
+                  "name": "Text",
+                  "value": "今天天气不错。"
+                }
+              ]
+            },
+            {
+              "type": "Wait",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Sequence",
+          "label": "提醒",
+          "childNodes": [
+            {
+              "type": "Say",
+              "properties": [
+                {
+                  "name": "Text",
+                  "value": "小心东边的骷髅弓手！"
+                }
+              ]
+            },
+            {
+              "type": "Wait",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 3
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

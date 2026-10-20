@@ -1,0 +1,23 @@
+# 技能配置
+#   kind:   target 单体（需要目标）| aoe 以自身为中心的范围伤害 | self 作用于自己（治疗 / 增益）
+#   damage: physical 物理（攻击 vs 防御）| magic 法术（法强 vs 法抗）
+#   伤害 = (攻击 × ratio + base) × 防御减免 × 暴击 × 随机浮动
+#   heal:   治疗量 = 最大生命 × heal
+#   fx:     前端表现 melee | projectile | circle | heal | buff
+skills:
+  slash:      { name: 斩击,   kind: target, range: 70,  cooldown: 0.7, damage: physical, ratio: 1.0, base: 4,  fx: melee,      color: "#ffd166" }
+  fireball:   { name: 火球术, kind: target, range: 280, cooldown: 2.0, damage: magic,    ratio: 1.5, base: 10, fx: projectile, color: "#ff7b39" }
+  whirlwind:  { name: 旋风斩, kind: aoe,    radius: 110, cooldown: 5,  damage: physical, ratio: 1.2, base: 6,  fx: circle,     color: "#e0e0e0" }
+  heal:       { name: 治疗术, kind: self,   cooldown: 8,  heal: 0.35, fx: heal, color: "#7dff9b" }
+  warcry:     { name: 战吼,   kind: self,   cooldown: 15, fx: buff, color: "#ff4d6d",
+                buff: { name: 战吼, duration: 6, atk_pct: 0.4, speed_pct: 0.25 } }
+
+  bite:       { name: 撕咬,   kind: target, range: 60,  cooldown: 1.2, damage: physical, ratio: 1.0, base: 2,  fx: melee, color: "#b8f28b" }
+  heavy_bite: { name: 猛扑,   kind: target, range: 60,  cooldown: 5,   damage: physical, ratio: 1.5, base: 3,  fx: melee, color: "#ffef5c" }
+  arrow:      { name: 骨箭,   kind: target, range: 260, cooldown: 1.6, damage: physical, ratio: 1.1, base: 3,  fx: projectile, color: "#e8e3d0" }
+  smash:      { name: 重锤,   kind: target, range: 75,  cooldown: 1.5, damage: physical, ratio: 1.3, base: 8,  fx: melee, color: "#ff9f43" }
+  boss_whirl: { name: 旋风斩, kind: aoe,    radius: 120, cooldown: 6,  damage: physical, ratio: 1.4, base: 10, fx: circle, color: "#ff6b6b" }
+  enrage:     { name: 狂暴,   kind: self,   cooldown: 20, fx: buff, color: "#ff0040",
+                buff: { name: 狂暴, duration: 8, atk_pct: 0.5, speed_pct: 0.3 } }
+  guard_hit:  { name: 长枪突刺, kind: target, range: 70, cooldown: 1.0, damage: physical, ratio: 1.1, base: 5, fx: melee, color: "#9ad0ff" }
+  guard_heal: { name: 包扎,   kind: self,   cooldown: 12, heal: 0.4, fx: heal, color: "#7dff9b" }

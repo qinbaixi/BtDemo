@@ -1,0 +1,142 @@
+{
+  "types": {
+    "seconds": { "type": "number" }
+  },
+  "nodes": [
+    {
+      "name": "Selector",
+      "icon": "question",
+      "isComposite": true,
+      "description": "依次执行子节点，直到有一个成功"
+    },
+    {
+      "name": "Sequence",
+      "icon": "arrow-right",
+      "isComposite": true,
+      "description": "依次执行子节点，直到有一个失败"
+    },
+    {
+      "name": "Parallel",
+      "icon": "bars",
+      "isComposite": true,
+      "description": "同时执行所有子节点（{{Policy}}）",
+      "properties": [
+        { "name": "Policy", "type": "enum", "values": ["RequireOne", "RequireAll"], "default": "RequireAll" }
+      ]
+    },
+    {
+      "name": "RandomSelector",
+      "icon": "shuffle",
+      "color": "#c0a030",
+      "isComposite": true,
+      "description": "每次进入时随机打乱子节点顺序，直到有一个成功"
+    },
+    {
+      "name": "FindTarget",
+      "icon": "eye",
+      "description": "在 {{Range}} 范围内寻找最近的敌对目标",
+      "properties": [{ "name": "Range", "type": "number", "min": 0, "default": 250, "description": "索敌半径（像素）" }]
+    },
+    {
+      "name": "ClearTarget",
+      "icon": "eraser",
+      "description": "清除当前目标"
+    },
+    {
+      "name": "ChaseTarget",
+      "icon": "person-running",
+      "description": "追击目标直到距离 {{StopRange}} 以内",
+      "properties": [{ "name": "StopRange", "type": "number", "min": 0, "default": 40 }]
+    },
+    {
+      "name": "CastSkill",
+      "icon": "wand-magic-sparkles",
+      "description": "释放技能槽 {{Slot}} 的技能（由 YAML 模板配置）",
+      "properties": [{ "name": "Slot", "type": "number", "min": 1, "max": 8, "default": 1, "description": "怪物模板 skills 列表中的序号，从 1 开始" }]
+    },
+    {
+      "name": "Wander",
+      "icon": "shoe-prints",
+      "description": "在出生点 {{Radius}} 范围内随机走动",
+      "properties": [{ "name": "Radius", "type": "number", "min": 0, "default": 120 }]
+    },
+    {
+      "name": "ReturnHome",
+      "icon": "house",
+      "description": "回到出生点并回满血"
+    },
+    {
+      "name": "Flee",
+      "icon": "person-running",
+      "color": "#c65c8a",
+      "description": "远离目标或攻击者 {{Distance}} 像素",
+      "properties": [{ "name": "Distance", "type": "number", "min": 0, "default": 160 }]
+    },
+    {
+      "name": "Wait",
+      "icon": "hourglass",
+      "description": "等待 {{Seconds}} 秒",
+      "properties": [{ "name": "Seconds", "type": "seconds", "min": 0, "default": 1 }]
+    },
+    {
+      "name": "Say",
+      "icon": "comment",
+      "description": "说：{{Text}}",
+      "properties": [{ "name": "Text", "type": "string", "default": "" }]
+    }
+  ],
+  "decorators": [
+    {
+      "name": "HasTarget",
+      "icon": "crosshairs",
+      "description": "有存活的目标"
+    },
+    {
+      "name": "TargetInRange",
+      "icon": "ruler",
+      "description": "目标在 {{Range}} 以内",
+      "properties": [{ "name": "Range", "type": "number", "min": 0, "default": 60 }]
+    },
+    {
+      "name": "HpBelow",
+      "icon": "heart-crack",
+      "description": "生命低于 {{Percent}}%",
+      "properties": [{ "name": "Percent", "type": "number", "min": 0, "max": 100, "default": 30 }]
+    },
+    {
+      "name": "FarFromHome",
+      "icon": "route",
+      "description": "离出生点超过 {{Distance}}",
+      "properties": [{ "name": "Distance", "type": "number", "min": 0, "default": 400 }]
+    },
+    {
+      "name": "WasAttacked",
+      "icon": "burst",
+      "description": "最近 {{Seconds}} 秒内被攻击过",
+      "properties": [{ "name": "Seconds", "type": "seconds", "min": 0, "default": 3 }]
+    },
+    {
+      "name": "ForceSuccess",
+      "icon": "check",
+      "description": "总是成功（条件不满足或失败时也不让父节点失败）"
+    },
+    {
+      "name": "Cooldown",
+      "icon": "clock",
+      "description": "成功后冷却 {{Seconds}} 秒",
+      "properties": [{ "name": "Seconds", "type": "seconds", "min": 0, "default": 5 }]
+    }
+  ],
+  "services": [
+    {
+      "name": "UpdateTarget",
+      "icon": "satellite-dish",
+      "description": "定期在 {{Range}} 内刷新目标（当前目标无效时）",
+      "properties": [{ "name": "Range", "type": "number", "min": 0, "default": 250 }]
+    }
+  ],
+  "export": {
+    "subtrees": "inline",
+    "go": { "outDir": "../internal/ai/trees", "fileName": "{name}", "package": "trees" }
+  }
+}

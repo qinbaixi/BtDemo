@@ -1,0 +1,323 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --bg: #0b1510;
+  --panel: rgba(12, 22, 17, 0.84);
+  --line: rgba(255, 255, 255, 0.12);
+  --text: #e8f1ea;
+  --muted: #8fa597;
+  --gold: #ffd54a;
+  --good: #7cff9b;
+  --danger: #ef5350;
+  --font: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#game {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hidden { display: none !important; }
+
+.panel {
+  pointer-events: auto;
+  position: absolute;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+}
+
+/* top-left: self */
+#panel-self {
+  top: 12px;
+  left: 12px;
+  width: min(300px, calc(100vw - 24px));
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.lv {
+  color: var(--gold);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar {
+  position: relative;
+  height: 18px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.bar .fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  transition: width 0.15s linear;
+}
+
+.bar.hp .fill { background: linear-gradient(90deg, #2e7d32, #66bb6a); }
+.bar.exp .fill { background: linear-gradient(90deg, #1565c0, #64b5f6); }
+.bar.exp { height: 14px; }
+
+.bar .txt {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  text-shadow: 0 1px 2px #000;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+h4 {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.kvs { display: grid; gap: 2px; }
+
+.kv {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.kv b {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.buffs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 20px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.buff {
+  background: rgba(100, 181, 246, 0.18);
+  border: 1px solid rgba(100, 181, 246, 0.45);
+  border-radius: 6px;
+  padding: 2px 6px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* top-center: selected target */
+.target {
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(260px, 60vw);
+}
+
+.target .head { font-size: 15px; }
+
+/* bottom-center: skill bar */
+.skillbar {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.skill {
+  position: relative;
+  width: 86px;
+  height: 64px;
+  padding: 0;
+  border: 2px solid var(--skill, #555);
+  border-radius: 10px;
+  background: rgba(12, 22, 17, 0.92);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--skill, #555) 35%, transparent);
+}
+
+.skill:hover:not(:disabled) { filter: brightness(1.25); }
+.skill:active:not(:disabled) { transform: scale(0.96); }
+.skill:disabled { opacity: 0.4; cursor: default; }
+
+.skill .key {
+  position: absolute;
+  top: 4px;
+  left: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.skill .sname {
+  font-weight: 600;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.skill .cd {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  background: rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.skill .cdnum {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 2px 4px #000;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* bottom-left help */
+.help {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* top-right connection status */
+.conn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.conn::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #999;
+  vertical-align: middle;
+}
+
+.conn.ok::before { background: var(--good); }
+.conn.wait::before { background: var(--gold); }
+.conn.bad::before { background: var(--danger); }
+
+/* transient message toast */
+.toast {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.75);
+  font-size: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* death overlay */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(60, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+#death-text {
+  font-size: 24px;
+  font-weight: 700;
+  color: #ffb4b4;
+  text-shadow: 0 2px 8px #000;
+}
+
+@media (max-width: 700px) {
+  .cols { grid-template-columns: 1fr; }
+  .target { width: min(220px, 70vw); }
+  .skillbar { gap: 6px; bottom: 10px; }
+  .skill { width: 64px; height: 54px; font-size: 12px; }
+  .help { display: none; }
+  .toast { top: 150px; }
+}

@@ -1,0 +1,53 @@
+{
+  "type": "Selector",
+  "label": "近战怪物",
+  "comment": "脱战回家 > 战斗 > 索敌 > 闲逛",
+  "services": [
+    {
+      "type": "UpdateTarget",
+      "label": "刷新仇恨",
+      "properties": [{ "name": "Range", "value": 220 }],
+      "timeBetweenTicks": 0.5
+    }
+  ],
+  "childNodes": [
+    {
+      "type": "Sequence",
+      "label": "脱战回家",
+      "decorators": [{ "type": "FarFromHome", "properties": [{ "name": "Distance", "value": 450 }] }],
+      "childNodes": [
+        { "type": "ClearTarget" },
+        { "type": "Say", "properties": [{ "name": "Text", "value": "算你跑得快……" }] },
+        { "type": "ReturnHome" }
+      ]
+    },
+    {
+      "type": "Selector",
+      "label": "战斗",
+      "decorators": [{ "type": "HasTarget" }],
+      "childNodes": [
+        {
+          "type": "CastSkill",
+          "label": "重击",
+          "properties": [{ "name": "Slot", "value": 2 }],
+          "decorators": [{ "type": "TargetInRange", "properties": [{ "name": "Range", "value": 60 }] }]
+        },
+        {
+          "type": "CastSkill",
+          "label": "普攻",
+          "properties": [{ "name": "Slot", "value": 1 }],
+          "decorators": [{ "type": "TargetInRange", "properties": [{ "name": "Range", "value": 60 }] }]
+        },
+        { "type": "ChaseTarget", "label": "追击", "properties": [{ "name": "StopRange", "value": 45 }] }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "闲逛",
+      "childNodes": [
+        { "type": "Wander", "properties": [{ "name": "Radius", "value": 120 }] },
+        { "type": "Wait", "properties": [{ "name": "Seconds", "value": 2 }] }
+      ]
+    }
+  ]
+}
