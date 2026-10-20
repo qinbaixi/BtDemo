@@ -64,3 +64,8 @@ tools/btregistry/    扫描导出文件生成 registry.go
 go vet ./...
 go test ./...
 ```
+
+## GitHub Actions
+
+- `.github/workflows/ci.yml`：每次推送和 PR 都会运行 gofmt、`go vet`、检查 `registry.go` 是否最新、`go test -race`、构建并冒烟启动服务、检查前端语法；另一个任务拉取 BtTree，用它的导出器重新导出 `bt/`，确认提交的 `internal/ai/trees` 与树文件一致（BtTree 若为私有仓库，需要添加有读权限的 `BTTREE_TOKEN` secret）。
+- `.github/workflows/release.yml`：推送 `v*` 标签时构建 Linux / macOS / Windows 的可执行文件（附带 `config/` 与 README），发布到 GitHub Releases。

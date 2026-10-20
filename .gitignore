@@ -1,3 +1,6 @@
 /btdemo
 /server
 *.exe
+/.bttree
+/dist
+/build

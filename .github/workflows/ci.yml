@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, "claude/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Behavior tree registry is up to date
+        run: |
+          go generate ./internal/ai/trees
+          git diff --exit-code -- internal/ai/trees
+
+      - name: go test
+        run: go test -race ./...
+
+      - name: Build
+        run: go build -o btdemo ./cmd/server
+
+      - name: Smoke test the server
+        run: |
+          ./btdemo -addr :8080 &
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:8080/ >/dev/null && break
+            sleep 0.5
+          done
+          curl -sf http://localhost:8080/ | grep -q '<canvas'
+          curl -sf http://localhost:8080/main.js >/dev/null
+          kill %1
+
+      - name: Check client syntax
+        run: node --check web/static/main.js
+
+  bt-export:
+    name: Exported trees match bt/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: qinbaixi/BtTree
+          path: .bttree
+          # BtTree is read with the default token; if it is private, add a
+          # BTTREE_TOKEN secret with read access to it.
+          token: ${{ secrets.BTTREE_TOKEN || github.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install BtTree
+        working-directory: .bttree
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Re-export bt/ with BtTree
+        run: |
+          npx --prefix .bttree tsx .bttree/packages/server/src/cli.ts export bt --format go
+          go generate ./internal/ai/trees
+
+      - name: Committed Go files match the trees
+        run: |
+          if ! git diff --exit-code -- internal/ai/trees; then
+            echo "::error::internal/ai/trees is stale. Run scripts/export-bt.sh and commit the result."
+            exit 1
+          fi
