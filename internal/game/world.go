@@ -2,7 +2,6 @@ package game
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -12,15 +11,18 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/ai/trees"
 	"github.com/qinbaixi/BtDemo/internal/bt"
 	"github.com/qinbaixi/BtDemo/internal/config"
+	"github.com/qinbaixi/BtDemo/internal/pb"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // Event is a one-off message such as damage, a cast or a death. It is sent to
 // every player who can see the entity it happened at.
-type Event map[string]any
+type Event = pb.Event
 
 type pendingEvent struct {
 	cell int
-	ev   Event
+	ev   *Event
 }
 
 // World owns all game state. Everything runs on the goroutine that calls Run;
@@ -206,11 +208,11 @@ func (w *World) moveBy(e *Entity, dx, dy float64) {
 
 // Say shows a speech bubble over e.
 func (w *World) Say(e *Entity, text string) {
-	w.Emit(e, Event{"k": "say", "id": e.ID, "text": text})
+	w.Emit(e, &Event{Kind: pb.EventKind_SAY.Enum(), Id: i32(e.ID), Text: proto.String(text)})
 }
 
 // Emit queues ev for every player who can see e.
-func (w *World) Emit(e *Entity, ev Event) {
+func (w *World) Emit(e *Entity, ev *Event) {
 	w.events = append(w.events, pendingEvent{cell: w.Grid.CellOf(e.X, e.Y), ev: ev})
 }
 
@@ -224,7 +226,7 @@ func (w *World) Kill(e, killer *Entity) {
 	e.Target = 0
 	e.Buffs = nil // MoveX/MoveY stay so a held key keeps working after respawn
 	e.Action = ""
-	w.Emit(e, Event{"k": "die", "id": e.ID})
+	w.Emit(e, &Event{Kind: pb.EventKind_DIE.Enum(), Id: i32(e.ID)})
 	delay := w.Cfg.World.Player.Respawn
 	if e.Tmpl != nil {
 		delay = e.Tmpl.Respawn
@@ -251,7 +253,7 @@ func (w *World) respawn(e *Entity) {
 		e.AI = bt.NewInstance(e.AI.Tree, w.reg, e.AI.Agent, w.Rand)
 	}
 	w.Grid.Moved(e)
-	w.Emit(e, Event{"k": "respawn", "id": e.ID})
+	w.Emit(e, &Event{Kind: pb.EventKind_RESPAWN.Enum(), Id: i32(e.ID)})
 }
 
 func (w *World) scatter(x, y, spread float64) (float64, float64) {
@@ -277,6 +279,7 @@ func (w *World) spawnTemplate(t *config.Template, x, y float64) *Entity {
 	e := w.newEntity()
 	e.Kind = Kind(t.Kind)
 	e.Name, e.Faction, e.Color, e.Radius, e.Tmpl = t.Name, t.Faction, t.Color, t.Radius, t
+	e.Model = t.Model
 	e.X, e.Y, e.HomeX, e.HomeY = x, y, x, y
 	e.Level, e.Base, e.Speed = t.Level, t.Attrs, t.Speed
 	e.Skills = w.skillsOf(t.Skills)
@@ -293,7 +296,7 @@ func (w *World) spawnPlayer() *Entity {
 	e := w.newEntity()
 	e.Kind, e.Faction = KindPlayer, "player"
 	e.Name = fmt.Sprintf("%s%d", p.NamePrefix, e.ID)
-	e.Color, e.Radius = p.Color, p.Radius
+	e.Color, e.Radius, e.Model = p.Color, p.Radius, p.Model
 	e.X, e.Y = w.scatter(p.Spawn.X, p.Spawn.Y, p.Spawn.Spread)
 	e.HomeX, e.HomeY = e.X, e.Y
 	e.Level, e.Base, e.Growth, e.Speed = 1, p.Attrs, p.Growth, p.Speed
@@ -319,28 +322,28 @@ func addAttrs(a *config.Attrs, b config.Attrs) {
 // Session is one connected player.
 type Session struct {
 	Player  *Entity
-	Out     chan []byte
+	Out     chan []byte // encoded pb.ServerMsg frames
 	visible map[int]bool
-	evs     []Event
 }
 
 // Join creates a new character for a connection. Call it on the world goroutine.
 func (w *World) Join() *Session {
 	s := &Session{Player: w.spawnPlayer(), Out: make(chan []byte, 64), visible: map[int]bool{}}
 	w.sessions[s] = true
-	skills := make([]map[string]any, 0, len(s.Player.Skills))
+	welcome := &pb.Welcome{
+		Id:      i32(s.Player.ID),
+		MapW:    f32(w.Cfg.World.Map.Width),
+		MapH:    f32(w.Cfg.World.Map.Height),
+		AoiCell: f32(w.Grid.Cell),
+	}
 	for i, sk := range s.Player.Skills {
-		skills = append(skills, map[string]any{
-			"slot": i + 1, "id": sk.ID, "name": sk.Name, "kind": sk.Kind, "range": sk.Range,
-			"radius": sk.Radius, "cooldown": sk.Cooldown, "color": sk.Color,
+		welcome.Skills = append(welcome.Skills, &pb.SkillInfo{
+			Slot: i32(i + 1), Id: proto.String(sk.ID), Name: proto.String(sk.Name), Kind: proto.String(sk.Kind),
+			Range: f32(sk.Range), Radius: f32(sk.Radius), Cooldown: f32(sk.Cooldown),
+			Color: proto.String(sk.Color), Fx: proto.String(sk.FX),
 		})
 	}
-	w.send(s, map[string]any{
-		"t": "welcome", "id": s.Player.ID,
-		"map":    map[string]any{"w": w.Cfg.World.Map.Width, "h": w.Cfg.World.Map.Height},
-		"aoi":    map[string]any{"cell": w.Grid.Cell},
-		"skills": skills,
-	})
+	w.send(s, &pb.ServerMsg{Msg: &pb.ServerMsg_Welcome{Welcome: welcome}})
 	return s
 }
 
@@ -356,24 +359,25 @@ func (w *World) Leave(s *Session) {
 }
 
 // Input applies a client message. Call it on the world goroutine.
-func (w *World) Input(s *Session, msg ClientMsg) {
+func (w *World) Input(s *Session, msg *pb.ClientMsg) {
 	e := s.Player
-	switch msg.T {
-	case "move":
-		d := math.Hypot(msg.DX, msg.DY)
-		if d > 0 {
-			e.MoveX, e.MoveY = msg.DX/d, msg.DY/d
+	switch m := msg.Msg.(type) {
+	case *pb.ClientMsg_Move:
+		dx, dy := float64(m.Move.GetDx()), float64(m.Move.GetDy())
+		if d := math.Hypot(dx, dy); d > 0 && !math.IsNaN(d) && !math.IsInf(d, 0) {
+			e.MoveX, e.MoveY = dx/d, dy/d
 		} else {
 			e.MoveX, e.MoveY = 0, 0
 		}
-	case "target":
-		e.Target = msg.Target
-	case "cast":
-		if msg.Slot < 1 || msg.Slot > len(e.Skills) {
+	case *pb.ClientMsg_Target:
+		e.Target = int(m.Target.GetId())
+	case *pb.ClientMsg_Cast:
+		slot := int(m.Cast.GetSlot())
+		if slot < 1 || slot > len(e.Skills) {
 			return
 		}
-		sk := e.Skills[msg.Slot-1]
-		target := msg.Target
+		sk := e.Skills[slot-1]
+		target := int(m.Cast.GetTarget())
 		if target == 0 {
 			target = e.Target
 		}
@@ -384,25 +388,16 @@ func (w *World) Input(s *Session, msg ClientMsg) {
 			}
 		}
 		if err := w.Cast(e, sk, target); err != nil {
-			w.send(s, map[string]any{"t": "msg", "text": err.Error()})
+			w.send(s, &pb.ServerMsg{Msg: &pb.ServerMsg_Toast{Toast: &pb.Toast{Text: proto.String(err.Error())}}})
 		}
 	}
 }
 
-// ClientMsg is a message from the browser.
-type ClientMsg struct {
-	T      string  `json:"t"`
-	DX     float64 `json:"dx"`
-	DY     float64 `json:"dy"`
-	Slot   int     `json:"slot"`
-	Target int     `json:"target"`
-}
-
-func (w *World) send(s *Session, v any) {
+func (w *World) send(s *Session, msg *pb.ServerMsg) {
 	if !w.sessions[s] {
 		return
 	}
-	data, err := json.Marshal(v)
+	data, err := proto.Marshal(msg)
 	if err != nil {
 		log.Printf("marshal: %v", err)
 		return
@@ -417,15 +412,6 @@ func (w *World) send(s *Session, v any) {
 	}
 }
 
-func entityInfo(e *Entity) map[string]any {
-	return map[string]any{
-		"id": e.ID, "kind": e.Kind, "name": e.Name, "color": e.Color, "r": e.Radius,
-		"lv": e.Level, "x": round1(e.X), "y": round1(e.Y), "hp": math.Ceil(e.HP), "maxHp": math.Ceil(e.Attr.MaxHP),
-	}
-}
-
-func round1(v float64) float64 { return math.Round(v*10) / 10 }
-
 // flush sends AOI enter / leave, the state of visible entities, queued events
 // and the player's own attributes to every session.
 func (w *World) flush() {
@@ -433,62 +419,44 @@ func (w *World) flush() {
 		p := s.Player
 		now := map[int]*Entity{}
 		w.Grid.Neighbors(p.cell, func(e *Entity) { now[e.ID] = e })
-		var enter []map[string]any
-		var leave []int
+		enter := &pb.Enter{}
+		leave := &pb.Leave{}
 		for id, e := range now {
 			if !s.visible[id] {
-				enter = append(enter, entityInfo(e))
+				enter.Ents = append(enter.Ents, entityInfo(e))
 			}
 		}
 		for id := range s.visible {
 			if now[id] == nil {
-				leave = append(leave, id)
+				leave.Ids = append(leave.Ids, int32(id))
 			}
 		}
 		s.visible = map[int]bool{}
 		for id := range now {
 			s.visible[id] = true
 		}
-		if len(leave) > 0 {
-			w.send(s, map[string]any{"t": "leave", "ids": leave})
+		if len(leave.Ids) > 0 {
+			w.send(s, &pb.ServerMsg{Msg: &pb.ServerMsg_Leave{Leave: leave}})
 		}
-		if len(enter) > 0 {
-			w.send(s, map[string]any{"t": "enter", "ents": enter})
+		if len(enter.Ents) > 0 {
+			w.send(s, &pb.ServerMsg{Msg: &pb.ServerMsg_Enter{Enter: enter}})
 		}
 
-		states := make([]map[string]any, 0, len(now))
+		sync := &pb.Sync{Time: f32(round1(w.Now)), Self: w.selfInfo(p)}
 		for _, e := range now {
-			states = append(states, map[string]any{
-				"id": e.ID, "x": round1(e.X), "y": round1(e.Y), "hp": math.Ceil(e.HP),
-				"maxHp": math.Ceil(e.Attr.MaxHP), "lv": e.Level, "act": e.Action, "tg": e.Target, "dead": e.Dead,
+			sync.Ents = append(sync.Ents, &pb.EntityState{
+				Id: i32(e.ID), X: f32(round1(e.X)), Y: f32(round1(e.Y)),
+				Hp: f32(math.Ceil(e.HP)), MaxHp: f32(math.Ceil(e.Attr.MaxHP)), Lv: i32(e.Level),
+				Act: proto.String(e.Action), Tg: i32(e.Target), Dead: proto.Bool(e.Dead),
 			})
 		}
-		var evs []Event
 		pc := w.Grid.CellOf(p.X, p.Y)
 		for _, pe := range w.events {
 			if w.Grid.Sees(pc, pe.cell) {
-				evs = append(evs, pe.ev)
+				sync.Ev = append(sync.Ev, pe.ev)
 			}
 		}
-		w.send(s, map[string]any{"t": "sync", "time": round1(w.Now), "ents": states, "ev": evs, "self": w.selfInfo(p)})
+		w.send(s, &pb.ServerMsg{Msg: &pb.ServerMsg_Sync{Sync: sync}})
 	}
 	w.events = w.events[:0]
-}
-
-func (w *World) selfInfo(e *Entity) map[string]any {
-	cds := map[string]float64{}
-	for id, ready := range e.Cooldowns {
-		if left := ready - w.Now; left > 0 {
-			cds[id] = math.Round(left*10) / 10
-		}
-	}
-	buffs := make([]map[string]any, 0, len(e.Buffs))
-	for _, b := range e.Buffs {
-		buffs = append(buffs, map[string]any{"name": b.Cfg.Name, "left": math.Round((b.Until-w.Now)*10) / 10})
-	}
-	return map[string]any{
-		"lv": e.Level, "exp": e.Exp, "next": ExpToNext(e.Level), "hp": math.Ceil(e.HP),
-		"base": e.Base, "attr": e.Attr, "cds": cds, "buffs": buffs, "dead": e.Dead,
-		"respawnIn": math.Max(0, math.Round((e.RespawnAt-w.Now)*10)/10),
-	}
 }

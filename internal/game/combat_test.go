@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/qinbaixi/BtDemo/internal/config"
+	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
 var (
@@ -139,7 +140,7 @@ func TestDamageSetsLastAttacker(t *testing.T) {
 	if m.LastAttacker != p.ID || m.LastHitAt != 3 {
 		t.Errorf("LastAttacker = %d, LastHitAt = %v; want %d, 3", m.LastAttacker, m.LastHitAt, p.ID)
 	}
-	if len(w.events) < 2 || w.events[0].ev["k"] != "cast" || w.events[1].ev["k"] != "dmg" {
+	if len(w.events) < 2 || w.events[0].ev.GetKind() != pb.EventKind_CAST || w.events[1].ev.GetKind() != pb.EventKind_DAMAGE {
 		t.Errorf("events = %v, want cast then dmg", w.events)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/qinbaixi/BtDemo/internal/config"
+	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
 // User-facing reasons a skill cannot be cast.
@@ -29,7 +30,7 @@ func (w *World) GainExp(e *Entity, n int) {
 		addAttrs(&e.Base, e.Growth)
 		w.Recalc(e)
 		e.HP = e.Attr.MaxHP
-		w.Emit(e, Event{"k": "lvl", "id": e.ID, "lv": e.Level})
+		w.Emit(e, &Event{Kind: pb.EventKind_LEVEL_UP.Enum(), Id: i32(e.ID), Lv: i32(e.Level)})
 	}
 }
 
@@ -89,12 +90,13 @@ func (w *World) Cast(e *Entity, sk *config.Skill, targetID int) error {
 		if EdgeDist(e, t) > sk.Range {
 			return errTooFar
 		}
-		w.Emit(e, Event{"k": "cast", "src": e.ID, "dst": t.ID, "skill": sk.ID, "name": sk.Name, "fx": sk.FX, "color": sk.Color})
+		w.Emit(e, castEvent(e, t, sk))
 		dmg, crit := w.CalcDamage(e, t, sk)
 		w.applyDamage(e, t, dmg, crit, sk)
 	case "aoe":
-		w.Emit(e, Event{"k": "cast", "src": e.ID, "skill": sk.ID, "name": sk.Name, "fx": sk.FX, "color": sk.Color,
-			"radius": sk.Radius, "x": e.X, "y": e.Y})
+		ev := castEvent(e, nil, sk)
+		ev.Radius, ev.X, ev.Y = f32(sk.Radius), f32(e.X), f32(e.Y)
+		w.Emit(e, ev)
 		// Collect first so damage (and any kill it causes) never changes the grid mid-walk.
 		var targets []*Entity
 		// Candidates by center distance; the edge test below is exact.
@@ -108,18 +110,18 @@ func (w *World) Cast(e *Entity, sk *config.Skill, targetID int) error {
 			w.applyDamage(e, o, dmg, crit, sk)
 		}
 	case "self":
-		w.Emit(e, Event{"k": "cast", "src": e.ID, "dst": e.ID, "skill": sk.ID, "name": sk.Name, "fx": sk.FX, "color": sk.Color})
+		w.Emit(e, castEvent(e, e, sk))
 		if sk.Heal > 0 {
 			amount := math.Round(e.Attr.MaxHP * sk.Heal)
 			e.HP = math.Min(e.Attr.MaxHP, e.HP+amount)
-			w.Emit(e, Event{"k": "heal", "dst": e.ID, "v": amount})
+			w.Emit(e, &Event{Kind: pb.EventKind_HEAL.Enum(), Dst: i32(e.ID), Value: f32(amount)})
 		}
 		if sk.Buff != nil {
 			// Recasting refreshes the buff instead of stacking it.
 			filterBuffs(e, func(b *Buff) bool { return b.Cfg.Name != sk.Buff.Name })
 			e.Buffs = append(e.Buffs, &Buff{Cfg: sk.Buff, Until: w.Now + sk.Buff.Duration})
 			w.Recalc(e)
-			w.Emit(e, Event{"k": "buff", "dst": e.ID, "name": sk.Buff.Name, "dur": sk.Buff.Duration})
+			w.Emit(e, &Event{Kind: pb.EventKind_BUFF.Enum(), Dst: i32(e.ID), Name: &sk.Buff.Name, Dur: f32(sk.Buff.Duration)})
 		}
 	default:
 		return errBadSkill
@@ -133,7 +135,7 @@ func (w *World) applyDamage(src, dst *Entity, dmg float64, crit bool, sk *config
 	dst.HP -= dmg
 	dst.LastAttacker = src.ID
 	dst.LastHitAt = w.Now
-	w.Emit(dst, Event{"k": "dmg", "src": src.ID, "dst": dst.ID, "v": dmg, "crit": crit, "skill": sk.ID})
+	w.Emit(dst, &Event{Kind: pb.EventKind_DAMAGE.Enum(), Src: i32(src.ID), Dst: i32(dst.ID), Value: f32(dmg), Crit: &crit, Skill: &sk.ID})
 	if dst.HP <= 0 {
 		w.Kill(dst, src)
 	}

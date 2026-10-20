@@ -34,6 +34,7 @@ type Player struct {
 	Speed      float64  `yaml:"speed"`
 	Radius     float64  `yaml:"radius"`
 	Color      string   `yaml:"color"`
+	Model      string   `yaml:"model"`
 	Respawn    float64  `yaml:"respawn"`
 	Skills     []string `yaml:"skills"`
 }
@@ -91,6 +92,7 @@ type Template struct {
 	Speed   float64  `yaml:"speed"`
 	Radius  float64  `yaml:"radius"`
 	Color   string   `yaml:"color"`
+	Model   string   `yaml:"model"` // client look; defaults to the template id
 	Skills  []string `yaml:"skills"`
 	Respawn float64  `yaml:"respawn"`
 	Exp     int      `yaml:"exp"`
@@ -164,6 +166,9 @@ func (c *Config) validate(knownTrees map[string]bool) error {
 	if w.Player.Level <= 0 {
 		w.Player.Level = 1
 	}
+	if w.Player.Model == "" {
+		w.Player.Model = "knight"
+	}
 	for f, targets := range w.Hostile {
 		for _, t := range targets {
 			if _, ok := w.Hostile[t]; !ok {
@@ -202,6 +207,9 @@ func (c *Config) validate(knownTrees map[string]bool) error {
 		t.ID = id
 		if t.Level <= 0 {
 			t.Level = 1
+		}
+		if t.Model == "" {
+			t.Model = id
 		}
 		if t.Kind != "monster" && t.Kind != "npc" {
 			return fmt.Errorf("monsters.yaml: template %s has kind %q, want monster or npc", id, t.Kind)

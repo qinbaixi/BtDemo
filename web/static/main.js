@@ -5,6 +5,8 @@
 
 /* ============================== config ============================== */
 
+import { loadProtocol } from './protocol.js';
+
 const LERP_MS = 100;          // position interpolation window between 10 Hz syncs
 const SNAP_DIST = 400;        // larger jumps snap instead of sliding
 const FX_LIFE = { melee: 220, projectile: 250, circle: 450, heal: 700, buff: 900 };
@@ -62,6 +64,7 @@ const keys = new Set();   // held KeyboardEvent.code values
 const ui = { attr: {}, skillBtns: {} };
 let ctx = null;
 let ws = null;
+let protocol = null; // set by loadProtocol() before the first connect
 let retryTimer = 0;
 let toastTimer = 0;
 let lastMove = '';
@@ -166,11 +169,12 @@ function connect() {
     return;
   }
   ws = sock;
+  sock.binaryType = 'arraybuffer';
   sock.onopen = () => setConn('wait', '已连接，等待数据…');
   sock.onmessage = (ev) => {
     let m;
-    try { m = JSON.parse(ev.data); } catch { return; }
-    handleMsg(m);
+    try { m = protocol.decode(ev.data); } catch (err) { console.warn('bad frame', err); return; }
+    if (m) handleMsg(m);
   };
   sock.onclose = () => {
     if (ws === sock) ws = null;
@@ -189,7 +193,10 @@ function scheduleReconnect() {
 }
 
 function send(obj) {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    const data = protocol.encode(obj);
+    if (data) ws.send(data);
+  }
 }
 
 function handleMsg(m) {
@@ -964,8 +971,14 @@ function init() {
     if (document.hidden) releaseKeys();
   });
 
-  connect();
   requestAnimationFrame(frame);
+  loadProtocol().then((p) => {
+    protocol = p;
+    connect();
+  }).catch((err) => {
+    console.error(err);
+    setConn('bad', '协议加载失败');
+  });
 }
 
 init();

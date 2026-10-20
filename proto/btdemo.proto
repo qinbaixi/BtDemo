@@ -1,0 +1,197 @@
+// BtDemo client/server protocol. Every WebSocket frame is one binary
+// ClientMsg (browser -> server) or ServerMsg (server -> browser).
+//
+// Regenerate the Go code with `go generate ./internal/pb` after editing.
+// The browser loads this same file at runtime with protobuf.js.
+syntax = "proto2";
+
+package btdemo;
+
+option go_package = "github.com/qinbaixi/BtDemo/internal/pb";
+
+// ---------- browser -> server ----------
+
+message ClientMsg {
+  oneof msg {
+    Move move = 1;
+    SetTarget target = 2;
+    Cast cast = 3;
+  }
+}
+
+// Move sets the held movement direction; the server normalizes it. 0,0 stops.
+message Move {
+  required float dx = 1;
+  required float dy = 2;
+}
+
+// SetTarget selects an entity; 0 clears the selection.
+message SetTarget {
+  required int32 id = 1;
+}
+
+// Cast uses the skill in a 1-based slot on target (0 = the selected target).
+message Cast {
+  required int32 slot = 1;
+  optional int32 target = 2;
+}
+
+// ---------- server -> browser ----------
+
+message ServerMsg {
+  oneof msg {
+    Welcome welcome = 1;
+    Enter enter = 2;
+    Leave leave = 3;
+    Sync sync = 4;
+    Toast toast = 5;
+  }
+}
+
+message SkillInfo {
+  required int32 slot = 1;
+  required string id = 2;
+  required string name = 3;
+  required string kind = 4;  // target | aoe | self
+  optional float range = 5;
+  optional float radius = 6;
+  optional float cooldown = 7;
+  optional string color = 8;
+  optional string fx = 9;    // melee | projectile | circle | heal | buff
+}
+
+// Welcome is the first message after connecting: a new character was created.
+message Welcome {
+  required int32 id = 1;
+  required float map_w = 2;
+  required float map_h = 3;
+  required float aoi_cell = 4;
+  repeated SkillInfo skills = 5;
+}
+
+enum EntityKind {
+  PLAYER = 1;
+  MONSTER = 2;
+  NPC = 3;
+}
+
+// EntityInfo is the static part of an entity, sent when it enters the AOI.
+message EntityInfo {
+  required int32 id = 1;
+  required EntityKind kind = 2;
+  required string name = 3;
+  optional string color = 4;
+  optional float r = 5;
+  optional int32 lv = 6;
+  required float x = 7;
+  required float y = 8;
+  optional float hp = 9;
+  optional float max_hp = 10;
+  optional string model = 11;  // which look the client draws, e.g. knight, slime
+}
+
+message Enter {
+  repeated EntityInfo ents = 1;
+}
+
+message Leave {
+  repeated int32 ids = 1 [packed = true];
+}
+
+// EntityState is the dynamic part of a visible entity, sent on every sync.
+message EntityState {
+  required int32 id = 1;
+  required float x = 2;
+  required float y = 3;
+  optional float hp = 4;
+  optional float max_hp = 5;
+  optional int32 lv = 6;
+  optional string act = 7;   // behavior tree task currently running
+  optional int32 tg = 8;     // current target id
+  optional bool dead = 9;
+}
+
+enum EventKind {
+  CAST = 1;
+  DAMAGE = 2;
+  HEAL = 3;
+  BUFF = 4;
+  DIE = 5;
+  RESPAWN = 6;
+  SAY = 7;
+  LEVEL_UP = 8;
+}
+
+// Event is a one-off thing that happened inside the AOI. Which fields are set
+// depends on kind.
+message Event {
+  required EventKind kind = 1;
+  optional int32 src = 2;     // CAST, DAMAGE
+  optional int32 dst = 3;     // CAST, DAMAGE, HEAL, BUFF
+  optional int32 id = 4;      // DIE, RESPAWN, SAY, LEVEL_UP
+  optional string skill = 5;  // CAST, DAMAGE
+  optional string name = 6;   // CAST: skill name, BUFF: buff name
+  optional string fx = 7;     // CAST
+  optional string color = 8;  // CAST
+  optional float radius = 9;  // CAST of an aoe skill
+  optional float x = 10;      // CAST of an aoe skill
+  optional float y = 11;
+  optional float value = 12;  // DAMAGE, HEAL
+  optional bool crit = 13;    // DAMAGE
+  optional string text = 14;  // SAY
+  optional int32 lv = 15;     // LEVEL_UP
+  optional float dur = 16;    // BUFF
+}
+
+message Attrs {
+  optional float str = 1;
+  optional float agi = 2;
+  optional float int = 3;
+  optional float vit = 4;
+}
+
+message Derived {
+  optional float max_hp = 1;
+  optional float atk = 2;
+  optional float matk = 3;
+  optional float def = 4;
+  optional float mdef = 5;
+  optional float crit = 6;
+  optional float crit_dmg = 7;
+  optional float speed = 8;
+}
+
+message SkillCooldown {
+  required string skill = 1;
+  required float left = 2;
+}
+
+message BuffInfo {
+  required string name = 1;
+  required float left = 2;
+}
+
+// SelfInfo is the player's own character sheet.
+message SelfInfo {
+  required int32 lv = 1;
+  required int32 exp = 2;
+  required int32 next = 3;
+  required float hp = 4;
+  optional Attrs base = 5;
+  optional Derived attr = 6;
+  repeated SkillCooldown cds = 7;
+  repeated BuffInfo buffs = 8;
+  optional bool dead = 9;
+  optional float respawn_in = 10;
+}
+
+message Sync {
+  required float time = 1;
+  repeated EntityState ents = 2;
+  repeated Event ev = 3;
+  optional SelfInfo self = 4;
+}
+
+message Toast {
+  required string text = 1;
+}

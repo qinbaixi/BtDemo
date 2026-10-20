@@ -42,6 +42,7 @@ type Entity struct {
 	Faction string
 	Color   string
 	Radius  float64
+	Model   string           // client look, e.g. knight, slime
 	Tmpl    *config.Template // nil for players
 
 	X, Y         float64

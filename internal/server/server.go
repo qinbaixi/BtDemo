@@ -2,15 +2,17 @@
 package server
 
 import (
-	"encoding/json"
 	"io/fs"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/qinbaixi/BtDemo/internal/game"
+	"github.com/qinbaixi/BtDemo/internal/pb"
+	btproto "github.com/qinbaixi/BtDemo/proto"
 )
 
 var upgrader = websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 4096}
@@ -19,6 +21,10 @@ var upgrader = websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 4096}
 func Handler(w *game.World, static fs.FS) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.FS(static)))
+	mux.HandleFunc("/btdemo.proto", func(rw http.ResponseWriter, _ *http.Request) {
+		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		rw.Write(btproto.Source)
+	})
 	mux.HandleFunc("/ws", func(rw http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(rw, r, nil)
 		if err != nil {
@@ -41,7 +47,7 @@ func serve(w *game.World, conn *websocket.Conn) {
 	go func() {
 		for data := range s.Out {
 			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			if err := conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
 				conn.Close()
 				for range s.Out { // drain until Leave closes the channel
 				}
@@ -55,12 +61,15 @@ func serve(w *game.World, conn *websocket.Conn) {
 
 	conn.SetReadLimit(4096)
 	for {
-		_, data, err := conn.ReadMessage()
+		typ, data, err := conn.ReadMessage()
 		if err != nil {
 			break
 		}
-		var msg game.ClientMsg
-		if json.Unmarshal(data, &msg) != nil {
+		if typ != websocket.BinaryMessage {
+			continue
+		}
+		msg := &pb.ClientMsg{}
+		if proto.Unmarshal(data, msg) != nil {
 			continue
 		}
 		w.Do(func() { w.Input(s, msg) })
