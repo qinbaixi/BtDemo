@@ -24,7 +24,9 @@ internal/game/       世界循环、实体、AOI、属性、技能 / 伤害、AI
 internal/config/     YAML 配置加载与校验
 internal/server/     HTTP 与 WebSocket
 config/              world.yaml（地图、AOI、阵营、玩家）、skills.yaml、monsters.yaml
-web/static/          前端（原生 Canvas + JavaScript，由 go:embed 打进二进制）
+proto/btdemo.proto   客户端与服务端协议（proto2）
+internal/pb/         protoc 生成的 Go 代码
+web/static/          前端（原生 Canvas + JavaScript，由 go:embed 打进二进制）：main.js 主流程、protocol.js 协议、models.js 角色模型与动作、fx.js 特效、scenery.js 场景
 tools/btregistry/    扫描导出文件生成 registry.go
 ```
 
@@ -53,6 +55,21 @@ tools/btregistry/    扫描导出文件生成 registry.go
 - 基础属性：力量、敏捷、智力、体质；玩家每升一级按 `world.yaml` 的 `growth` 成长。
 - 派生属性：生命上限、攻击、法强、防御、法抗、暴击率、暴击伤害、移速（公式见 `internal/game/attr.go`），再叠加 Buff 的百分比加成。
 - 伤害 = `(攻击 × 系数 + 固定值) × (1 − 防御 / (防御 + 100)) × 暴击 × 随机 0.95~1.05`；物理技能用攻击 / 防御，法术技能用法强 / 法抗。
+
+## 协议
+
+客户端和服务端之间每个 WebSocket 二进制帧是一个 protobuf 消息，定义在 `proto/btdemo.proto`（`syntax = "proto2"`）：浏览器发 `ClientMsg`（移动、选目标、施法），服务端发 `ServerMsg`（`Welcome`、AOI 的 `Enter` / `Leave`、10Hz 的 `Sync`、`Toast`）。
+
+- Go 端用 `google.golang.org/protobuf`，生成代码在 `internal/pb`。修改 `.proto` 后运行 `go generate ./internal/pb`（需要 `protoc` 和 `protoc-gen-go@v1.36.6`），CI 会检查生成代码是否最新。
+- 浏览器端用 `web/static/vendor/protobuf.min.js`（protobuf.js 7.4.0），运行时从服务端的 `/btdemo.proto` 加载同一份定义，不需要额外生成 JS 代码。
+
+## 美术与特效
+
+全部用 Canvas 程序化绘制，没有图片资源。`monsters.yaml` 模板的 `model` 字段（默认等于模板名）和 `world.yaml` 玩家的 `model`（默认 `knight`）决定客户端画哪个模型：`knight`、`slime`、`wolf`、`skeleton_archer`、`ogre_chief`、`guard`、`villager`。角色有朝向、行走、攻击、受击和死亡动画；技能、受击、治疗、增益、升级、死亡、复活都有粒子特效。
+
+- `web/static/models.js`：角色模型和动作
+- `web/static/fx.js`：技能与战斗特效（刀光、火球、骨箭、旋风斩、治疗法阵、增益光柱、暴击闪光、屏幕震动）
+- `web/static/scenery.js`：按区域生成的地表和场景物件（村庄、史莱姆草地、狼林、墓地、食人魔营地），与角色一起按纵深排序
 
 ## AOI
 

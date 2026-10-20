@@ -6,10 +6,18 @@
 /* ============================== config ============================== */
 
 import { loadProtocol } from './protocol.js';
+import { drawModel } from './models.js';
+import { FX } from './fx.js';
+import { createScenery } from './scenery.js';
 
 const LERP_MS = 100;          // position interpolation window between 10 Hz syncs
 const SNAP_DIST = 400;        // larger jumps snap instead of sliding
-const FX_LIFE = { melee: 220, projectile: 250, circle: 450, heal: 700, buff: 900 };
+const ATTACK_MS = 380;       // attack swing animation
+const HIT_MS = 260;          // hit reaction animation
+const DEATH_MS = 650;        // fall-over animation
+// Drawn height of each model at radius 16, used to place labels above heads.
+const MODEL_SCALE = 1.25;    // models are drawn a bit larger than their collision radius
+const MODEL_H = { knight: 46, guard: 50, villager: 42, slime: 26, wolf: 30, skeleton_archer: 46, ogre_chief: 54 };
 const ACT_NAMES = {
   find_target: '索敌',
   chase_target: '追击',
@@ -52,11 +60,14 @@ const state = {
   cdsAt: 0,
   target: 0,
   hoverSlot: 0,
-  showAOI: true,
-  effects: [],
+  showAOI: false,
+  fx: null,               // FX engine
+  scenery: null,          // ground and props, built for the map size on welcome
+  lands: new Map(),       // caster id -> { at, color } when its latest cast lands
+  pending: [],            // [{ at, fn }] hit reactions waiting for a projectile
+  lastFrame: 0,
   floats: [],
   bubbles: new Map(),     // id -> { text, until }
-  flashes: new Map(),     // id -> until (hit flash)
   cam: { x: 0, y: 0, w: 0, h: 0 },
   dpr: 1,
 };
@@ -131,7 +142,38 @@ function makeEntity(d, now) {
     act: '',
     tg: 0,
     dead: false,
+    model: d.model || '',
+    // animation state
+    facing: kind === 'player' ? 0 : (Math.random() < 0.5 ? 0 : Math.PI),
+    walk: Math.random() * 6,
+    moveUntil: 0,           // walking pose shows until this time
+    rx: d.x || 0,           // rendered position last frame, drives the walk cycle
+    ry: d.y || 0,
+    attackAt: -1e9,
+    hitAt: -1e9,
+    deadAt: -1,
+    fresh: true,            // no sync seen yet: an already-dead entity shows fallen
   };
+}
+
+// headY is the screen y just above an entity's drawn head.
+function headY(e, p) {
+  const s = ((e.r || 14) * MODEL_SCALE) / 16;
+  return p.y - (MODEL_H[e.model] || 34) * s;
+}
+
+// faceToward turns an entity left or right toward a point.
+function faceToward(e, x, y, now) {
+  const p = posOf(e, now);
+  if (Math.abs(x - p.x) > 2) e.facing = x < p.x ? Math.PI : 0;
+}
+
+// fxResolve lets the effect engine follow live entities (body centre).
+function fxResolve(id) {
+  const e = state.ents.get(id);
+  if (!e) return null;
+  const p = posOf(e, performance.now());
+  return { x: p.x, y: p.y, r: e.r || 14 };
 }
 
 // Rendered position: lerp from the previous position to the latest synced one.
@@ -204,13 +246,15 @@ function handleMsg(m) {
   switch (m.t) {
     case 'welcome': onWelcome(m); break;
     case 'enter':
-      for (const d of m.ents || []) state.ents.set(d.id, makeEntity(d, now));
+      for (const d of m.ents || []) {
+        if (!state.ents.has(d.id)) state.ents.set(d.id, makeEntity(d, now));
+      }
       break;
     case 'leave':
       for (const id of m.ids || []) {
         state.ents.delete(id);
         state.bubbles.delete(id);
-        state.flashes.delete(id);
+        state.lands.delete(id);
         if (id === state.target) {
           state.target = 0;
           send({ t: 'target', target: 0 });
@@ -232,14 +276,21 @@ function onWelcome(m) {
 
   // A welcome means a brand-new character: drop everything from the old one.
   state.ents.clear();
-  state.effects = [];
+  state.fx.clear();
+  state.lands.clear();
+  state.pending = [];
   state.floats = [];
   state.bubbles.clear();
-  state.flashes.clear();
   state.self = null;
   state.cds = {};
   state.target = 0;
   state.hoverSlot = 0;
+
+  if (!state.scenery || state.scenery.w !== state.map.w || state.scenery.h !== state.map.h) {
+    state.scenery = createScenery(state.map.w, state.map.h);
+    state.scenery.w = state.map.w;
+    state.scenery.h = state.map.h;
+  }
 
   buildSkillBar();
   setConn('ok', '已连接');
@@ -257,6 +308,14 @@ function onSync(m, now) {
     if (!e) continue;
     const cur = posOf(e, now);
     const jump = hypot(cur.x, cur.y, s.x, s.y) > SNAP_DIST;
+    const mdx = s.x - e.x;
+    if (!jump && hypot(e.x, e.y, s.x, s.y) > 0.5) {
+      e.moveUntil = now + LERP_MS * 1.6;
+      if (Math.abs(mdx) > 0.3 && now - e.attackAt > ATTACK_MS) e.facing = mdx < 0 ? Math.PI : 0;
+    }
+    if (jump) { e.rx = s.x; e.ry = s.y; }
+    if (s.dead && !e.dead) e.deadAt = e.fresh ? now - DEATH_MS : now;
+    if (!s.dead) e.deadAt = -1;
     e.px = jump ? s.x : cur.x;
     e.py = jump ? s.y : cur.y;
     e.x = s.x;
@@ -268,6 +327,7 @@ function onSync(m, now) {
     e.act = s.act || '';
     e.tg = s.tg || 0;
     e.dead = !!s.dead;
+    e.fresh = false;
   }
   if (m.self) {
     state.self = m.self;
@@ -283,59 +343,64 @@ function onSync(m, now) {
 
 function onEvent(ev, now) {
   switch (ev.k) {
-    case 'cast': addCast(ev, now); break;
-    case 'dmg':
-      if (ev.dst) {
-        state.flashes.set(ev.dst, now + 150);
-        if (ev.crit) addFloat(now, ev.dst, `暴击 -${ev.v}`, '#ffe14d', 24, 1000);
-        else addFloat(now, ev.dst, `-${ev.v}`, '#ff5a5a', 16, 900);
+    case 'cast': {
+      const src = state.ents.get(ev.src);
+      if (src) {
+        src.attackAt = now;
+        const dst = ev.dst && ev.dst !== ev.src ? state.ents.get(ev.dst) : null;
+        if (dst) { const dp = posOf(dst, now); faceToward(src, dp.x, dp.y, now); }
+      }
+      const delay = state.fx.cast(ev, now);
+      state.lands.set(ev.src, { at: now + delay, color: ev.color });
+      // name the skill for players and for the big moves of monsters
+      const big = ev.fx === 'circle' || ev.fx === 'buff';
+      if (ev.name && src && (src.kind === 'player' || big)) {
+        addFloat(now, ev.src, String(ev.name), ev.color || '#ffffff', 13, 900, { rise: 22 });
       }
       break;
+    }
+    case 'dmg': {
+      if (!ev.dst) break;
+      const land = state.lands.get(ev.src);
+      const at = land && land.at > now ? land.at : now;
+      const color = land ? land.color : '#ffd166';
+      const hit = () => {
+        const t = performance.now();
+        const e = state.ents.get(ev.dst);
+        if (e) e.hitAt = t;
+        state.fx.impact(ev.dst, color, ev.crit, t);
+        if (ev.crit) addFloat(t, ev.dst, `暴击 ${ev.v}`, '#ffe14d', 26, 1100, { pop: true, rise: 54 });
+        else addFloat(t, ev.dst, `-${ev.v}`, ev.dst === state.myId ? '#ff6b6b' : '#ffffff', 17, 900);
+      };
+      if (at > now) state.pending.push({ at, fn: hit });
+      else hit();
+      break;
+    }
     case 'heal':
-      addFloat(now, ev.dst, `+${ev.v}`, '#7cff9b', 16, 1000);
+      addFloat(now, ev.dst, `+${ev.v}`, '#7cff9b', 18, 1000);
       break;
     case 'buff':
-      addFloat(now, ev.dst, String(ev.name || ''), '#9ad7ff', 14, 1200);
+      addFloat(now, ev.dst, String(ev.name || ''), '#9ad7ff', 15, 1200, { rise: 50 });
       break;
-    case 'die':
+    case 'die': {
       state.bubbles.delete(ev.id);
+      const e = state.ents.get(ev.id);
+      if (e && e.deadAt < 0) e.deadAt = now;
+      state.fx.death(ev.id, e ? e.color : '#ffffff', now);
       break;
+    }
     case 'respawn':
+      state.fx.respawn(ev.id, now);
       addFloat(now, ev.id, '复活', '#7cff9b', 16, 1000);
       break;
     case 'say':
       state.bubbles.set(ev.id, { text: String(ev.text || ''), until: now + 3000 });
       break;
     case 'lvl':
+      state.fx.levelUp(ev.id, now);
       addFloat(now, ev.id, `升级! Lv ${ev.lv}`, '#ffd54a', 26, 1600, { pop: true, rise: 60 });
       break;
   }
-}
-
-function addCast(ev, now) {
-  const src = livePos(ev.src, ev.x ?? 0, ev.y ?? 0, now);
-  const dst = ev.dst ? livePos(ev.dst, src.x, src.y, now) : src;
-  const fx = ev.fx || 'melee';
-  const cx = typeof ev.x === 'number' ? ev.x : dst.x;
-  const cy = typeof ev.y === 'number' ? ev.y : dst.y;
-  const color = ev.color || (fx === 'heal' ? '#7cff9b' : '#ffffff');
-  const parts = [];
-  for (let i = 0; i < 6; i++) parts.push({ ox: (i - 2.5) * 9 + (Math.random() - 0.5) * 4, delay: i * 0.08 });
-
-  state.effects.push({
-    fx,
-    src: ev.src || 0,
-    dst: ev.dst || 0,
-    sx: src.x, sy: src.y,
-    dx: dst.x, dy: dst.y,
-    cx, cy,
-    radius: ev.radius || 40,
-    color,
-    born: now,
-    life: FX_LIFE[fx] || 300,
-    parts,
-  });
-  if (ev.name && ev.src) addFloat(now, ev.src, String(ev.name), color, 14, 1000, { rise: 26 });
 }
 
 // Floating text above an entity (or at its last known position).
@@ -343,11 +408,14 @@ function addFloat(now, anchorId, text, color, size, life, opts = {}) {
   const e = state.ents.get(anchorId);
   if (!e) return;
   const p = posOf(e, now);
+  // numbers landing together on one target fan out instead of piling up
+  let recent = 0;
+  for (const f of state.floats) if (f.anchor === anchorId && now - f.born < 300) recent++;
   state.floats.push({
     anchor: anchorId,
     x: p.x, y: p.y,
-    oy: -((e.r || 14) + 30),
-    jx: (Math.random() - 0.5) * 22,
+    oy: headY(e, p) - p.y - 16 - Math.min(recent, 4) * 13,
+    jx: (recent % 2 ? 1 : -1) * Math.min(recent, 3) * 12 + (Math.random() - 0.5) * 10,
     text, color, size, life,
     born: now,
     rise: opts.rise ?? 40,
@@ -360,11 +428,22 @@ function addFloat(now, anchorId, text, color, size, life, opts = {}) {
 function frame() {
   requestAnimationFrame(frame);
   const now = performance.now();
+  const dt = state.lastFrame ? now - state.lastFrame : 16;
+  state.lastFrame = now;
+  runPending(now);
   updateCamera(now);
-  draw(now);
+  draw(now, dt);
   renderTarget();
   renderSkillBar(now);
   renderDeath(now);
+}
+
+function runPending(now) {
+  if (!state.pending.length) return;
+  const due = state.pending.filter((p) => p.at <= now);
+  if (!due.length) return;
+  state.pending = state.pending.filter((p) => p.at > now);
+  for (const p of due) p.fn();
 }
 
 function updateCamera(now) {
@@ -378,51 +457,69 @@ function updateCamera(now) {
   state.cam = { x, y, w: vw, h: vh };
 }
 
-function draw(now) {
+function draw(now, dt) {
   const { x: cx, y: cy, w: vw, h: vh } = state.cam;
   const dpr = state.dpr;
+  const shake = state.fx.shakeOffset(dt);
   // World units are CSS pixels; the camera offset is applied in the transform.
-  ctx.setTransform(dpr, 0, 0, dpr, -cx * dpr, -cy * dpr);
-  ctx.fillStyle = '#0b1510';
-  ctx.fillRect(cx, cy, vw, vh);
+  ctx.setTransform(dpr, 0, 0, dpr, (-cx + shake.x) * dpr, (-cy + shake.y) * dpr);
+  ctx.fillStyle = '#0d1a12';
+  ctx.fillRect(cx - 20, cy - 20, vw + 40, vh + 40);
 
   const me = state.ents.get(state.myId);
   const mp = me ? posOf(me, now) : null;
+  const view = state.cam;
 
-  drawGround();
+  if (state.scenery) state.scenery.drawGround(ctx, view);
   if (state.showAOI) drawAOI(mp);
   drawBorder();
 
   if (mp && state.hoverSlot) drawRangePreview(mp);
   const tgt = state.ents.get(state.target);
-  if (tgt && mp) drawTargetMarks(tgt, mp, now);
+  if (tgt) drawTargetRing(tgt, now);
+  state.fx.drawUnder(ctx, now);
 
+  // characters and props share one depth order by their feet
   const list = [];
-  for (const e of state.ents.values()) list.push({ e, p: posOf(e, now) });
-  list.sort((a, b) => a.p.y - b.p.y);
-  for (const it of list) drawEntity(it.e, it.p, now);
+  for (const e of state.ents.values()) {
+    const p = posOf(e, now);
+    // a corpse lies flat, so it sorts behind anything standing on it
+    list.push({ y: p.y - (e.dead ? 30 : 0), e, p });
+  }
+  if (state.scenery) for (const pr of state.scenery.visible(view)) list.push({ y: pr.y, prop: pr });
+  list.sort((a, b) => a.y - b.y);
+  for (const it of list) {
+    if (it.prop) state.scenery.drawProp(ctx, it.prop, now, mp);
+    else drawEntity(it.e, it.p, now);
+  }
 
-  drawEffects(now);
+  state.fx.drawOver(ctx, now, dt);
+  if (state.scenery) state.scenery.drawAmbient(ctx, view, now);
+  if (tgt && mp && tgt.id !== state.myId) drawTargetLink(tgt, mp, now);
+  for (const it of list) if (it.e) drawLabels(it.e, it.p, now);
   drawBubbles(now);
   drawFloats(now);
+  drawVignette();
 }
 
-function drawGround() {
-  const { w, h } = state.map;
-  ctx.fillStyle = '#1d3a2a';
+function drawVignette() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+  if (!state.vignette || state.vignette.w !== w || state.vignette.h !== h) {
+    const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.hypot(w, h) * 0.6);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(4,10,8,0.5)');
+    state.vignette = { w, h, g };
+  }
+  ctx.fillStyle = state.vignette.g;
   ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let x = 0; x <= w; x += 80) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, h); }
-  for (let y = 0; y <= h; y += 80) { ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); }
-  ctx.stroke();
 }
 
 function drawBorder() {
   const { w, h } = state.map;
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = 'rgba(255,213,74,0.55)';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(255,213,74,0.35)';
   ctx.strokeRect(0, 0, w, h);
 }
 
@@ -476,189 +573,145 @@ function drawRangePreview(mp) {
   ctx.restore();
 }
 
-function drawTargetMarks(tgt, mp, now) {
+// drawTargetRing marks the selected entity with a rotating ring at its feet.
+function drawTargetRing(tgt, now) {
+  const tp = posOf(tgt, now);
+  const r = (tgt.r || 14) + 9;
+  const hostile = tgt.kind === 'monster';
+  const color = hostile ? '255,90,80' : '120,200,255';
+  ctx.save();
+  ctx.translate(tp.x, tp.y);
+  ctx.scale(1, 0.42);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = `rgba(${color},0.35)`;
+  ctx.beginPath();
+  ctx.arc(0, 0, r + 3, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.rotate(now / 600);
+  ctx.strokeStyle = `rgba(${color},0.95)`;
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, a, a + 1.3);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// drawTargetLink draws a faint dotted line from the player to the target.
+function drawTargetLink(tgt, mp, now) {
   const tp = posOf(tgt, now);
   ctx.save();
-  ctx.setLineDash([6, 5]);
-  ctx.strokeStyle = 'rgba(255,224,102,0.5)';
-  ctx.lineWidth = 1.5;
+  ctx.setLineDash([2, 7]);
+  ctx.lineDashOffset = -now / 40;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = tgt.kind === 'monster' ? 'rgba(255,120,100,0.45)' : 'rgba(140,210,255,0.45)';
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(mp.x, mp.y);
-  ctx.lineTo(tp.x, tp.y);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  const pulse = 0.5 + 0.5 * Math.sin(now / 160);
-  ctx.strokeStyle = '#ffe066';
-  ctx.lineWidth = 2.5;
-  ctx.globalAlpha = 0.5 + 0.5 * pulse;
-  ctx.beginPath();
-  ctx.arc(tp.x, tp.y, (tgt.r || 14) + 7 + pulse * 3, 0, Math.PI * 2);
+  ctx.moveTo(mp.x, mp.y - 4);
+  ctx.lineTo(tp.x, tp.y - 4);
   ctx.stroke();
   ctx.restore();
 }
 
 function drawEntity(e, p, now) {
-  const r = e.r || 14;
+  // walk cycle advances with the distance actually drawn this frame
+  const moved = hypot(e.rx, e.ry, p.x, p.y);
+  e.rx = p.x;
+  e.ry = p.y;
+  if (moved < 40) e.walk += moved * 0.16 * (16 / (e.r || 14));
+
+  const atk = (now - e.attackAt) / ATTACK_MS;
+  const hit = (now - e.hitAt) / HIT_MS;
+  drawModel(ctx, e.model, {
+    x: p.x,
+    y: p.y,
+    r: (e.r || 14) * MODEL_SCALE,
+    color: e.color,
+    facing: e.facing,
+    walk: e.walk,
+    moving: now < e.moveUntil && !e.dead,
+    attack: atk >= 0 && atk < 1 && !e.dead ? atk : -1,
+    hit: hit >= 0 && hit < 1 ? hit : -1,
+    dead: e.dead ? clamp((now - (e.deadAt < 0 ? now - DEATH_MS : e.deadAt)) / DEATH_MS, 0, 1) : -1,
+    time: now + e.id * 397,
+    isSelf: e.id === state.myId,
+  });
+}
+
+// drawLabels draws name, level, HP bar, behaviour and aggro mark over a head.
+function drawLabels(e, p, now) {
   const dead = e.dead;
   const isSelf = e.id === state.myId;
-  const color = dead ? '#5d6661' : (e.color || KIND_COLOR[e.kind] || '#cccccc');
-
-  // body
-  ctx.save();
-  if (dead) ctx.globalAlpha = 0.4;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(p.x, p.y + r * 0.85, r * 0.9, r * 0.35, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
-  if (e.kind === 'player') {
-    ctx.lineWidth = isSelf ? 4 : 2;
-    ctx.strokeStyle = isSelf ? '#ffd54a' : '#ffffff';
-  } else {
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-  }
-  ctx.stroke();
-
-  const fl = state.flashes.get(e.id) || 0;
-  if (fl > now) {
-    ctx.globalAlpha = ((fl - now) / 150) * 0.7;
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-
-  if (dead) {
-    const s = r * 0.5;
-    ctx.save();
-    ctx.strokeStyle = '#e0e0e0';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(p.x - s, p.y - s);
-    ctx.lineTo(p.x + s, p.y + s);
-    ctx.moveTo(p.x + s, p.y - s);
-    ctx.lineTo(p.x - s, p.y + s);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // name + level, HP bar, action label, aggro marker
+  if (dead && !isSelf && e.id !== state.target) return;   // corpses stay unlabelled
+  const top = headY(e, p);
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  ctx.font = `bold 13px ${FONT}`;
+  ctx.lineJoin = 'round';
+
+  let y = top - 6;
+  if (!dead) {
+    const bw = Math.max(40, (e.r || 14) * 2.6);
+    const bh = 5;
+    const bx = p.x - bw / 2;
+    const by = y - bh;
+    const frac = e.maxHp > 0 ? clamp(e.hp / e.maxHp, 0, 1) : 0;
+    ctx.fillStyle = 'rgba(10,12,14,0.75)';
+    roundRect(bx - 1.5, by - 1.5, bw + 3, bh + 3, 3);
+    ctx.fill();
+    const c = isSelf ? '#5fd17a' : e.kind === 'monster' ? '#ef5350' : e.kind === 'npc' ? '#4fa8ff' : hpColor(frac);
+    if (frac > 0) {
+      roundRect(bx, by, bw * frac, bh, 2);
+      ctx.fillStyle = c;
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillRect(bx + 1, by + 0.5, Math.max(0, bw * frac - 2), 1.5);
+    }
+    y = by - 4;
+  }
+
+  ctx.font = `bold 12px ${FONT}`;
   ctx.lineWidth = 3;
-  ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.7)';
   let nameColor = NAME_COLOR[e.kind] || '#ffffff';
   if (isSelf) nameColor = '#ffd54a';
   if (dead) nameColor = '#9aa39e';
-  const label = `${e.name} Lv${fmt(e.lv)}`;
-  const ly = p.y - r - 24;
-  ctx.strokeText(label, p.x, ly);
+  const name = e.name;
+  const lv = `Lv${fmt(e.lv)}`;
+  ctx.font = `bold 12px ${FONT}`;
+  const nw = ctx.measureText(name).width;
+  ctx.font = `bold 10px ${FONT}`;
+  const lw = ctx.measureText(lv).width;
+  const x0 = p.x - (nw + lw + 4) / 2;
+  ctx.textAlign = 'left';
+  ctx.strokeText(lv, x0, y);
+  ctx.fillStyle = dead ? '#7d857f' : '#c9d2cc';
+  ctx.fillText(lv, x0, y);
+  ctx.font = `bold 12px ${FONT}`;
+  ctx.strokeText(name, x0 + lw + 4, y);
   ctx.fillStyle = nameColor;
-  ctx.fillText(label, p.x, ly);
-
-  if (!dead) {
-    const bw = Math.max(44, r * 2 + 14);
-    const bh = 5;
-    const bx = p.x - bw / 2;
-    const by = p.y - r - 16;
-    const frac = e.maxHp > 0 ? clamp(e.hp / e.maxHp, 0, 1) : 0;
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
-    ctx.fillStyle = hpColor(frac);
-    ctx.fillRect(bx, by, bw * frac, bh);
-  }
+  ctx.fillText(name, x0 + lw + 4, y);
+  ctx.textAlign = 'center';
 
   if (e.kind !== 'player' && e.act && !dead) {
     ctx.font = `11px ${FONT}`;
-    ctx.fillStyle = '#b5bfb8';
-    ctx.fillText(ACT_NAMES[e.act] || e.act, p.x, p.y + r + 15);
+    ctx.lineWidth = 2.5;
+    const label = ACT_NAMES[e.act] || e.act;
+    ctx.strokeText(label, p.x, p.y + 15);
+    ctx.fillStyle = 'rgba(214,224,218,0.85)';
+    ctx.fillText(label, p.x, p.y + 15);
   }
 
   if (e.kind === 'monster' && e.tg === state.myId && !dead) {
-    ctx.font = `bold 20px ${FONT}`;
-    ctx.strokeText('!', p.x, p.y - r - 40);
+    const bob = Math.sin(now / 140) * 2;
+    ctx.font = `900 18px ${FONT}`;
+    ctx.lineWidth = 4;
+    ctx.strokeText('!', p.x, y - 16 + bob);
     ctx.fillStyle = '#ff3b3b';
-    ctx.fillText('!', p.x, p.y - r - 40);
+    ctx.fillText('!', p.x, y - 16 + bob);
   }
   ctx.restore();
-}
-
-function drawEffects(now) {
-  state.effects = state.effects.filter((f) => now - f.born < f.life);
-  for (const f of state.effects) {
-    const t = clamp((now - f.born) / f.life, 0, 1);
-    const sp = livePos(f.src, f.sx, f.sy, now);
-    const dp = livePos(f.dst, f.dx, f.dy, now);
-    ctx.save();
-    ctx.strokeStyle = f.color;
-    ctx.fillStyle = f.color;
-    ctx.lineCap = 'round';
-    switch (f.fx) {
-      case 'melee': {
-        const ang = Math.atan2(dp.y - sp.y, dp.x - sp.x);
-        const a0 = ang - 0.9;
-        const a1 = a0 + 1.8 * Math.min(1, t * 1.6);
-        ctx.globalAlpha = 1 - t * 0.8;
-        ctx.lineWidth = 6 * (1 - t) + 1;
-        ctx.beginPath();
-        ctx.arc(sp.x, sp.y, 34, a0, a1);
-        ctx.stroke();
-        break;
-      }
-      case 'projectile': {
-        const x = lerp(sp.x, dp.x, t);
-        const y = lerp(sp.y, dp.y, t);
-        ctx.shadowColor = f.color;
-        ctx.shadowBlur = 18;
-        ctx.beginPath();
-        ctx.arc(x, y, 7, 0, Math.PI * 2);
-        ctx.fill();
-        break;
-      }
-      case 'circle': {
-        const rad = Math.max(2, f.radius * (0.2 + 0.8 * t));
-        ctx.globalAlpha = 1 - t;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(f.cx, f.cy, rad, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.globalAlpha = 0.15 * (1 - t);
-        ctx.fill();
-        break;
-      }
-      case 'heal': {
-        ctx.globalAlpha = 1 - t * 0.6;
-        for (const p of f.parts) {
-          const k = clamp(t * 1.3 - p.delay, 0, 1);
-          if (k <= 0) continue;
-          ctx.beginPath();
-          ctx.arc(sp.x + p.ox, sp.y + 8 - 50 * k, 3 + 1.5 * (1 - k), 0, Math.PI * 2);
-          ctx.fill();
-        }
-        break;
-      }
-      case 'buff': {
-        for (const off of [0, 0.5]) {
-          const k = (t + off) % 1;
-          ctx.globalAlpha = 1 - k;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(sp.x, sp.y, 16 + 30 * k, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        break;
-      }
-    }
-    ctx.restore();
-  }
 }
 
 function drawBubbles(now) {
@@ -672,7 +725,7 @@ function drawBubbles(now) {
     const w = ctx.measureText(b.text).width + 16;
     const h = 24;
     const x = p.x - w / 2;
-    const y = p.y - (e.r || 14) - 72 - h;
+    const y = headY(e, p) - 48 - h;
     ctx.globalAlpha = clamp((b.until - now) / 400, 0, 1);
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
     roundRect(x, y, w, h, 8);
@@ -879,8 +932,10 @@ function pickEntity(wx, wy, now) {
   let bestD = Infinity;
   for (const e of state.ents.values()) {
     const p = posOf(e, now);
-    const d = hypot(p.x, p.y, wx, wy);
-    if (d <= (e.r || 14) + 2 && d < bestD) { best = e; bestD = d; }
+    // hit-test the drawn body, which stands above the feet position
+    const half = (p.y - headY(e, p)) / 2;
+    const d = hypot(p.x, p.y - half, wx, wy);
+    if (d <= Math.max((e.r || 14) + 4, half) && d < bestD) { best = e; bestD = d; }
   }
   return best;
 }
@@ -947,6 +1002,7 @@ function init() {
   ui.death = $('death');
   ui.deathText = $('death-text');
 
+  state.fx = new FX(fxResolve);
   buildAttrRows();
   buildSkillBar();
   resize();

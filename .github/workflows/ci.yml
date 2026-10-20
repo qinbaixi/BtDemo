@@ -29,6 +29,18 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      - name: Install protoc
+        run: |
+          curl -sSLo /tmp/protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v28.3/protoc-28.3-linux-x86_64.zip
+          unzip -q /tmp/protoc.zip -d "$HOME/protoc"
+          echo "$HOME/protoc/bin" >> "$GITHUB_PATH"
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.6
+
+      - name: Protobuf code is up to date
+        run: |
+          go generate ./internal/pb
+          git diff --exit-code -- internal/pb
+
       - name: Behavior tree registry is up to date
         run: |
           go generate ./internal/ai/trees
