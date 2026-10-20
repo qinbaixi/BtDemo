@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BtDemo · 行为树小游戏</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="debug.css">
+<link rel="stylesheet" href="debug-proto.css">
 </head>
 <body>
 <canvas id="game" aria-label="游戏画面"></canvas>
@@ -34,11 +36,22 @@
   </section>
 
   <div id="skillbar" class="skillbar"></div>
-  <div id="help" class="help">WASD 移动 · 点击选择目标 · 1-5 释放技能 · G 切换 AOI 网格</div>
+  <div id="help" class="help">WASD 移动 · 点击选择目标 · 1-5 释放技能 · G 切换 AOI 网格 · ` 调试面板</div>
   <div id="conn" class="conn wait">连接中…</div>
+  <button id="debug-btn" class="debug-btn" type="button" title="调试面板（` 键）">调试</button>
   <div id="toast" class="toast hidden" role="status"></div>
   <div id="death" class="overlay hidden"><div id="death-text"></div></div>
 </div>
+
+<aside id="debug" class="debug hidden" aria-label="调试面板">
+  <div class="dbg-tabs">
+    <button type="button" data-tab="ai" class="on">AI 决策</button>
+    <button type="button" data-tab="proto">协议收发</button>
+    <button type="button" class="dbg-close" title="关闭（` 键）">×</button>
+  </div>
+  <div id="dbg-ai" class="dbg-body"></div>
+  <div id="dbg-proto" class="dbg-body hidden"></div>
+</aside>
 
 <script src="vendor/protobuf.min.js"></script>
 <script type="module" src="main.js"></script>

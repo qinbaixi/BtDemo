@@ -199,3 +199,39 @@ func TestForceSuccessCoversBlockedCondition(t *testing.T) {
 		t.Fatalf("calls %v", a.calls)
 	}
 }
+
+func TestTraceRecordsVisitedNodes(t *testing.T) {
+	tr := load(t, map[int]map[string]any{
+		1: entry(1, "composite", "selector", "children", []int{3, 4}),
+		2: entry(2, "decorator", "flag", "inverse_check_condition", false),
+		3: entry(3, "task", "ok", "decorators", []int{2}, "properties", map[string]any{}),
+		4: entry(4, "task", "walk", "properties", map[string]any{}),
+	})
+	a := newAgent()
+	a.runFor = 100
+	in := NewInstance(tr, newReg(), a, rand.New(rand.NewSource(1)))
+	in.Tick(0)
+	if len(in.Trace) != 0 {
+		t.Fatalf("trace recorded while off: %v", in.Trace)
+	}
+	in.Tracing = true
+	in.Tick(1)
+	want := []struct {
+		id, depth int
+		st        Status
+		note      string
+	}{{1, 0, Running, ""}, {3, 1, Failure, "blocked:flag"}, {4, 1, Running, ""}}
+	if len(in.Trace) != len(want) {
+		t.Fatalf("trace %+v", in.Trace)
+	}
+	for i, w := range want {
+		s := in.Trace[i]
+		note := ""
+		if len(s.Notes) > 0 {
+			note = s.Notes[0]
+		}
+		if s.Node.ID != w.id || s.Depth != w.depth || s.Status != w.st || note != w.note {
+			t.Fatalf("step %d: got %d/%d/%v/%q want %+v", i, s.Node.ID, s.Depth, s.Status, note, w)
+		}
+	}
+}

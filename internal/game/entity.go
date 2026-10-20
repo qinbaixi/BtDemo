@@ -5,6 +5,7 @@ import (
 
 	"github.com/qinbaixi/BtDemo/internal/bt"
 	"github.com/qinbaixi/BtDemo/internal/config"
+	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
 // Kind of an entity.
@@ -72,8 +73,9 @@ type Entity struct {
 	AI     *bt.Instance // nil for players
 	Action string       // what the entity is doing, for display
 
-	cell   int
-	inGrid bool
+	cell    int
+	inGrid  bool
+	aiTicks []*pb.AiTick // traced ticks since the last sync, while watched
 }
 
 // maxEntityRadius bounds entity radii for range queries that test edge distance.

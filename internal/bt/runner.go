@@ -92,6 +92,12 @@ type Instance struct {
 	// handy for debugging and display.
 	Active string
 
+	// Tracing turns on Trace: every node visited by the last Tick, in the
+	// order it was entered.
+	Tracing bool
+	Trace   []TraceStep
+	depth   int
+
 	tick        int
 	now         float64
 	mem         map[int]*nodeMem
@@ -115,12 +121,32 @@ func NewInstance(t *Tree, reg *Registry, agent any, rng *rand.Rand) *Instance {
 	}
 }
 
+// TraceStep records one node visited during a traced tick.
+type TraceStep struct {
+	Node   *Node
+	Depth  int
+	Status Status
+	// Note says why the result is what it is: "blocked:<decorator>" when a
+	// condition or cooldown stopped the node, "<decorator>" when a result
+	// decorator changed it, and "service:<sub_type>" for each service that fired.
+	Notes []string
+}
+
 // Tick runs the tree once at time now (seconds).
 func (in *Instance) Tick(now float64) Status {
 	in.tick++
 	in.now = now
 	in.Active = ""
+	in.Trace = in.Trace[:0]
+	in.depth = 0
 	return in.run(in.Tree.Root)
+}
+
+// note adds a note to the trace step at index i, when tracing.
+func (in *Instance) note(i int, s string) {
+	if i >= 0 {
+		in.Trace[i].Notes = append(in.Trace[i].Notes, s)
+	}
 }
 
 func (in *Instance) memOf(n *Node) (*nodeMem, bool) {
@@ -143,13 +169,28 @@ func (in *Instance) ctx(n *Node, fresh bool, m *nodeMem) *Ctx {
 func (in *Instance) run(n *Node) Status {
 	m, fresh := in.memOf(n)
 
+	step := -1
+	if in.Tracing {
+		step = len(in.Trace)
+		in.Trace = append(in.Trace, TraceStep{Node: n, Depth: in.depth})
+		in.depth++
+		defer func() { in.depth-- }()
+	}
+	done := func(st Status) Status {
+		if step >= 0 {
+			in.Trace[step].Status = st
+		}
+		return st
+	}
+
 	for _, d := range n.Decorators {
 		if !fresh && !d.Periodic {
 			continue
 		}
 		if !in.checkDecorator(d) {
 			m.lastRunning = -1
-			return applyResultDecorators(in, n, Failure)
+			in.note(step, "blocked:"+d.SubType)
+			return done(in.applyResultDecorators(n, Failure, step))
 		}
 	}
 
@@ -166,6 +207,7 @@ func (in *Instance) run(n *Node) Status {
 				in.serviceMem[s.ID] = map[string]any{}
 			}
 			in.Reg.services[s.SubType](&Ctx{Agent: in.Agent, Now: in.now, Node: s, Mem: in.serviceMem[s.ID], inst: in})
+			in.note(step, "service:"+s.SubType)
 		}
 		in.serviceNext[s.ID] = next
 	}
@@ -178,14 +220,14 @@ func (in *Instance) run(n *Node) Status {
 		in.Active = n.SubType
 	}
 
-	st = applyResultDecorators(in, n, st)
+	st = in.applyResultDecorators(n, st, step)
 
 	if st == Running {
 		m.lastRunning = in.tick
 	} else {
 		m.lastRunning = -1
 	}
-	return st
+	return done(st)
 }
 
 // builtinDecorators are decorators that change a result instead of checking a
@@ -195,9 +237,13 @@ var builtinDecorators = map[string]bool{"cooldown": true, "invert": true, "force
 // applyResultDecorators lets the result decorators of n change st. They also
 // apply when a condition decorator blocked the node, so ForceSuccess can make
 // an optional step (such as a line of speech on cooldown) never fail its parent.
-func applyResultDecorators(in *Instance, n *Node, st Status) Status {
+func (in *Instance) applyResultDecorators(n *Node, st Status, step int) Status {
 	for _, d := range n.Decorators {
+		before := st
 		st = applyDecorator(in, d, st)
+		if st != before {
+			in.note(step, d.SubType)
+		}
 	}
 	return st
 }

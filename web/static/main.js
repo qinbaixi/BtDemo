@@ -9,6 +9,7 @@ import { loadProtocol } from './protocol.js';
 import { drawModel } from './models.js';
 import { FX } from './fx.js';
 import { createScenery } from './scenery.js';
+import { createDebug } from './debug.js';
 
 const LERP_MS = 100;          // position interpolation window between 10 Hz syncs
 const SNAP_DIST = 400;        // larger jumps snap instead of sliding
@@ -76,6 +77,7 @@ const ui = { attr: {}, skillBtns: {} };
 let ctx = null;
 let ws = null;
 let protocol = null; // set by loadProtocol() before the first connect
+let debug = null;    // debug drawer
 let retryTimer = 0;
 let toastTimer = 0;
 let lastMove = '';
@@ -293,6 +295,8 @@ function onWelcome(m) {
   }
 
   buildSkillBar();
+  debug.setTarget(0);
+  debug.reset();
   setConn('ok', '已连接');
   lastMove = '';
   sendMove(true);   // tell the server the current key state
@@ -337,6 +341,7 @@ function onSync(m, now) {
     renderSelf();
   }
   for (const ev of m.ev || []) onEvent(ev, now);
+  if (m.ai) debug.trace(m.ai);
 }
 
 /* ============================== events ============================== */
@@ -431,6 +436,8 @@ function frame() {
   const dt = state.lastFrame ? now - state.lastFrame : 16;
   state.lastFrame = now;
   runPending(now);
+  debug.setTarget(state.target);
+  debug.update(now);
   updateCamera(now);
   draw(now, dt);
   renderTarget();
@@ -942,6 +949,9 @@ function pickEntity(wx, wy, now) {
 
 function onKeyDown(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // typing in a text box (the protocol filter) must not move or cast
+  const t = e.target;
+  if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && !['checkbox', 'button'].includes(t.type))) return;
   if (MOVE_DIR[e.code]) {
     e.preventDefault();
     if (!keys.has(e.code)) {
@@ -953,6 +963,10 @@ function onKeyDown(e) {
   if (e.repeat) return;
   if (e.code === 'KeyG') {
     state.showAOI = !state.showAOI;
+    return;
+  }
+  if (e.code === 'Backquote') {
+    debug.toggle();
     return;
   }
   const m = /^(?:Digit|Numpad)([1-5])$/.exec(e.code);
@@ -1003,6 +1017,8 @@ function init() {
   ui.deathText = $('death-text');
 
   state.fx = new FX(fxResolve);
+  debug = createDebug({ send, entity: (id) => state.ents.get(id) });
+  window.btdemo = { state };   // for poking around in the browser console
   buildAttrRows();
   buildSkillBar();
   resize();
@@ -1030,6 +1046,7 @@ function init() {
   requestAnimationFrame(frame);
   loadProtocol().then((p) => {
     protocol = p;
+    p.tap = (dir, type, bytes, obj) => debug.frame(dir, type, bytes, obj);
     connect();
   }).catch((err) => {
     console.error(err);

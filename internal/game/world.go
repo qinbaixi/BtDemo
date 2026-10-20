@@ -42,6 +42,7 @@ type World struct {
 	events   []pendingEvent
 	inbox    chan func()
 	tickNo   int
+	labels   map[*bt.Node]string // trace labels, built on first use
 }
 
 // NewWorld loads the behavior trees, validates them against the AI handlers and
@@ -53,6 +54,7 @@ func NewWorld(cfg *config.Config, seed int64) (*World, error) {
 		Rand:     rand.New(rand.NewSource(seed)),
 		Dt:       1 / float64(cfg.World.TickRate),
 		trees:    map[string]*bt.Tree{},
+		labels:   map[*bt.Node]string{},
 		reg:      bt.NewRegistry(),
 		ents:     map[int]*Entity{},
 		sessions: map[*Session]bool{},
@@ -128,6 +130,7 @@ func (w *World) Run(ctx context.Context) {
 func (w *World) Step() {
 	w.tickNo++
 	w.Now += w.Dt
+	watched := w.watchedIDs()
 	for _, e := range w.ents {
 		if e.Dead {
 			if w.Now >= e.RespawnAt {
@@ -146,8 +149,12 @@ func (w *World) Step() {
 			continue
 		}
 		if e.AI != nil {
+			e.AI.Tracing = watched[e.ID]
 			e.AI.Tick(w.Now)
 			e.Action = e.AI.Active
+			if e.AI.Tracing {
+				w.recordTrace(e)
+			}
 		}
 	}
 	syncEvery := max(1, w.Cfg.World.TickRate/w.Cfg.World.SyncRate)
@@ -323,6 +330,7 @@ func addAttrs(a *config.Attrs, b config.Attrs) {
 type Session struct {
 	Player  *Entity
 	Out     chan []byte // encoded pb.ServerMsg frames
+	Watch   int         // entity whose behavior tree trace this session wants
 	visible map[int]bool
 }
 
@@ -371,6 +379,8 @@ func (w *World) Input(s *Session, msg *pb.ClientMsg) {
 		}
 	case *pb.ClientMsg_Target:
 		e.Target = int(m.Target.GetId())
+	case *pb.ClientMsg_Watch:
+		s.Watch = int(m.Watch.GetId())
 	case *pb.ClientMsg_Cast:
 		slot := int(m.Cast.GetSlot())
 		if slot < 1 || slot > len(e.Skills) {
@@ -456,7 +466,13 @@ func (w *World) flush() {
 				sync.Ev = append(sync.Ev, pe.ev)
 			}
 		}
+		if s.Watch != 0 && now[s.Watch] != nil {
+			sync.Ai = w.aiTrace(now[s.Watch])
+		}
 		w.send(s, &pb.ServerMsg{Msg: &pb.ServerMsg_Sync{Sync: sync}})
 	}
 	w.events = w.events[:0]
+	for _, e := range w.ents {
+		e.aiTicks = nil
+	}
 }

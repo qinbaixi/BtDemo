@@ -16,6 +16,7 @@ message ClientMsg {
     Move move = 1;
     SetTarget target = 2;
     Cast cast = 3;
+    Watch watch = 4;
   }
 }
 
@@ -34,6 +35,12 @@ message SetTarget {
 message Cast {
   required int32 slot = 1;
   optional int32 target = 2;
+}
+
+// Watch asks for the behavior tree trace of one monster or NPC (the debug
+// panel); 0 stops. The trace arrives in Sync.ai while the entity is visible.
+message Watch {
+  required int32 id = 1;
 }
 
 // ---------- server -> browser ----------
@@ -190,6 +197,41 @@ message Sync {
   repeated EntityState ents = 2;
   repeated Event ev = 3;
   optional SelfInfo self = 4;
+  optional AiTrace ai = 5;
+}
+
+// AiNode is one behavior tree node visited during a tick, in visiting order.
+message AiNode {
+  required int32 node = 1;      // node id in the exported tree
+  required int32 depth = 2;
+  required string kind = 3;     // composite | task
+  required string name = 4;     // sub_type plus its properties, e.g. "cast_skill Slot=1"
+  required AiStatus status = 5;
+  repeated string notes = 6;    // blocked:<decorator>, <decorator> (changed the result), service:<name>
+}
+
+enum AiStatus {
+  FAILURE = 0;
+  SUCCESS = 1;
+  RUNNING = 2;
+}
+
+message AiTick {
+  required float time = 1;
+  repeated AiNode nodes = 2;
+}
+
+message KeyValue {
+  required string key = 1;
+  required string value = 2;
+}
+
+// AiTrace carries the ticks the watched entity ran since the last sync.
+message AiTrace {
+  required int32 id = 1;
+  required string tree = 2;
+  repeated AiTick ticks = 3;
+  repeated KeyValue blackboard = 4;  // blackboard plus a few agent fields
 }
 
 message Toast {

@@ -1,0 +1,131 @@
+/* Debug drawer (debug.js). The 协议 tab styles live in debug-proto.css. */
+
+.debug-btn {
+  position: absolute;
+  top: 44px;
+  right: 12px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--muted);
+  font: 12px var(--font);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.debug-btn:hover { color: var(--text); border-color: rgba(255, 255, 255, 0.3); }
+
+.debug {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(440px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: rgba(12, 22, 17, 0.92);
+  border-left: 1px solid var(--line);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  font-size: 12px;
+  color: var(--text);
+  z-index: 10;
+}
+
+.dbg-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.dbg-tabs button {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--muted);
+  font: 13px var(--font);
+  cursor: pointer;
+}
+.dbg-tabs button.on { background: rgba(255, 255, 255, 0.08); color: var(--gold); }
+.dbg-tabs .dbg-close { margin-left: auto; font-size: 18px; line-height: 1; }
+.dbg-tabs .dbg-close:hover { color: var(--text); }
+
+.dbg-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px 10px;
+}
+
+.dbg-head { padding: 2px 0 8px; }
+.dbg-title { font-size: 14px; font-weight: 600; }
+.dbg-sub { margin-top: 2px; color: var(--muted); }
+
+.dbg-section { border-top: 1px solid var(--line); padding: 6px 0; }
+.dbg-section h5 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+
+.dbg-tree {
+  max-height: 34vh;
+  overflow: auto;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.dbg-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.dbg-node .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #999; }
+.dbg-node .nm.composite { color: #9fd3ff; }
+.dbg-node .tag {
+  padding: 0 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font: 11px var(--font);
+}
+.st-success .dot { background: var(--good); }
+.st-running .dot { background: var(--gold); box-shadow: 0 0 6px var(--gold); }
+.st-failure .dot { background: var(--danger); }
+.dbg-node.st-failure .nm { color: #b88; }
+.dbg-node.st-running { background: rgba(255, 213, 74, 0.08); }
+
+.dbg-bb {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  max-height: 16vh;
+  overflow: auto;
+}
+.dbg-bb .k { color: var(--muted); }
+.dbg-bb .v { font-family: ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }
+
+.dbg-logbox { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dbg-logbar { display: flex; align-items: center; gap: 6px; }
+.dbg-logbar h5 { margin: 0 auto 0 0; }
+.dbg-btn {
+  padding: 2px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  background: #1b2a22;
+  color: var(--text);
+  font: 12px var(--font);
+  cursor: pointer;
+}
+.dbg-log { flex: 1; min-height: 0; overflow: auto; margin-top: 4px; user-select: text; }
+.dbg-line {
+  padding: 3px 4px 3px 8px;
+  border-left: 3px solid #666;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.dbg-line.st-success { border-left-color: var(--good); }
+.dbg-line.st-running { border-left-color: var(--gold); }
+.dbg-line .t { display: inline-block; min-width: 44px; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; }
+.dbg-line .p { color: var(--text); }
+.dbg-line .s { margin-left: 6px; color: var(--muted); }
+.dbg-line .args { margin-left: 44px; color: #9fd3ff; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.dbg-line .skip { margin-left: 44px; color: #c99; }

@@ -1,0 +1,152 @@
+/* debug-proto.css: 协议调试面板样式（所有类名以 dp- 开头） */
+
+.dp-root {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  background: transparent;
+  color: #e8f1ea;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.dp-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.dp-stats {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  color: #8fa597;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dp-list {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+
+.dp-btn,
+.dp-input {
+  background: #1b2a22;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  color: #e8f1ea;
+  font-size: 12px;
+  padding: 2px 8px;
+  box-sizing: border-box;
+}
+
+.dp-btn {
+  cursor: pointer;
+}
+
+.dp-input {
+  flex: 1 1 120px;
+  min-width: 0;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+.dp-chk {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #e8f1ea;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dp-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.dp-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.dp-t {
+  flex: 0 0 auto;
+  width: 52px;
+  color: #8fa597;
+  font-variant-numeric: tabular-nums;
+}
+
+.dp-dir {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.dp-dir.dp-in {
+  color: #7cff9b;
+}
+
+.dp-dir.dp-out {
+  color: #ffd54a;
+}
+
+.dp-type {
+  flex: 0 0 auto;
+  min-width: 64px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+.dp-bytes {
+  flex: 0 0 auto;
+  min-width: 56px;
+  text-align: right;
+  color: #8fa597;
+  font-variant-numeric: tabular-nums;
+}
+
+.dp-prev {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #8fa597;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+.dp-detail {
+  padding: 4px 8px 8px 24px;
+  cursor: auto;
+}
+
+.dp-pre {
+  margin: 0;
+  max-height: 300px;
+  overflow: auto;
+  padding: 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  color: #e8f1ea;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
