@@ -62,17 +62,27 @@ export async function loadArt(): Promise<void> {
     const res = await fetch(BASE + 'manifest.json', { cache: 'no-cache' });
     if (!res.ok) return;
     m = await res.json();
+    if (!m || typeof m !== 'object') return;
   } catch {
     return;
   }
   const tex = (path: string) => Assets.load<Texture>(BASE + path);
   const jobs: Promise<void>[] = [];
+  const pair = (v: unknown) => Array.isArray(v) && v.length === 2 && v.every((n) => typeof n === 'number');
   for (const [name, def] of Object.entries(m.characters || {})) {
+    if (!def || typeof def.sheet !== 'string' || !pair(def.frame) || !pair(def.anchor) || !def.anims) {
+      console.error(`美术资源 ${name}：清单缺少 sheet、frame、anchor 或 anims，已跳过`);
+      continue;
+    }
     jobs.push(tex(def.sheet).then((t) => {
       art.characters.set(name, { def, anims: sliceSheet(t, def) });
     }).catch((err) => console.error(`美术资源 ${name} 加载失败`, err)));
   }
   for (const [kind, def] of Object.entries(m.props || {})) {
+    if (!def || !Array.isArray(def.images) || !def.images.length || !pair(def.anchor)) {
+      console.error(`美术资源 ${kind}：清单缺少 images 或 anchor，已跳过`);
+      continue;
+    }
     jobs.push(Promise.all(def.images.map(tex)).then((ts) => {
       art.props.set(kind, { def, variants: ts.map((t) => sliceStrip(t, def.frames || 1)) });
     }).catch((err) => console.error(`美术资源 ${kind} 加载失败`, err)));

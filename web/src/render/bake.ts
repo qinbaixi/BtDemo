@@ -103,6 +103,7 @@ function bakeProps(): Record<string, { def: PropArt; canvases: HTMLCanvasElement
   for (const [kind, maxV] of variants) {
     const kd = sc.kindOf({ kind });
     if (kd.still) continue;   // 墙按两端点画，不是一张图能表示的
+    if (!kd.draw && !kd.live) continue;   // 只有美术图、没有程序画法的种类，没东西可导
     const canvases: HTMLCanvasElement[] = [];
     let anchor: [number, number] = [0, 0];
     let frames = 1;
