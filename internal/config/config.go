@@ -1,4 +1,4 @@
-// Package config loads the YAML files under config/.
+// Package config 加载 config/ 下的 YAML 文件。
 package config
 
 import (
@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Attrs are the four base attributes.
+// Attrs 是四项基础属性。
 type Attrs struct {
 	Str float64 `yaml:"str" json:"str"`
 	Agi float64 `yaml:"agi" json:"agi"`
@@ -18,14 +18,14 @@ type Attrs struct {
 	Vit float64 `yaml:"vit" json:"vit"`
 }
 
-// Point is a spawn position with a random spread radius.
+// Point 是带有随机分散半径的出生位置。
 type Point struct {
 	X      float64 `yaml:"x"`
 	Y      float64 `yaml:"y"`
 	Spread float64 `yaml:"spread"`
 }
 
-// Player is the template every new connection gets.
+// Player 是每个新连接获得的模板。
 type Player struct {
 	NamePrefix string   `yaml:"name_prefix"`
 	Spawn      Point    `yaml:"spawn"`
@@ -40,7 +40,7 @@ type Player struct {
 	Skills     []string `yaml:"skills"`
 }
 
-// World is config/world.yaml.
+// World 对应 config/world.yaml。
 type World struct {
 	Map struct {
 		Width  float64 `yaml:"width"`
@@ -51,12 +51,12 @@ type World struct {
 	} `yaml:"aoi"`
 	TickRate int                 `yaml:"tick_rate"`
 	SyncRate int                 `yaml:"sync_rate"`
-	Addr     string              `yaml:"addr"` // HTTP listen address, e.g. ":8090" or "127.0.0.1:8090"
+	Addr     string              `yaml:"addr"` // HTTP 监听地址，例如 ":8090" 或 "127.0.0.1:8090"
 	Hostile  map[string][]string `yaml:"hostile"`
 	Player   Player              `yaml:"player"`
 }
 
-// Buff is a timed attribute modifier granted by a skill.
+// Buff 是技能授予的限时属性修正。
 type Buff struct {
 	Name     string  `yaml:"name"`
 	Duration float64 `yaml:"duration"`
@@ -65,7 +65,7 @@ type Buff struct {
 	SpeedPct float64 `yaml:"speed_pct"`
 }
 
-// Skill is one entry of config/skills.yaml.
+// Skill 对应 config/skills.yaml 中的一个条目。
 type Skill struct {
 	ID       string  `yaml:"-"`
 	Name     string  `yaml:"name"`
@@ -82,7 +82,7 @@ type Skill struct {
 	Color    string  `yaml:"color"`
 }
 
-// Template is a monster or NPC template from config/monsters.yaml.
+// Template 是 config/monsters.yaml 中的怪物或 NPC 模板。
 type Template struct {
 	ID      string   `yaml:"-"`
 	Name    string   `yaml:"name"`
@@ -94,13 +94,13 @@ type Template struct {
 	Speed   float64  `yaml:"speed"`
 	Radius  float64  `yaml:"radius"`
 	Color   string   `yaml:"color"`
-	Model   string   `yaml:"model"` // client look; defaults to the template id
+	Model   string   `yaml:"model"` // 客户端外观；默认为模板 id
 	Skills  []string `yaml:"skills"`
 	Respawn float64  `yaml:"respawn"`
 	Exp     int      `yaml:"exp"`
 }
 
-// Spawn places Count copies of a template around (X, Y).
+// Spawn 在 (X, Y) 周围放置 Count 份模板副本。
 type Spawn struct {
 	Template string  `yaml:"template"`
 	X        float64 `yaml:"x"`
@@ -109,18 +109,17 @@ type Spawn struct {
 	Spread   float64 `yaml:"spread"`
 }
 
-// Config is everything loaded from the config folder.
+// Config 是从配置目录加载的全部内容。
 type Config struct {
 	World     World
 	Skills    map[string]*Skill
 	Templates map[string]*Template
 	Spawns    []Spawn
-	Layout    Layout // map.yaml
+	Layout    Layout // 对应 map.yaml
 }
 
-// Load reads world.yaml, skills.yaml, monsters.yaml and map.yaml from dir and checks
-// that every reference resolves. knownTrees lists the behavior trees compiled
-// into the binary.
+// Load 从 dir 读取 world.yaml、skills.yaml、monsters.yaml 和 map.yaml，并检查每个引用都能解析。
+// knownTrees 列出编译进二进制文件的行为树。
 func Load(dir string, knownTrees map[string]bool) (*Config, error) {
 	c := &Config{}
 	if err := readYAML(filepath.Join(dir, "world.yaml"), &c.World); err != nil {
@@ -245,7 +244,7 @@ func (c *Config) validate(knownTrees map[string]bool) error {
 	return nil
 }
 
-// Hostile reports whether faction a attacks faction b.
+// Hostile 报告阵营 a 是否会攻击阵营 b。
 func (c *Config) Hostile(a, b string) bool {
 	for _, f := range c.World.Hostile[a] {
 		if f == b {
@@ -255,8 +254,7 @@ func (c *Config) Hostile(a, b string) bool {
 	return false
 }
 
-// NormalizeAddr turns a bare port such as "8090" into ":8090" and defaults
-// an empty address to ":8080".
+// NormalizeAddr 将 "8090" 这类裸端口转换为 ":8090"，并将空地址默认为 ":8080"。
 func NormalizeAddr(addr string) string {
 	addr = strings.TrimSpace(addr)
 	if addr == "" {

@@ -6,8 +6,8 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/config"
 )
 
-// A player only receives entities in the nine cells around it, and gets
-// leave when they go out of view.
+// 玩家只接收其周围九宫格内的实体，
+// 实体离开视野时会收到离开通知。
 func TestFlushEnterLeave(t *testing.T) {
 	w := testWorld()
 	w.State.Cfg.World.Player.Respawn = 3

@@ -1,4 +1,4 @@
-// Package web embeds the browser client.
+// Package web 嵌入浏览器客户端。
 package web
 
 import (
@@ -9,5 +9,5 @@ import (
 //go:embed static
 var files embed.FS
 
-// FS is the client's static files (index.html, main.js, ...).
+// FS 是客户端的静态文件（index.html、main.js 等）。
 var FS, _ = fs.Sub(files, "static")

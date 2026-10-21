@@ -1,11 +1,9 @@
-// Package bt runs behavior trees exported by owl-bt (BtTree) as Go source.
+// Package bt 运行 owl-bt（BtTree）导出为 Go 源码的行为树。
 //
-// The exporter produces one map per tree, `map[int]map[string]any`, keyed by
-// node id. Every entry has `node_id`, `type` (composite / task / decorator /
-// service) and `sub_type`; nodes list their `children`, `decorators` and
-// `services` by id, and leaf items carry a `properties` map. This package turns
-// that data into a Tree and ticks it, while the game binds each `sub_type` to
-// real code through a Registry.
+// 导出器为每棵树生成一个 `map[int]map[string]any`，以节点 id 为键。每个条目都有 `node_id`、
+// `type`（composite / task / decorator / service 之一）和 `sub_type`；节点通过 id 列出其
+// `children`、`decorators` 和 `services`，叶子条目带有 `properties` 映射。本包将这些数据
+// 转换为 Tree 并对其进行 tick，而游戏则通过 Registry 将每个 `sub_type` 绑定到真实代码。
 package bt
 
 import (
@@ -13,7 +11,7 @@ import (
 	"sort"
 )
 
-// Kind is the exported `type` of an item.
+// Kind 是条目导出的 `type`。
 type Kind string
 
 const (
@@ -23,7 +21,7 @@ const (
 	KindService   Kind = "service"
 )
 
-// Node is one exported item: a composite, a task, a decorator or a service.
+// Node 是一个导出的条目：composite、task、decorator 或 service 之一。
 type Node struct {
 	ID         int
 	Kind       Kind
@@ -33,16 +31,16 @@ type Node struct {
 	Decorators []*Node
 	Services   []*Node
 
-	// Decorator fields.
+	// 装饰器字段。
 	Inverse  bool
 	Periodic bool
 
-	// Service fields, in seconds.
+	// 服务字段，单位为秒。
 	Interval  float64
 	FirstTick float64
 }
 
-// Num returns a numeric property, or def when it is missing.
+// Num 返回数值属性；若该属性不存在，则返回 def。
 func (n *Node) Num(name string, def float64) float64 {
 	switch v := n.Props[name].(type) {
 	case int:
@@ -55,7 +53,7 @@ func (n *Node) Num(name string, def float64) float64 {
 	return def
 }
 
-// Str returns a string property, or def when it is missing.
+// Str 返回字符串属性；若该属性不存在，则返回 def。
 func (n *Node) Str(name, def string) string {
 	if v, ok := n.Props[name].(string); ok {
 		return v
@@ -63,15 +61,14 @@ func (n *Node) Str(name, def string) string {
 	return def
 }
 
-// Tree is a loaded behavior tree.
+// Tree 是已加载的行为树。
 type Tree struct {
 	Name  string
 	Root  *Node
 	Nodes map[int]*Node
 }
 
-// Load builds a Tree from the data owl-bt exports for Go
-// (`<Prefix>RootID` and `<Prefix>Nodes`).
+// Load 根据 owl-bt 为 Go 导出的数据（`<Prefix>RootID` 和 `<Prefix>Nodes`）构建 Tree。
 func Load(name string, rootID int, raw map[int]map[string]any) (*Tree, error) {
 	t := &Tree{Name: name, Nodes: make(map[int]*Node, len(raw))}
 	ids := make([]int, 0, len(raw))
@@ -130,7 +127,7 @@ func (t *Tree) refs(entry map[string]any, key string, owner int) ([]*Node, error
 	return out, nil
 }
 
-// Validate checks that every item of the tree has a handler in reg.
+// Validate 检查树中的每个条目在 reg 中都有对应的处理函数。
 func (t *Tree) Validate(reg *Registry) error {
 	for _, id := range sortedIDs(t.Nodes) {
 		n := t.Nodes[id]

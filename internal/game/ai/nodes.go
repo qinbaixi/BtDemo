@@ -10,28 +10,27 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
-// Agent is what the behavior tree runtime passes to handlers (ctx.Agent).
+// Agent 是行为树运行时传给处理器的对象（ctx.Agent）。
 type Agent struct {
 	sys *System
 	E   *core.Entity
 }
 
-// Speed multipliers and timeouts used by the movement tasks.
+// 移动任务使用的速度倍率和超时时间。
 const (
 	wanderSpeed      = 0.5
-	wanderTimeout    = 6.0 // seconds
+	wanderTimeout    = 6.0 // 秒
 	returnHomeSpeed  = 1.5
 	fleeSpeed        = 1.2
-	fleeTimeout      = 4.0 // seconds
-	attackerWindow   = 5.0 // seconds a hit keeps the attacker as the preferred target
-	lostTargetFactor = 2.0 // a target farther than Range*lostTargetFactor is dropped
+	fleeTimeout      = 4.0 // 秒
+	attackerWindow   = 5.0 // 受击后，攻击者保持为优先目标的秒数
+	lostTargetFactor = 2.0 // 距离超过 Range*lostTargetFactor 的目标会被丢弃
 )
 
-// step is how far the agent may move this tick at the given speed multiplier.
+// step 返回本 tick 内 agent 以给定速度倍率可以移动的距离。
 func (a *Agent) step(mult float64) float64 { return a.E.Attr.Speed * mult * a.sys.s.Clock.Dt }
 
-// target returns the agent's current target if it is still alive. Otherwise it
-// clears the target and returns nil.
+// target 在 agent 当前的目标仍然存活时返回该目标；否则清除目标并返回 nil。
 func (a *Agent) target() *core.Entity {
 	t := a.sys.s.Ents.Get(a.E.Target)
 	if !t.Alive() {
@@ -41,13 +40,13 @@ func (a *Agent) target() *core.Entity {
 	return t
 }
 
-// memFloat reads a float64 from the node's scratch memory, or 0 when missing.
+// memFloat 从节点的临时内存中读取 float64，缺失时返回 0。
 func memFloat(ctx *bt.Ctx, key string) float64 {
 	v, _ := ctx.Mem[key].(float64)
 	return v
 }
 
-// register binds every task, condition and service used by bt/owl-bt.json to game code.
+// register 将 bt/owl-bt.json 中用到的每个任务、条件和服务绑定到游戏代码。
 func (sys *System) register() {
 	reg := sys.reg
 	reg.Task("find_target", func(ctx *bt.Ctx) bt.Status {
@@ -129,7 +128,7 @@ func (sys *System) register() {
 			}
 			dx, dy := a.E.X-threat.X, a.E.Y-threat.Y
 			d := math.Hypot(dx, dy)
-			if d < 1e-6 { // standing on top of the threat: pick any direction
+			if d < 1e-6 { // 正压在威胁目标上：任选一个方向
 				ang := sys.s.Rand.Float64() * 2 * math.Pi
 				dx, dy, d = math.Cos(ang), math.Sin(ang), 1
 			}

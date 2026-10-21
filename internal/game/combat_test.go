@@ -17,8 +17,8 @@ var (
 	monsterBase = config.Attrs{Str: 6, Agi: 4, Int: 2, Vit: 8}
 )
 
-// testWorld builds a 1000x1000 world from a small hand-written config: no
-// spawns, no config files, and only the given obstacles.
+// testWorld 使用一份手写的小型配置构建 1000x1000 的世界：没有刷怪点，不读取配置文件，
+// 只包含给定的障碍物。
 func testWorld(obstacles ...nav.Shape) *World {
 	cfg := &config.Config{Skills: map[string]*config.Skill{}, Templates: map[string]*config.Template{}}
 	cfg.World.Map.Width, cfg.World.Map.Height, cfg.World.AOI.Cell = 1000, 1000, 200
@@ -31,7 +31,7 @@ func testWorld(obstacles ...nav.Shape) *World {
 	return w
 }
 
-// addTestEntity places a living entity with radius 16 into w. "player" gets core.KindPlayer, anything else core.KindMonster.
+// addTestEntity 在 w 中放入一个半径为 16 的存活实体。"player" 的 Kind 为 core.KindPlayer，其余为 core.KindMonster。
 func addTestEntity(w *World, id int, faction string, x, y float64, base config.Attrs) *core.Entity {
 	e := &core.Entity{
 		Identity:  core.Identity{ID: id, Kind: core.KindMonster, Faction: faction},
@@ -75,7 +75,7 @@ func TestComputeDerived(t *testing.T) {
 		MaxHP: 220, Atk: 33, MAtk: 33, Def: 19, MDef: 19, Crit: 0.09, CritDmg: 1.55, Speed: 100,
 	})
 
-	// Two buffs: Atk/MAtk x1.5, Def/MDef x1.1, Speed x1.25.
+	// 两个 Buff：Atk/MAtk 乘以 1.5，Def/MDef 乘以 1.1，Speed 乘以 1.25。
 	buffs := []*core.Buff{
 		{Cfg: &config.Buff{AtkPct: 0.4, DefPct: 0.1, SpeedPct: 0.25}, Until: 10},
 		{Cfg: &config.Buff{AtkPct: 0.1}, Until: 10},
@@ -89,7 +89,7 @@ func TestRecalcKeepsHPRatio(t *testing.T) {
 	w := testWorld()
 	p := addTestEntity(w, 1, "player", 0, 0, playerBase) // MaxHP 220
 	p.HP = p.Attr.MaxHP / 2
-	p.Base.Vit += 5 // MaxHP +60 -> 280
+	p.Base.Vit += 5 // MaxHP 增加 60 -> 280
 	attr.Recalc(p)
 	if p.Attr.MaxHP != 280 {
 		t.Fatalf("MaxHP = %v, want 280", p.Attr.MaxHP)
@@ -114,7 +114,7 @@ func TestTargetOutOfRange(t *testing.T) {
 func TestCooldownBlocksRecast(t *testing.T) {
 	w := testWorld()
 	p := addTestEntity(w, 1, "player", 0, 0, playerBase)
-	m := addTestEntity(w, 2, "monster", 60, 0, monsterBase) // edge distance 28, within range 70
+	m := addTestEntity(w, 2, "monster", 60, 0, monsterBase) // 边缘距离 28，在范围 70 之内
 	sk := slashSkill()
 	if err := w.Combat.Cast(p, sk, m.ID); err != nil {
 		t.Fatalf("first cast: %v", err)
@@ -155,10 +155,10 @@ func TestDamageSetsLastAttacker(t *testing.T) {
 func TestAOEHitsOnlyHostileInRadius(t *testing.T) {
 	w := testWorld()
 	p := addTestEntity(w, 1, "player", 500, 500, playerBase)
-	near := addTestEntity(w, 2, "monster", 550, 500, monsterBase) // edge distance 18: hit
-	side := addTestEntity(w, 3, "monster", 500, 620, monsterBase) // edge distance 88: hit
-	far := addTestEntity(w, 4, "monster", 500, 660, monsterBase)  // edge distance 128: miss
-	ally := addTestEntity(w, 5, "player", 520, 500, playerBase)   // in range but not hostile: miss
+	near := addTestEntity(w, 2, "monster", 550, 500, monsterBase) // 边缘距离 18：命中
+	side := addTestEntity(w, 3, "monster", 500, 620, monsterBase) // 边缘距离 88：命中
+	far := addTestEntity(w, 4, "monster", 500, 660, monsterBase)  // 边缘距离 128：未命中
+	ally := addTestEntity(w, 5, "player", 520, 500, playerBase)   // 在范围内但不是敌对目标：未命中
 	whirl := &config.Skill{ID: "whirlwind", Name: "旋风斩", Kind: "aoe", Radius: 110, Cooldown: 5, Damage: "physical", Ratio: 1.2, Base: 6, FX: "circle"}
 
 	if err := w.Combat.Cast(p, whirl, 0); err != nil {
@@ -247,13 +247,13 @@ func TestGainExpLevelsUp(t *testing.T) {
 	p := addTestEntity(w, 1, "player", 0, 0, playerBase)
 	p.Growth = config.Attrs{Str: 2, Agi: 1.5, Int: 1.5, Vit: 2}
 
-	w.Attr.GainExp(p, 100) // exactly enough for level 2
+	w.Attr.GainExp(p, 100) // 恰好够升到 2 级
 	if p.Level != 2 || p.Exp != 0 || p.Base.Str != 12 {
 		t.Fatalf("after 100 exp: level %d, exp %d, str %v; want 2, 0, 12", p.Level, p.Exp, p.Base.Str)
 	}
 
 	p.HP = 1
-	w.Attr.GainExp(p, 250) // 200 for level 3, 50 left over
+	w.Attr.GainExp(p, 250) // 升到 3 级需要 200，剩余 50
 	if p.Level != 3 || p.Exp != 50 || p.Base.Str != 14 {
 		t.Errorf("after 250 exp: level %d, exp %d, str %v; want 3, 50, 14", p.Level, p.Exp, p.Base.Str)
 	}
@@ -262,8 +262,7 @@ func TestGainExpLevelsUp(t *testing.T) {
 	}
 }
 
-// A monster killed by a player grants exp, lies dead until its respawn time,
-// then comes back at home with full HP.
+// 被玩家击杀的怪物会给予经验，在重生时间到达前保持死亡状态，然后回到家中并恢复满血。
 func TestKillGrantsExpAndRespawns(t *testing.T) {
 	w := testWorld()
 	p := addTestEntity(w, 1, "player", 500, 500, playerBase)
@@ -273,7 +272,7 @@ func TestKillGrantsExpAndRespawns(t *testing.T) {
 	if !m.Dead || m.HP != 0 || p.Exp != 30 {
 		t.Fatalf("dead %v hp %v exp %v", m.Dead, m.HP, p.Exp)
 	}
-	w.Combat.Kill(m, p) // killing the dead does nothing
+	w.Combat.Kill(m, p) // 杀死已死亡的实体不会有任何效果
 	if p.Exp != 30 {
 		t.Fatalf("exp granted twice: %v", p.Exp)
 	}
@@ -291,7 +290,7 @@ func TestKillGrantsExpAndRespawns(t *testing.T) {
 	}
 }
 
-// Only a player killer earns exp.
+// 只有玩家击杀者才能获得经验。
 func TestMonsterKillerGetsNoExp(t *testing.T) {
 	w := testWorld()
 	a := addTestEntity(w, 1, "monster", 500, 500, monsterBase)

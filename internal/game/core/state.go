@@ -9,8 +9,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
-// State is the shared world state handed to every system: config, clock,
-// randomness, the entity table and the event queue.
+// State 是共享的世界状态，会传给每个系统：包括配置、时钟、随机数、实体表和事件队列。
 type State struct {
 	Cfg    *config.Config
 	Rand   *rand.Rand
@@ -19,7 +18,7 @@ type State struct {
 	Events Events
 }
 
-// NewState creates an empty world state.
+// NewState 创建一个空的世界状态。
 func NewState(cfg *config.Config, seed int64) *State {
 	return &State{
 		Cfg:   cfg,
@@ -29,46 +28,46 @@ func NewState(cfg *config.Config, seed int64) *State {
 	}
 }
 
-// Now is the current game time in seconds.
+// Now 返回当前的游戏时间（秒）。
 func (s *State) Now() float64 { return s.Clock.Now }
 
-// Hostile reports whether a attacks b.
+// Hostile 报告 a 是否会攻击 b。
 func (s *State) Hostile(a, b *Entity) bool { return a != b && s.Cfg.Hostile(a.Faction, b.Faction) }
 
-// Scatter returns a random point within spread of (x, y).
+// Scatter 返回 (x, y) 周围 spread 范围内的一个随机点。
 func (s *State) Scatter(x, y, spread float64) (float64, float64) {
 	a := s.Rand.Float64() * 2 * math.Pi
 	r := math.Sqrt(s.Rand.Float64()) * spread
 	return x + math.Cos(a)*r, y + math.Sin(a)*r
 }
 
-// Clock is game time, advanced one fixed tick at a time.
+// Clock 是游戏时间，每次按固定的一个 tick 推进。
 type Clock struct {
-	Now  float64 // seconds since start
-	Dt   float64 // seconds per tick
-	Tick int     // ticks since start
+	Now  float64 // 自开始以来的秒数
+	Dt   float64 // 每个 tick 的秒数
+	Tick int     // 自开始以来的 tick 数
 }
 
-// Advance moves the clock one tick forward.
+// Advance 将时钟向前推进一个 tick。
 func (c *Clock) Advance() {
 	c.Tick++
 	c.Now += c.Dt
 }
 
-// Entities is the table of every entity in the world.
+// Entities 是世界中所有实体的表。
 type Entities struct {
 	byID   map[int]*Entity
-	ids    []int // sorted, for a deterministic Each
+	ids    []int // 已排序，用于保证 Each 的确定性
 	nextID int
 }
 
-// New creates an entity with a fresh id. It is not in the table until Add.
+// New 创建一个带有新 ID 的实体。在调用 Add 之前，它不在表中。
 func (t *Entities) New() *Entity {
 	t.nextID++
 	return &Entity{Identity: Identity{ID: t.nextID}, Combat: Combat{Cooldowns: map[string]float64{}}}
 }
 
-// Add puts e into the table.
+// Add 将 e 放入表中。
 func (t *Entities) Add(e *Entity) {
 	if _, ok := t.byID[e.ID]; !ok {
 		i, _ := slices.BinarySearch(t.ids, e.ID)
@@ -78,7 +77,7 @@ func (t *Entities) Add(e *Entity) {
 	t.nextID = max(t.nextID, e.ID)
 }
 
-// Remove takes e out of the table.
+// Remove 将 e 从表中移除。
 func (t *Entities) Remove(e *Entity) {
 	if _, ok := t.byID[e.ID]; !ok {
 		return
@@ -89,41 +88,39 @@ func (t *Entities) Remove(e *Entity) {
 	}
 }
 
-// Get returns the entity with the given id, or nil.
+// Get 返回具有给定 ID 的实体，不存在则返回 nil。
 func (t *Entities) Get(id int) *Entity { return t.byID[id] }
 
-// Each calls fn for every entity in id order, so a tick is deterministic for
-// a given seed.
+// Each 按 ID 顺序对每个实体调用 fn，因此在给定种子下，tick 的执行是确定性的。
 func (t *Entities) Each(fn func(*Entity)) {
-	for _, id := range slices.Clone(t.ids) { // fn may add or remove entities
+	for _, id := range slices.Clone(t.ids) { // fn 中可能会添加或移除实体
 		if e := t.byID[id]; e != nil {
 			fn(e)
 		}
 	}
 }
 
-// Event is something that happened, sent with the next sync to every player
-// who can see where it happened.
+// Event 是已经发生的事件，会随下一次同步发送给每个能看到事件发生位置的玩家。
 type Event = pb.Event
 
-// PendingEvent is a queued event and where it happened.
+// PendingEvent 是排队中的事件及其发生位置。
 type PendingEvent struct {
 	X, Y float64
 	Ev   *Event
 }
 
-// Events is the queue of events since the last sync.
+// Events 是自上次同步以来的事件队列。
 type Events struct {
 	list []PendingEvent
 }
 
-// Emit queues ev at e's position.
+// Emit 将 ev 加入队列，位置为 e 所在位置。
 func (q *Events) Emit(e *Entity, ev *Event) {
 	q.list = append(q.list, PendingEvent{X: e.X, Y: e.Y, Ev: ev})
 }
 
-// List returns the queued events.
+// List 返回队列中的事件。
 func (q *Events) List() []PendingEvent { return q.list }
 
-// Clear empties the queue.
+// Clear 清空队列。
 func (q *Events) Clear() { q.list = q.list[:0] }

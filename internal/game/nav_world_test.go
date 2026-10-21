@@ -9,7 +9,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
 )
 
-// overlap is how deep e sits inside an obstacle (0 when it is clear).
+// overlap 是 e 嵌入障碍物的深度（完全不重叠时为 0）。
 func overlap(w *World, e *core.Entity) float64 {
 	worst := 0.0
 	for _, s := range w.Nav.Shapes() {
@@ -20,8 +20,8 @@ func overlap(w *World, e *core.Entity) float64 {
 	return worst
 }
 
-// With the shipped map, everything spawns clear of props and nothing ends up
-// inside one after a minute of fighting and wandering.
+// 使用随附的地图时，所有实体都生成在场景物件之外，
+// 经过一分钟的战斗和游走后，也没有任何实体进入场景物件内部。
 func TestShippedMapKeepsEntitiesOutOfProps(t *testing.T) {
 	cfg, err := config.Load("../../config", TreeNames())
 	if err != nil {
@@ -43,7 +43,7 @@ func TestShippedMapKeepsEntitiesOutOfProps(t *testing.T) {
 		})
 	}
 	check("spawn")
-	s.Player.MoveX = 1 // walk east through the sanctuary wall, the meadow and the trees
+	s.Player.MoveX = 1 // 向东穿过圣所墙、草地和树林
 	for i := 0; i < 60*20; i++ {
 		w.Step()
 		drain(s)
@@ -51,7 +51,7 @@ func TestShippedMapKeepsEntitiesOutOfProps(t *testing.T) {
 	check("after 60s")
 }
 
-// A player cannot walk through a house; walking into it slides along it.
+// 玩家无法穿过房屋；走向房屋时会沿其表面滑动。
 func TestPlayerBlockedByHouse(t *testing.T) {
 	w := testWorld(nav.Shape{Kind: nav.Rect, A: nav.Vec{X: 400, Y: 400}, B: nav.Vec{X: 600, Y: 450}})
 	p := addTestEntity(w, 1, "player", 500, 300, playerBase)
@@ -62,7 +62,7 @@ func TestPlayerBlockedByHouse(t *testing.T) {
 	if p.Y > 400-p.Radius+0.01 {
 		t.Fatalf("player walked into the house: y = %.1f", p.Y)
 	}
-	p.MoveX, p.MoveY = 0.7071, 0.7071 // diagonal: slides east along the wall
+	p.MoveX, p.MoveY = 0.7071, 0.7071 // 斜向移动：沿墙向东滑动
 	x0 := p.X
 	for i := 0; i < 10; i++ {
 		w.Step()
@@ -72,7 +72,7 @@ func TestPlayerBlockedByHouse(t *testing.T) {
 	}
 }
 
-// A monster chasing a player behind a wall walks around it and reaches it.
+// 追赶墙后玩家的怪物会绕过墙并追上玩家。
 func TestChaseFindsWayAroundWall(t *testing.T) {
 	w := testWorld(nav.Shape{Kind: nav.Capsule, A: nav.Vec{X: 500, Y: 150}, B: nav.Vec{X: 500, Y: 850}, R: 10})
 	m := addTestEntity(w, 1, "monster", 350, 500, monsterBase)
@@ -94,9 +94,9 @@ func TestChaseFindsWayAroundWall(t *testing.T) {
 	}
 }
 
-// A goal sealed off by walls: the mover walks to the closest spot it can
-// reach, counts that as arrived, and only searches again on the replan
-// schedule rather than every tick.
+// 目标被墙封闭：移动体走到它能到达的最近位置，
+// 并视为已到达，且只按重新规划的时间表再次搜索，
+// 而不是每个 tick 都搜索。
 func TestUnreachableGoalDoesNotReplanEveryTick(t *testing.T) {
 	box := []nav.Shape{
 		{Kind: nav.Capsule, A: nav.Vec{X: 600, Y: 400}, B: nav.Vec{X: 800, Y: 400}, R: 10},

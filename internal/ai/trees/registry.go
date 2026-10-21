@@ -2,7 +2,7 @@
 
 package trees
 
-// All maps each exported tree, by file name without .json, to its data.
+// All 把每棵导出的树按文件名（不含 .json）映射到它的数据。
 var All = map[string]Exported{
 	"monster_boss":   {RootID: MonsterBossRootID, Nodes: MonsterBossNodes},
 	"monster_melee":  {RootID: MonsterMeleeRootID, Nodes: MonsterMeleeNodes},

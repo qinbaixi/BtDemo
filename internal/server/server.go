@@ -1,4 +1,4 @@
-// Package server serves the browser client and the game WebSocket.
+// Package server 提供浏览器客户端和游戏 WebSocket 服务。
 package server
 
 import (
@@ -17,7 +17,7 @@ import (
 
 var upgrader = websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 4096}
 
-// Handler serves static files from static and the game socket at /ws.
+// Handler 从 static 目录提供静态文件，并在 /ws 提供游戏 socket。
 func Handler(w *game.World, static fs.FS) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.FS(static)))
@@ -35,7 +35,7 @@ func Handler(w *game.World, static fs.FS) http.Handler {
 	return mux
 }
 
-// serve runs one connection: every connection gets a brand new character.
+// serve 处理一个连接：每个连接都会获得一个全新的角色。
 func serve(w *game.World, conn *websocket.Conn) {
 	defer conn.Close()
 	joined := make(chan *game.Session, 1)
@@ -49,12 +49,12 @@ func serve(w *game.World, conn *websocket.Conn) {
 			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 			if err := conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
 				conn.Close()
-				for range s.Out { // drain until Leave closes the channel
+				for range s.Out { // 持续读取直到 Leave 关闭通道
 				}
 				return
 			}
 		}
-		// The world dropped the session (e.g. it fell behind): close so the client reconnects.
+		// 世界丢弃了该会话（例如它落后了）：关闭连接，使客户端重新连接。
 		conn.WriteMessage(websocket.CloseMessage, nil)
 		conn.Close()
 	}()

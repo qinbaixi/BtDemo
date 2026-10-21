@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// raw builds export data in the shape owl-bt writes for Go.
+// raw 按 owl-bt 为 Go 写出的格式构建导出数据。
 func entry(id int, typ, sub string, kv ...any) map[string]any {
 	e := map[string]any{"node_id": id, "type": typ, "sub_type": sub}
 	for i := 0; i < len(kv); i += 2 {
@@ -17,7 +17,7 @@ func entry(id int, typ, sub string, kv ...any) map[string]any {
 type agent struct {
 	cond    bool
 	calls   map[string]int
-	runFor  int // ticks "walk" stays running
+	runFor  int // "walk" 保持运行的 tick 数
 	walked  int
 	service int
 }
@@ -143,7 +143,7 @@ func TestServiceInterval(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		in.Tick(float64(i) * 0.1)
 	}
-	if a.service != 4 { // t = 0, 0.5, 1.0, 1.5
+	if a.service != 4 { // 时刻 t = 0、0.5、1.0、1.5
 		t.Fatalf("service ran %d times", a.service)
 	}
 }
@@ -194,7 +194,7 @@ func TestForceSuccessCoversBlockedCondition(t *testing.T) {
 	a := newAgent()
 	in := NewInstance(tr, newReg(), a, rand.New(rand.NewSource(1)))
 	in.Tick(0)
-	in.Tick(1) // "ok" is on cooldown, but the sequence must still reach "fail"
+	in.Tick(1) // "ok" 仍在冷却中，但序列必须仍能执行到 "fail"
 	if a.calls["ok"] != 1 || a.calls["fail"] != 2 {
 		t.Fatalf("calls %v", a.calls)
 	}

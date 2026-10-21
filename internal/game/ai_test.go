@@ -7,7 +7,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/bt"
 )
 
-// aiInstance loads raw as a tree for e, checks that every node has a handler, and returns a runnable instance.
+// aiInstance 将 raw 作为 e 的行为树加载，检查每个节点都有处理器，并返回一个可运行的实例。
 func aiInstance(t *testing.T, w *World, e *core.Entity, raw map[int]map[string]any) *bt.Instance {
 	t.Helper()
 	tr, err := bt.Load("test", 1, raw)
@@ -20,14 +20,14 @@ func aiInstance(t *testing.T, w *World, e *core.Entity, raw map[int]map[string]a
 	return w.AI.Instance(e, tr)
 }
 
-// tickAI advances the world clock by one tick and ticks inst.
+// tickAI 将世界时钟推进一个 tick，并对 inst 执行一次 tick。
 func tickAI(w *World, inst *bt.Instance) bt.Status {
 	w.State.Clock.Now += w.State.Clock.Dt
 	return inst.Tick(w.State.Clock.Now)
 }
 
-// condHolds reports whether the condition sub (with props) passes for e. It hangs the
-// condition on a Wait(0) under a selector, so Success means the condition held.
+// condHolds 报告条件 sub（带属性 props）对 e 是否通过。它把该条件挂在 selector 下的
+// Wait(0) 之上，因此 Success 即表示条件成立。
 func condHolds(t *testing.T, w *World, e *core.Entity, sub string, props map[string]any) bool {
 	t.Helper()
 	inst := aiInstance(t, w, e, map[int]map[string]any{
@@ -41,7 +41,7 @@ func condHolds(t *testing.T, w *World, e *core.Entity, sub string, props map[str
 func TestFindTargetAndChase(t *testing.T) {
 	w := testWorld()
 	m := addTestEntity(w, 1, "monster", 500, 500, monsterBase)
-	p := addTestEntity(w, 2, "player", 600, 500, playerBase) // edge distance 68
+	p := addTestEntity(w, 2, "player", 600, 500, playerBase) // 边缘距离 68
 	inst := aiInstance(t, w, m, map[int]map[string]any{
 		1: {"node_id": 1, "type": "composite", "sub_type": "selector", "children": []int{2, 4}},
 		2: {"node_id": 2, "type": "task", "sub_type": "chase_target", "decorators": []int{3}, "properties": map[string]any{"StopRange": 40}},
@@ -81,7 +81,7 @@ func TestFindTargetAndChase(t *testing.T) {
 func TestFindTargetIgnoresFarPlayer(t *testing.T) {
 	w := testWorld()
 	m := addTestEntity(w, 1, "monster", 500, 500, monsterBase)
-	addTestEntity(w, 2, "player", 900, 900, playerBase) // distance 565, out of range 300
+	addTestEntity(w, 2, "player", 900, 900, playerBase) // 距离 565，超出范围 300
 	inst := aiInstance(t, w, m, map[int]map[string]any{
 		1: {"node_id": 1, "type": "composite", "sub_type": "selector", "children": []int{2}},
 		2: {"node_id": 2, "type": "task", "sub_type": "find_target", "properties": map[string]any{"Range": 300}},
@@ -133,7 +133,7 @@ func TestFarFromHomeCondition(t *testing.T) {
 	if condHolds(t, w, m, "far_from_home", props) {
 		t.Error("at home: far_from_home should not hold")
 	}
-	m.X = 950 // 450 from home
+	m.X = 950 // 距家 450
 	if !condHolds(t, w, m, "far_from_home", props) {
 		t.Error("450 from home: far_from_home 400 should hold")
 	}
@@ -164,7 +164,7 @@ func TestFleeMovesAwayFromAttacker(t *testing.T) {
 func TestReturnHomeRestoresHP(t *testing.T) {
 	w := testWorld()
 	m := addTestEntity(w, 1, "monster", 500, 500, monsterBase)
-	m.X = 600 // 100 from home
+	m.X = 600 // 距家 100
 	m.HP = 5
 	m.Target = 99
 	inst := aiInstance(t, w, m, map[int]map[string]any{
@@ -193,7 +193,7 @@ func TestCastSkillUsesSlotAndTarget(t *testing.T) {
 	w := testWorld()
 	m := addTestEntity(w, 1, "monster", 500, 500, monsterBase)
 	m.Skills = append(m.Skills, slashSkill())
-	p := addTestEntity(w, 2, "player", 560, 500, playerBase) // edge distance 28, within range 70
+	p := addTestEntity(w, 2, "player", 560, 500, playerBase) // 边缘距离 28，在范围 70 之内
 	m.Target = p.ID
 	cast := func(slot int) bt.Status {
 		return tickAI(w, aiInstance(t, w, m, map[int]map[string]any{
@@ -230,7 +230,7 @@ func TestUpdateTargetPrefersRecentAttacker(t *testing.T) {
 	}
 
 	m.Target = 0
-	m.LastHitAt = -100 // hit long ago, so the nearest hostile wins
+	m.LastHitAt = -100 // 受击已久，因此最近的敌对目标获胜
 	tickAI(w, inst)
 	if m.Target != near.ID {
 		t.Errorf("after an old hit: target %d, want nearest %d", m.Target, near.ID)

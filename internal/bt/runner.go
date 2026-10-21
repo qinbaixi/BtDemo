@@ -2,7 +2,7 @@ package bt
 
 import "math/rand"
 
-// Status is the result of ticking a node.
+// Status 是节点执行一次 tick 的结果。
 type Status int
 
 const (
@@ -21,25 +21,24 @@ func (s Status) String() string {
 	return "failure"
 }
 
-// TaskFunc runs a task node. ctx.Fresh reports whether the node was just
-// entered (it was not running on the previous tick) and ctx.Mem is scratch
-// memory that is cleared on every fresh entry.
+// TaskFunc 执行一个任务节点。ctx.Fresh 表示该节点是否刚刚进入（即上一次 tick 时并未运行），
+// ctx.Mem 是临时内存，每次全新进入时都会被清空。
 type TaskFunc func(ctx *Ctx) Status
 
-// ConditionFunc evaluates a condition decorator.
+// ConditionFunc 计算一个条件装饰器的结果。
 type ConditionFunc func(ctx *Ctx) bool
 
-// ServiceFunc runs a service.
+// ServiceFunc 运行一个服务。
 type ServiceFunc func(ctx *Ctx)
 
-// Registry binds exported `sub_type` names to game code.
+// Registry 将导出的 `sub_type` 名称绑定到游戏代码。
 type Registry struct {
 	tasks      map[string]TaskFunc
 	conditions map[string]ConditionFunc
 	services   map[string]ServiceFunc
 }
 
-// NewRegistry returns an empty registry.
+// NewRegistry 返回一个空的注册表。
 func NewRegistry() *Registry {
 	return &Registry{
 		tasks:      map[string]TaskFunc{},
@@ -52,7 +51,7 @@ func (r *Registry) Task(subType string, f TaskFunc)           { r.tasks[subType]
 func (r *Registry) Condition(subType string, f ConditionFunc) { r.conditions[subType] = f }
 func (r *Registry) Service(subType string, f ServiceFunc)     { r.services[subType] = f }
 
-// Ctx is passed to handlers.
+// Ctx 会传递给处理函数。
 type Ctx struct {
 	Agent any
 	Now   float64
@@ -62,25 +61,23 @@ type Ctx struct {
 	inst  *Instance
 }
 
-// Blackboard returns the instance's blackboard.
+// Blackboard 返回该实例的黑板。
 func (c *Ctx) Blackboard() map[string]any { return c.inst.Blackboard }
 
 type nodeMem struct {
-	lastRunning int // tick number on which the node last returned Running
+	lastRunning int // 节点上一次返回 Running 时的 tick 编号
 	child       int
 	order       []int
 	results     []Status
 	data        map[string]any
 }
 
-// Instance is one agent's running copy of a tree.
+// Instance 是某个智能体所持有的一份运行中的树副本。
 //
-// Each tick starts at the root. Selectors are reactive: they try their
-// children in priority order every tick, so a higher priority branch can
-// interrupt a running lower one. Sequences and random selectors resume at the
-// child that was running. A node that was not running on the previous tick is
-// entered fresh: its memory is cleared and its decorators are checked; while
-// it keeps running only `periodic` decorators are checked again.
+// 每次 tick 都从根节点开始。选择器是响应式的：它们每次 tick 都按优先级顺序尝试子节点，
+// 因此优先级更高的分支可以打断正在运行的低优先级分支。序列和随机选择器会从正在运行的
+// 子节点处继续。上一次 tick 未在运行的节点视为全新进入：清空其内存并检查其装饰器；
+// 在其持续运行期间，只会再次检查 `periodic` 装饰器。
 type Instance struct {
 	Tree       *Tree
 	Reg        *Registry
@@ -88,12 +85,10 @@ type Instance struct {
 	Blackboard map[string]any
 	Rand       *rand.Rand
 
-	// Active is the sub_type of the deepest task that ran on the last tick,
-	// handy for debugging and display.
+	// Active 是上一次 tick 中执行的最深任务的 sub_type，便于调试和显示。
 	Active string
 
-	// Tracing turns on Trace: every node visited by the last Tick, in the
-	// order it was entered.
+	// Tracing 开启 Trace：记录上一次 Tick 访问过的每个节点，按进入顺序排列。
 	Tracing bool
 	Trace   []TraceStep
 	depth   int
@@ -106,7 +101,7 @@ type Instance struct {
 	serviceMem  map[int]map[string]any
 }
 
-// NewInstance creates a runnable copy of t for agent.
+// NewInstance 为 agent 创建一份可运行的 t 副本。
 func NewInstance(t *Tree, reg *Registry, agent any, rng *rand.Rand) *Instance {
 	return &Instance{
 		Tree:        t,
@@ -121,18 +116,17 @@ func NewInstance(t *Tree, reg *Registry, agent any, rng *rand.Rand) *Instance {
 	}
 }
 
-// TraceStep records one node visited during a traced tick.
+// TraceStep 记录一次追踪 tick 中访问过的一个节点。
 type TraceStep struct {
 	Node   *Node
 	Depth  int
 	Status Status
-	// Note says why the result is what it is: "blocked:<decorator>" when a
-	// condition or cooldown stopped the node, "<decorator>" when a result
-	// decorator changed it, and "service:<sub_type>" for each service that fired.
+	// Note 说明结果的原因：节点被条件或冷却时间阻止时为 "blocked:<decorator>"，
+	// 结果装饰器改变结果时为 "<decorator>"，每个被触发的服务为 "service:<sub_type>"。
 	Notes []string
 }
 
-// Tick runs the tree once at time now (seconds).
+// Tick 在时刻 now（秒）运行一次整棵树。
 func (in *Instance) Tick(now float64) Status {
 	in.tick++
 	in.now = now
@@ -142,7 +136,7 @@ func (in *Instance) Tick(now float64) Status {
 	return in.run(in.Tree.Root)
 }
 
-// note adds a note to the trace step at index i, when tracing.
+// note 在追踪时为索引 i 处的追踪步骤添加一条备注。
 func (in *Instance) note(i int, s string) {
 	if i >= 0 {
 		in.Trace[i].Notes = append(in.Trace[i].Notes, s)
@@ -195,8 +189,7 @@ func (in *Instance) run(n *Node) Status {
 	}
 
 	for _, s := range n.Services {
-		// A service keeps its schedule across re-entries of its node, so
-		// time_between_ticks holds even when the node finishes every tick.
+		// 服务会在其节点重新进入时保留自己的调度，因此即使节点每次 tick 都结束，time_between_ticks 仍然有效。
 		next, scheduled := in.serviceNext[s.ID]
 		if !scheduled {
 			next = in.now + s.FirstTick
@@ -230,13 +223,11 @@ func (in *Instance) run(n *Node) Status {
 	return done(st)
 }
 
-// builtinDecorators are decorators that change a result instead of checking a
-// condition. They need no game code.
+// builtinDecorators 是直接改变结果而非检查条件的装饰器，无需游戏代码即可使用。
 var builtinDecorators = map[string]bool{"cooldown": true, "invert": true, "force_success": true}
 
-// applyResultDecorators lets the result decorators of n change st. They also
-// apply when a condition decorator blocked the node, so ForceSuccess can make
-// an optional step (such as a line of speech on cooldown) never fail its parent.
+// applyResultDecorators 让 n 的结果装饰器改变 st。当条件装饰器阻止了节点时，这些结果装饰器同样生效，
+// 因此 ForceSuccess 可以让一个可选步骤（例如冷却中的一句台词）永远不会导致其父节点失败。
 func (in *Instance) applyResultDecorators(n *Node, st Status, step int) Status {
 	for _, d := range n.Decorators {
 		before := st

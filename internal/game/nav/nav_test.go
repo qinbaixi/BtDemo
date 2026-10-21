@@ -5,18 +5,18 @@ import (
 	"testing"
 )
 
-// a vertical wall from (500,100) to (500,700) on a 1000x800 map
+// 1000x800 地图上从 (500,100) 到 (500,700) 的一道竖直墙
 func wallMap() *Map {
 	return New(1000, 800, []Shape{{Kind: Rect, A: Vec{490, 100}, B: Vec{510, 700}}})
 }
 
 func TestResolvePushesOutAndSlides(t *testing.T) {
 	m := wallMap()
-	p := m.Resolve(Vec{495, 400}, 16) // centre inside the wall, nearer its left side
+	p := m.Resolve(Vec{495, 400}, 16) // 圆心在墙内，靠近墙的左侧
 	if p.X > 490-16+1e-9 || p.Y != 400 {
 		t.Fatalf("pushed to %v, want left of the wall at the same height", p)
 	}
-	// moving diagonally into the wall keeps the vertical part of the motion
+	// 斜向撞墙时，运动中竖直方向的分量保留
 	q := m.Resolve(Vec{480, 420}, 16)
 	if q.X != 474 || q.Y != 420 {
 		t.Fatalf("slide %v", q)
@@ -46,7 +46,7 @@ func TestFindPathGoesAroundWall(t *testing.T) {
 		}
 		prev = p
 	}
-	// around an end of the wall, so through y < 100 or y > 700
+	// 绕过墙的端点，即经过 y < 100 或 y > 700 的区域
 	around := false
 	for _, p := range path {
 		around = around || p.Y < 100 || p.Y > 700
@@ -65,7 +65,7 @@ func TestFindPathStraightWhenClear(t *testing.T) {
 }
 
 func TestUnreachableGoalEndsClosest(t *testing.T) {
-	// a closed box around (800, 400)
+	// (800, 400) 周围的一个封闭方框
 	m := New(1000, 800, []Shape{
 		{Kind: Rect, A: Vec{700, 300}, B: Vec{900, 320}},
 		{Kind: Rect, A: Vec{700, 480}, B: Vec{900, 500}},

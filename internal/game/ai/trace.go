@@ -11,10 +11,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// maxTraceTicks bounds the ticks buffered per watched entity between syncs.
+// maxTraceTicks 限制每个被观察实体在两次同步之间缓存的 tick 数。
 const maxTraceTicks = 8
 
-// recordTrace copies the last tick of a traced entity into its buffer.
+// recordTrace 将被追踪实体最近一次的 tick 复制到其缓冲区中。
 func (sys *System) recordTrace(e *core.Entity) {
 	tick := &pb.AiTick{Time: core.F32(core.Round1(sys.s.Now()))}
 	for _, st := range e.AI.Trace {
@@ -27,7 +27,7 @@ func (sys *System) recordTrace(e *core.Entity) {
 			Notes:  append([]string(nil), st.Notes...),
 		})
 	}
-	// keep at least one sync interval of ticks, so a slow sync rate drops none
+	// 至少保留一个同步间隔的 tick，同步较慢时也不会丢弃任何数据
 	limit := max(maxTraceTicks, sys.s.Cfg.World.TickRate/max(1, sys.s.Cfg.World.SyncRate))
 	if len(e.AITicks) >= limit {
 		e.AITicks = e.AITicks[1:]
@@ -35,7 +35,7 @@ func (sys *System) recordTrace(e *core.Entity) {
 	e.AITicks = append(e.AITicks, tick)
 }
 
-// nodeLabel names a node by its sub_type and properties, e.g. "cast_skill Slot=1".
+// nodeLabel 用节点的 sub_type 和属性为其命名，例如 "cast_skill Slot=1"。
 func (sys *System) nodeLabel(n *bt.Node) string {
 	if l, ok := sys.labels[n]; ok {
 		return l
@@ -54,8 +54,8 @@ func (sys *System) nodeLabel(n *bt.Node) string {
 	return sys.labels[n]
 }
 
-// Trace builds the trace message for a watched entity, or nil, and is
-// called once per sync for each watching session.
+// Trace 为被观察实体构建追踪消息，无法构建时返回 nil。每次同步时，会为每个正在
+// 观察的会话调用一次。
 func (sys *System) Trace(e *core.Entity) *pb.AiTrace {
 	if e == nil || e.AI == nil {
 		return nil
@@ -88,7 +88,7 @@ func (sys *System) Trace(e *core.Entity) *pb.AiTrace {
 	return tr
 }
 
-// ClearTraces drops the ticks recorded since the last sync.
+// ClearTraces 丢弃自上次同步以来记录的 tick。
 func (sys *System) ClearTraces() {
 	sys.s.Ents.Each(func(e *core.Entity) { e.AITicks = nil })
 }

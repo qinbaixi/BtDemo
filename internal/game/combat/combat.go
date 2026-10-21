@@ -1,5 +1,4 @@
-// Package combat casts skills, computes and applies damage, heals, buffs and
-// kills, and answers who is hostile to whom nearby.
+// Package combat 负责施放技能、计算并结算伤害、治疗、Buff 和击杀，并判断附近实体之间的敌对关系。
 package combat
 
 import (
@@ -15,7 +14,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
-// User-facing reasons a skill cannot be cast.
+// 面向用户的技能无法施放的原因。
 var (
 	ErrDead     = errors.New("你已经死亡")
 	ErrCooldown = errors.New("技能冷却中")
@@ -24,19 +23,19 @@ var (
 	ErrBadSkill = errors.New("未知的技能类型")
 )
 
-// System runs skills and damage.
+// System 负责执行技能与伤害。
 type System struct {
 	s    *core.State
 	grid *aoi.Grid
 	attr *attr.System
 }
 
-// New creates the combat system.
+// New 创建战斗系统。
 func New(s *core.State, grid *aoi.Grid, at *attr.System) *System {
 	return &System{s: s, grid: grid, attr: at}
 }
 
-// Tick drops expired buffs.
+// Tick 清除已过期的 Buff。
 func (c *System) Tick() {
 	c.s.Ents.Each(func(e *core.Entity) {
 		if !e.Dead {
@@ -45,7 +44,7 @@ func (c *System) Tick() {
 	})
 }
 
-// UpdateBuffs drops expired buffs and recalculates e if any were removed.
+// UpdateBuffs 清除已过期的 Buff；若有 Buff 被移除，则重新计算 e。
 func (c *System) UpdateBuffs(e *core.Entity) {
 	now := c.s.Now()
 	if filterBuffs(e, func(b *core.Buff) bool { return b.Until > now }) {
@@ -53,7 +52,7 @@ func (c *System) UpdateBuffs(e *core.Entity) {
 	}
 }
 
-// filterBuffs keeps the buffs for which keep returns true and reports whether any were dropped.
+// filterBuffs 保留 keep 返回 true 的 Buff，并报告是否有 Buff 被丢弃。
 func filterBuffs(e *core.Entity, keep func(*core.Buff) bool) bool {
 	kept := e.Buffs[:0]
 	for _, b := range e.Buffs {
@@ -62,17 +61,17 @@ func filterBuffs(e *core.Entity, keep func(*core.Buff) bool) bool {
 		}
 	}
 	removed := len(kept) < len(e.Buffs)
-	clear(e.Buffs[len(kept):]) // do not keep dropped buffs reachable from the backing array
+	clear(e.Buffs[len(kept):]) // 不让被丢弃的 Buff 仍可通过底层数组访问
 	e.Buffs = kept
 	return removed
 }
 
-// NearestHostile returns the closest living entity within r that e is hostile to.
+// NearestHostile 返回 r 范围内与 e 敌对的、距离最近的存活实体。
 func (c *System) NearestHostile(e *core.Entity, r float64) *core.Entity {
 	return c.nearest(e, r, func(o *core.Entity) bool { return true })
 }
 
-// NearestMonster is NearestHostile limited to monsters, for a player's auto-target.
+// NearestMonster 与 NearestHostile 相同，但仅限怪物，供玩家自动选择目标使用。
 func (c *System) NearestMonster(e *core.Entity, r float64) *core.Entity {
 	return c.nearest(e, r, func(o *core.Entity) bool { return o.Kind == core.KindMonster })
 }
@@ -82,7 +81,7 @@ func (c *System) nearest(e *core.Entity, r float64, ok func(*core.Entity) bool) 
 	bestD := math.Inf(1)
 	c.grid.InRange(e.X, e.Y, r, func(o *core.Entity) {
 		if o.Alive() && c.s.Hostile(e, o) && ok(o) {
-			// ties go to the lower id so the result does not depend on map order
+			// 距离相同时取 ID 较小的实体，使结果不依赖于 map 的遍历顺序
 			if d := core.Dist(e, o); d < bestD || d == bestD && o.ID < best.ID {
 				best, bestD = o, d
 			}
@@ -91,8 +90,8 @@ func (c *System) nearest(e *core.Entity, r float64, ok func(*core.Entity) bool) 
 	return best
 }
 
-// CalcDamage returns the damage src deals to dst with skill sk and whether it crit.
-// Physical skills use Atk against Def, magic skills use MAtk against MDef.
+// CalcDamage 返回 src 使用技能 sk 对 dst 造成的伤害，以及是否暴击。
+// 物理技能以 Atk 对抗 Def，法术技能以 MAtk 对抗 MDef。
 func (c *System) CalcDamage(src, dst *core.Entity, sk *config.Skill) (float64, bool) {
 	atk, def := src.Attr.Atk, dst.Attr.Def
 	if sk.Damage == "magic" {
@@ -108,8 +107,8 @@ func (c *System) CalcDamage(src, dst *core.Entity, sk *config.Skill) (float64, b
 	return math.Max(1, math.Round(dmg)), crit
 }
 
-// Cast makes e use skill sk. targetID is used for kind "target". It returns a
-// user-facing error when the skill cannot be cast.
+// Cast 让 e 使用技能 sk。targetID 用于 kind 为 "target" 的技能。技能无法施放时，
+// 返回面向用户的错误。
 func (c *System) Cast(e *core.Entity, sk *config.Skill, targetID int) error {
 	now := c.s.Now()
 	if e.Dead {
@@ -134,9 +133,9 @@ func (c *System) Cast(e *core.Entity, sk *config.Skill, targetID int) error {
 		ev := castEvent(e, nil, sk)
 		ev.Radius, ev.X, ev.Y = core.F32(sk.Radius), core.F32(e.X), core.F32(e.Y)
 		c.s.Events.Emit(e, ev)
-		// Collect first so damage (and any kill it causes) never changes the grid mid-walk.
+		// 先收集目标，使伤害（及其导致的击杀）不会在遍历过程中改变网格。
 		var targets []*core.Entity
-		// Candidates by center distance; the edge test below is exact.
+		// 先按中心距离筛选候选目标；下面的边缘距离判断是精确的。
 		c.grid.InRange(e.X, e.Y, sk.Radius+e.Radius+core.MaxRadius, func(o *core.Entity) {
 			if o.Alive() && c.s.Hostile(e, o) && core.EdgeDist(e, o) <= sk.Radius {
 				targets = append(targets, o)
@@ -154,7 +153,7 @@ func (c *System) Cast(e *core.Entity, sk *config.Skill, targetID int) error {
 			c.s.Events.Emit(e, &core.Event{Kind: pb.EventKind_HEAL.Enum(), Dst: core.I32(e.ID), Value: core.F32(amount)})
 		}
 		if sk.Buff != nil {
-			// Recasting refreshes the buff instead of stacking it.
+			// 重复施放会刷新 Buff，而不是叠加。
 			filterBuffs(e, func(b *core.Buff) bool { return b.Cfg.Name != sk.Buff.Name })
 			e.Buffs = append(e.Buffs, &core.Buff{Cfg: sk.Buff, Until: now + sk.Buff.Duration})
 			attr.Recalc(e)
@@ -167,7 +166,7 @@ func (c *System) Cast(e *core.Entity, sk *config.Skill, targetID int) error {
 	return nil
 }
 
-// applyDamage subtracts dmg from dst, records the attacker and kills dst at zero HP.
+// applyDamage 从 dst 中扣除 dmg，记录攻击者，并在 HP 归零时击杀 dst。
 func (c *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, sk *config.Skill) {
 	dst.HP -= dmg
 	dst.LastAttacker = src.ID
@@ -178,7 +177,7 @@ func (c *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, sk *
 	}
 }
 
-// Kill marks e dead, schedules its respawn and rewards the killer.
+// Kill 将 e 标记为死亡，安排其重生，并奖励击杀者。
 func (c *System) Kill(e, killer *core.Entity) {
 	if e.Dead {
 		return
@@ -186,7 +185,7 @@ func (c *System) Kill(e, killer *core.Entity) {
 	e.Dead = true
 	e.HP = 0
 	e.Target = 0
-	e.Buffs = nil // MoveX/MoveY stay so a held key keeps working after respawn
+	e.Buffs = nil // 保留 MoveX/MoveY，使按住的按键在重生后仍然有效
 	e.Action = ""
 	c.s.Events.Emit(e, &core.Event{Kind: pb.EventKind_DIE.Enum(), Id: core.I32(e.ID)})
 	delay := c.s.Cfg.World.Player.Respawn
@@ -197,10 +196,10 @@ func (c *System) Kill(e, killer *core.Entity) {
 		}
 	}
 	e.RespawnAt = c.s.Now() + delay
-	// The body stays in the grid so observers see it until it respawns.
+	// 尸体保留在网格中，使观察者在其重生前仍能看到它。
 }
 
-// castEvent describes e using sk on dst (nil for an aoe skill).
+// castEvent 描述 e 对 dst 使用技能 sk 的事件（aoe 技能的 dst 为 nil）。
 func castEvent(e, dst *core.Entity, sk *config.Skill) *core.Event {
 	ev := &core.Event{
 		Kind: pb.EventKind_CAST.Enum(), Src: core.I32(e.ID), Skill: proto.String(sk.ID),

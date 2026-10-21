@@ -16,8 +16,8 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
-// A browser connecting over WebSocket gets a Welcome, then Enter and Sync
-// frames, all as binary protobuf, and its Move input is applied.
+// 浏览器通过 WebSocket 连接后会收到 Welcome，随后是 Enter 和 Sync
+// 帧（均为二进制 protobuf），并且其 Move 输入会被应用。
 func TestWebSocketProtocol(t *testing.T) {
 	cfg, err := config.Load("../../config", game.TreeNames())
 	if err != nil {

@@ -1,16 +1,15 @@
-// Package trees holds the behavior trees exported from the owl-bt project in
-// bt/ (one Go file per tree, written by BtTree's "Export: Go"), plus
-// registry.go, which lists them by name.
+// Package trees 存放从 owl-bt 项目 bt/ 目录导出的行为树（每棵树对应一个 Go 文件，
+// 由 BtTree 的 "Export: Go" 写出），以及按名称列出这些树的 registry.go。
 //
-// To update after editing a tree in BtTree:
+// 在 BtTree 中编辑某棵树后，按以下步骤更新：
 //
-//	owlbt export bt --format go   # or "Export: Go" in the editor
+//	owlbt export bt --format go   # 或在编辑器里点 "Export: Go"
 //	go generate ./internal/ai/trees
 package trees
 
 //go:generate go run ../../../tools/btregistry
 
-// Exported is the data owl-bt generates for one tree.
+// Exported 是 owl-bt 为一棵树生成的数据。
 type Exported struct {
 	RootID int
 	Nodes  map[int]map[string]any

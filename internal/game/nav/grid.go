@@ -5,15 +5,15 @@ import (
 	"math"
 )
 
-// CellSize is the side of a path grid cell in pixels.
+// CellSize 是路径网格单元的边长（像素）。
 const CellSize = 16.0
 
-// Grid marks which cells a mover of one radius can stand in.
+// Grid 标记半径为某一值的移动体可以站立的单元格。
 type Grid struct {
 	cols, rows int
 	blocked    []bool
 
-	// A* scratch, reused between searches; stamp tells current entries from stale ones
+	// A* 的临时数据，在多次搜索间复用；stamp 用于区分当前条目和过期条目
 	g     []float64
 	from  []int32
 	stamp []uint32
@@ -65,7 +65,7 @@ func (g *Grid) center(c int) Vec {
 	return Vec{(float64(c%g.cols) + 0.5) * CellSize, (float64(c/g.cols) + 0.5) * CellSize}
 }
 
-// nearestOpen finds the open cell nearest to c within maxRing rings.
+// nearestOpen 在 maxRing 圈内查找离 c 最近的开放单元格。
 func (g *Grid) nearestOpen(c, maxRing int) (int, bool) {
 	if !g.blocked[c] {
 		return c, true
@@ -105,9 +105,9 @@ func abs(v int) int {
 
 var dirs = [8][3]int{{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {1, 1, 1}, {1, -1, 1}, {-1, 1, 1}, {-1, -1, 1}}
 
-// astar returns the cells from a's cell (exclusive) to b's cell, or to the
-// cell closest to b when b is cut off. Blocked start and goal cells are
-// swapped for the nearest open ones.
+// astar 返回从 a 所在单元格（不含）到 b 所在单元格的单元格序列；
+// 若 b 不可达，则返回到离 b 最近的单元格。被阻挡的起点和终点单元格
+// 会被替换为最近的开放单元格。
 func (g *Grid) astar(a, b Vec) []int {
 	start, ok := g.nearestOpen(g.cellOf(a), 8)
 	if !ok {
@@ -120,10 +120,10 @@ func (g *Grid) astar(a, b Vec) []int {
 	gx, gy := goal%g.cols, goal/g.cols
 	h := func(c int) float64 {
 		dx, dy := float64(abs(c%g.cols-gx)), float64(abs(c/g.cols-gy))
-		return dx + dy + (math.Sqrt2-2)*math.Min(dx, dy) // octile distance
+		return dx + dy + (math.Sqrt2-2)*math.Min(dx, dy) // 八方向距离
 	}
 	g.gen++
-	if g.gen == 0 { // wrapped: clear the stamps once
+	if g.gen == 0 { // 计数回绕：清空一次所有 stamp
 		clear(g.stamp)
 		clear(g.shut)
 		g.gen = 1
@@ -156,7 +156,7 @@ func (g *Grid) astar(a, b Vec) []int {
 			}
 			cost := 1.0
 			if d[2] == 1 {
-				// no cutting corners past an obstacle
+				// 不允许在障碍物旁边切角
 				if g.blocked[cy*g.cols+x] || g.blocked[y*g.cols+cx] {
 					continue
 				}

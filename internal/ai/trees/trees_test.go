@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// Every tree in the owl-bt project must have been exported and registered.
+// owl-bt 项目中的每棵树都必须已导出并完成注册。
 func TestEveryTreeIsExported(t *testing.T) {
 	files, err := filepath.Glob("../../../bt/trees/*.json")
 	if err != nil || len(files) == 0 {

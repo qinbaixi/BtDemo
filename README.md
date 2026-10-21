@@ -4,6 +4,8 @@
 
 不使用数据库和缓存，所有状态都在内存里；每个 WebSocket 连接会创建一个新角色，断开即删除。
 
+后端各模块的架构和设计思路见 [docs/](docs/README.md)，第一次读 Go 代码建议从 [Go 速读](docs/go-primer.md) 开始。
+
 ## 运行
 
 ```sh

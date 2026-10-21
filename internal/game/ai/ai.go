@@ -1,6 +1,5 @@
-// Package ai runs the behavior trees exported from BtTree: it loads and
-// validates them, attaches one to each monster and NPC, ticks them, and
-// records decision traces for the debug drawer.
+// Package ai 负责运行从 BtTree 导出的行为树：加载并校验这些树，为每个怪物和 NPC 挂载一棵树，
+// 驱动其 tick，并为调试面板记录决策轨迹。
 package ai
 
 import (
@@ -14,18 +13,18 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/move"
 )
 
-// System owns the behavior trees and the node handlers.
+// System 持有行为树和节点处理器。
 type System struct {
 	s      *core.State
 	combat *combat.System
 	move   *move.System
 	reg    *bt.Registry
 	trees  map[string]*bt.Tree
-	labels map[*bt.Node]string // trace labels, built on first use
+	labels map[*bt.Node]string // 追踪标签，首次使用时构建
 }
 
-// New loads every exported tree and checks that each node type it uses has a
-// handler and that every template's CastSkill slots exist.
+// New 加载所有导出的行为树，检查每棵树用到的节点类型都有对应的处理器，
+// 并检查每个模板的 CastSkill 槽位都存在。
 func New(s *core.State, cb *combat.System, mv *move.System) (*System, error) {
 	a := &System{
 		s: s, combat: cb, move: mv,
@@ -52,7 +51,7 @@ func New(s *core.State, cb *combat.System, mv *move.System) (*System, error) {
 	return a, nil
 }
 
-// TreeNames lists the trees compiled into the binary.
+// TreeNames 列出编译进二进制文件中的行为树。
 func TreeNames() map[string]bool {
 	out := map[string]bool{}
 	for name := range trees.All {
@@ -61,7 +60,7 @@ func TreeNames() map[string]bool {
 	return out
 }
 
-// checkSlots makes sure every CastSkill in the template's tree points at one of its skills.
+// checkSlots 确保模板行为树中的每个 CastSkill 都指向该模板的某个技能。
 func checkSlots(t *bt.Tree, tmpl *config.Template) error {
 	for _, n := range t.Nodes {
 		if n.Kind == bt.KindTask && n.SubType == "cast_skill" {
@@ -74,28 +73,28 @@ func checkSlots(t *bt.Tree, tmpl *config.Template) error {
 	return nil
 }
 
-// Registry is the node handlers, for validating extra trees (used by tests).
+// Registry 返回节点处理器，用于校验额外的行为树（供测试使用）。
 func (a *System) Registry() *bt.Registry { return a.reg }
 
-// Attach gives e a fresh instance of the named tree.
+// Attach 为 e 分配一个指定行为树的新实例。
 func (a *System) Attach(e *core.Entity, tree string) {
 	e.AI = a.Instance(e, a.trees[tree])
 }
 
-// Instance creates a behavior tree instance driving e.
+// Instance 创建一个驱动 e 的行为树实例。
 func (a *System) Instance(e *core.Entity, t *bt.Tree) *bt.Instance {
 	return bt.NewInstance(t, a.reg, &Agent{sys: a, E: e}, a.s.Rand)
 }
 
-// Reset restarts e's tree from scratch, e.g. after it respawns.
+// Reset 让 e 的行为树从头重新开始，例如在其重生之后。
 func (a *System) Reset(e *core.Entity) {
 	if e.AI != nil {
 		e.AI = a.Instance(e, e.AI.Tree)
 	}
 }
 
-// Tick runs one tick of every living entity's tree. Entities in watched get
-// their tick recorded for the debug drawer.
+// Tick 对每个存活实体的行为树执行一次 tick。watched 中的实体，其每次 tick 都会
+// 记录下来供调试面板使用。
 func (a *System) Tick(watched map[int]bool) {
 	now := a.s.Now()
 	a.s.Ents.Each(func(e *core.Entity) {

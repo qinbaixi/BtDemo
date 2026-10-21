@@ -1,5 +1,5 @@
-// Package spawn creates monsters, NPCs and players, removes players, and
-// brings the dead back after their respawn delay.
+// Package spawn 负责创建怪物、NPC 和玩家，移除玩家，并
+// 在复活延迟之后让死亡的实体复活。
 package spawn
 
 import (
@@ -14,7 +14,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
-// System creates and revives entities.
+// System 创建并复活实体。
 type System struct {
 	s    *core.State
 	grid *aoi.Grid
@@ -22,12 +22,12 @@ type System struct {
 	ai   *ai.System
 }
 
-// New creates the spawn system.
+// New 创建生成系统。
 func New(s *core.State, grid *aoi.Grid, mv *move.System, a *ai.System) *System {
 	return &System{s: s, grid: grid, move: mv, ai: a}
 }
 
-// SpawnConfigured places every monster and NPC listed in world.yaml.
+// SpawnConfigured 放置 world.yaml 中列出的每个怪物和 NPC。
 func (sp *System) SpawnConfigured() {
 	for _, at := range sp.s.Cfg.Spawns {
 		for i := 0; i < at.Count; i++ {
@@ -37,7 +37,7 @@ func (sp *System) SpawnConfigured() {
 	}
 }
 
-// Template creates a monster or NPC from a template at (x, y).
+// Template 根据模板在 (x, y) 处创建一个怪物或 NPC。
 func (sp *System) Template(t *config.Template, x, y float64) *core.Entity {
 	e := sp.s.Ents.New()
 	e.Identity = core.Identity{ID: e.ID, Kind: core.Kind(t.Kind), Name: t.Name, Faction: t.Faction, Color: t.Color, Model: t.Model, Tmpl: t}
@@ -52,7 +52,7 @@ func (sp *System) Template(t *config.Template, x, y float64) *core.Entity {
 	return e
 }
 
-// Player creates a new player character at the player spawn point.
+// Player 在玩家出生点创建一个新的玩家角色。
 func (sp *System) Player() *core.Entity {
 	p := sp.s.Cfg.World.Player
 	e := sp.s.Ents.New()
@@ -76,7 +76,7 @@ func (sp *System) add(e *core.Entity) {
 	sp.grid.Add(e)
 }
 
-// Remove takes e out of the world for good.
+// Remove 将 e 永久移出世界。
 func (sp *System) Remove(e *core.Entity) {
 	sp.grid.Remove(e)
 	sp.s.Ents.Remove(e)
@@ -90,7 +90,7 @@ func (sp *System) skills(ids []string) []*config.Skill {
 	return out
 }
 
-// Tick revives the dead whose respawn time has come.
+// Tick 复活复活时间已到的死亡实体。
 func (sp *System) Tick() {
 	now := sp.s.Now()
 	sp.s.Ents.Each(func(e *core.Entity) {

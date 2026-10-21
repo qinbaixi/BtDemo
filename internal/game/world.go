@@ -1,15 +1,15 @@
-// Package game is the game server's world. Each concern is a system in its
-// own package; World only wires them together and runs them in order:
+// Package game 是游戏服务器的世界。每个职责都是独立包中的一个系统，
+// World 只负责把它们连接起来并按顺序运行：
 //
-//	core     shared data: entities and their components, clock, event queue
-//	aoi      nine-grid area of interest
-//	nav      obstacles from map.yaml, collision and A* path finding
-//	attr     attribute formulas, experience and level ups
-//	move     movement: player input, path following, collision
-//	combat   skills, damage, buffs, death
-//	ai       behavior trees from BtTree and the debug trace
-//	spawn    creating monsters, NPCs and players, respawning
-//	session  connected players: input, AOI sync, protocol
+//	core     共享数据：实体及其组件、时钟、事件队列
+//	aoi      九宫格兴趣区域
+//	nav      来自 map.yaml 的障碍物、碰撞与 A* 寻路
+//	attr     属性公式、经验与升级
+//	move     移动：玩家输入、路径跟随、碰撞
+//	combat   技能、伤害、增益、死亡
+//	ai       来自 BtTree 的行为树与调试跟踪
+//	spawn    创建怪物、NPC 和玩家，复活
+//	session  已连接的玩家：输入、AOI 同步、协议
 package game
 
 import (
@@ -29,11 +29,11 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
-// Session is one connected player.
+// Session 是一个已连接的玩家。
 type Session = session.Session
 
-// World owns all game state. Everything runs on the goroutine that calls Run;
-// other goroutines talk to it through Do.
+// World 持有所有游戏状态。一切都在调用 Run 的 goroutine 上运行；
+// 其他 goroutine 通过 Do 与它通信。
 type World struct {
 	State    *core.State
 	Grid     *aoi.Grid
@@ -48,13 +48,13 @@ type World struct {
 	inbox chan func()
 }
 
-// NewWorld builds every system, loads and validates the behavior trees and
-// spawns the configured monsters and NPCs.
+// NewWorld 构建所有系统，加载并校验行为树，
+// 并生成配置好的怪物和 NPC。
 func NewWorld(cfg *config.Config, seed int64) (*World, error) {
 	return newWorld(cfg, seed, nav.ShapesFromLayout(cfg.Layout))
 }
 
-// newWorld is NewWorld with the obstacles given directly.
+// newWorld 与 NewWorld 相同，但直接传入障碍物。
 func newWorld(cfg *config.Config, seed int64, obstacles []nav.Shape) (*World, error) {
 	w := &World{State: core.NewState(cfg, seed), inbox: make(chan func(), 256)}
 	w.Grid = aoi.NewGrid(cfg.World.Map.Width, cfg.World.Map.Height, cfg.World.AOI.Cell)
@@ -72,13 +72,13 @@ func newWorld(cfg *config.Config, seed int64, obstacles []nav.Shape) (*World, er
 	return w, nil
 }
 
-// TreeNames lists the behavior trees compiled into the binary.
+// TreeNames 列出编译进二进制文件的行为树。
 func TreeNames() map[string]bool { return ai.TreeNames() }
 
-// Do runs fn on the world goroutine.
+// Do 在世界 goroutine 上运行 fn。
 func (w *World) Do(fn func()) { w.inbox <- fn }
 
-// Run advances the world until ctx is done.
+// Run 推进世界运行，直到 ctx 结束。
 func (w *World) Run(ctx context.Context) {
 	ticker := time.NewTicker(time.Duration(float64(time.Second) * w.State.Clock.Dt))
 	defer ticker.Stop()
@@ -94,7 +94,7 @@ func (w *World) Run(ctx context.Context) {
 	}
 }
 
-// Step advances the world by one tick.
+// Step 将世界推进一个 tick。
 func (w *World) Step() {
 	w.State.Clock.Advance()
 	w.Spawn.Tick()
@@ -107,14 +107,14 @@ func (w *World) Step() {
 	}
 }
 
-// Get returns the entity with the given id, or nil.
+// Get 返回具有给定 id 的实体，若不存在则返回 nil。
 func (w *World) Get(id int) *core.Entity { return w.State.Ents.Get(id) }
 
-// Join creates a new character for a connection. Call it on the world goroutine.
+// Join 为一个连接创建新角色。须在世界 goroutine 上调用。
 func (w *World) Join() *Session { return w.Sessions.Join() }
 
-// Leave removes a session's character. Call it on the world goroutine.
+// Leave 移除会话的角色。须在世界 goroutine 上调用。
 func (w *World) Leave(s *Session) { w.Sessions.Leave(s) }
 
-// Input applies a client message. Call it on the world goroutine.
+// Input 应用一条客户端消息。须在世界 goroutine 上调用。
 func (w *World) Input(s *Session, msg *pb.ClientMsg) { w.Sessions.Input(s, msg) }

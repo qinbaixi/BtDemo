@@ -1,6 +1,6 @@
-// Package session connects players to the world: it turns client messages
-// into actions, and on every sync sends each player the AOI changes, the
-// state of what it sees, the events near it and its own attributes.
+// Package session 把玩家连接到世界：将客户端消息转换为动作，
+// 并在每次同步时向每个玩家发送 AOI 变化、
+// 其所见实体的状态、附近的事件以及其自身属性。
 package session
 
 import (
@@ -18,18 +18,18 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
-// Session is one connected player.
+// Session 是一个已连接的玩家。
 type Session struct {
 	Player  *core.Entity
-	Out     chan []byte // encoded pb.ServerMsg frames
-	Watch   int         // entity whose behavior tree trace this session wants
+	Out     chan []byte // 编码后的 pb.ServerMsg 帧
+	Watch   int         // 本会话想要查看其行为树跟踪的实体
 	visible map[int]bool
 }
 
-// Visible reports whether the player currently has entity id in view (used by tests).
+// Visible 报告玩家当前是否看到实体 id（供测试使用）。
 func (s *Session) Visible(id int) bool { return s.visible[id] }
 
-// System keeps the connected sessions.
+// System 保存已连接的会话。
 type System struct {
 	s        *core.State
 	grid     *aoi.Grid
@@ -39,18 +39,18 @@ type System struct {
 	nav      *nav.Map
 	sessions map[*Session]bool
 
-	props     []*pb.MapProp // built once, sent in every welcome
+	props     []*pb.MapProp // 构建一次，并在每条欢迎消息中发送
 	obstacles []*pb.Obstacle
 }
 
-// New creates the session system.
+// New 创建会话系统。
 func New(s *core.State, grid *aoi.Grid, m *nav.Map, cb *combat.System, a *ai.System, sp *spawn.System) *System {
 	n := &System{s: s, grid: grid, nav: m, combat: cb, ai: a, spawn: sp, sessions: map[*Session]bool{}}
 	n.props, n.obstacles = mapInfo(s.Cfg.Layout, m)
 	return n
 }
 
-// Join creates a new character for a connection and sends it the welcome.
+// Join 为一个连接创建新角色，并向其发送欢迎消息。
 func (n *System) Join() *Session {
 	s := &Session{Player: n.spawn.Player(), Out: make(chan []byte, 64), visible: map[int]bool{}}
 	n.sessions[s] = true
@@ -74,7 +74,7 @@ func (n *System) Join() *Session {
 	return s
 }
 
-// Leave removes a session's character and closes its output.
+// Leave 移除会话的角色并关闭其输出。
 func (n *System) Leave(s *Session) {
 	if !n.sessions[s] {
 		return
@@ -84,7 +84,7 @@ func (n *System) Leave(s *Session) {
 	close(s.Out)
 }
 
-// Input applies a client message.
+// Input 应用一条客户端消息。
 func (n *System) Input(s *Session, msg *pb.ClientMsg) {
 	e := s.Player
 	switch m := msg.Msg.(type) {
@@ -110,7 +110,7 @@ func (n *System) Input(s *Session, msg *pb.ClientMsg) {
 			target = e.Target
 		}
 		if t := n.s.Ents.Get(target); sk.Kind == "target" && (!t.Alive() || !n.s.Hostile(e, t) || core.EdgeDist(e, t) > sk.Range) {
-			// No usable target selected: pick the nearest monster in reach.
+			// 未选择可用目标：选取范围内最近的怪物。
 			if t = n.combat.NearestMonster(e, sk.Range+e.Radius+40); t != nil {
 				target, e.Target = t.ID, t.ID
 			}
@@ -121,7 +121,7 @@ func (n *System) Input(s *Session, msg *pb.ClientMsg) {
 	}
 }
 
-// Watched returns the entities some session wants a behavior tree trace of.
+// Watched 返回某些会话想要查看行为树跟踪的实体。
 func (n *System) Watched() map[int]bool {
 	var ids map[int]bool
 	for s := range n.sessions {
@@ -147,15 +147,15 @@ func (n *System) send(s *Session, msg *pb.ServerMsg) {
 	select {
 	case s.Out <- data:
 	default:
-		// The client fell behind. Dropping a frame would desync its AOI
-		// state, so disconnect it instead; it reconnects with a fresh view.
+		// 客户端落后了。丢弃一帧会使其 AOI
+		// 状态不同步，因此改为断开连接；客户端会以新的视野重新连接。
 		log.Printf("player %d: send buffer full, disconnecting", s.Player.ID)
 		n.Leave(s)
 	}
 }
 
-// Flush sends AOI enter / leave, the state of visible entities, queued events
-// and the player's own attributes to every session, then clears the events.
+// Flush 向每个会话发送 AOI 的进入/离开、可见实体的状态、排队中的事件
+// 以及玩家自身属性，然后清空事件队列。
 func (n *System) Flush() {
 	events := n.s.Events.List()
 	cells := make([]int, len(events))

@@ -1,6 +1,5 @@
-// Package aoi is the nine-grid area of interest: the map is cut into square
-// cells and an observer sees the entities in its own cell and the eight
-// cells around it.
+// Package aoi 实现九宫格兴趣区域（AOI）：地图被切分为正方形格子，观察者可以看到
+// 自身所在格子及其周围八个格子中的实体。
 package aoi
 
 import (
@@ -9,16 +8,16 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 )
 
-// Grid indexes entities by cell. It keeps track of which cell each entity is
-// in, so entities carry no AOI bookkeeping of their own.
+// Grid 按格子为实体建立索引。它记录每个实体所在的格子，因此实体本身不需要保存
+// 任何 AOI 相关的记录。
 type Grid struct {
 	Cell       float64
 	Cols, Rows int
 	cells      []map[int]*core.Entity
-	where      map[int]int // entity id -> cell
+	where      map[int]int // 实体 ID -> 格子
 }
 
-// NewGrid creates a grid covering a w×h map.
+// NewGrid 创建一个覆盖 w×h 地图的格子网格。
 func NewGrid(w, h, cell float64) *Grid {
 	g := &Grid{Cell: cell, Cols: int(math.Ceil(w / cell)), Rows: int(math.Ceil(h / cell)), where: map[int]int{}}
 	g.cells = make([]map[int]*core.Entity, g.Cols*g.Rows)
@@ -28,21 +27,21 @@ func NewGrid(w, h, cell float64) *Grid {
 	return g
 }
 
-// CellOf returns the index of the cell containing (x, y), clamped to the map.
+// CellOf 返回包含 (x, y) 的格子索引，结果限制在地图范围内。
 func (g *Grid) CellOf(x, y float64) int {
 	cx := clampInt(int(x/g.Cell), 0, g.Cols-1)
 	cy := clampInt(int(y/g.Cell), 0, g.Rows-1)
 	return cy*g.Cols + cx
 }
 
-// Add puts e into the grid.
+// Add 将 e 放入网格。
 func (g *Grid) Add(e *core.Entity) {
 	c := g.CellOf(e.X, e.Y)
 	g.cells[c][e.ID] = e
 	g.where[e.ID] = c
 }
 
-// Remove takes e out of the grid.
+// Remove 将 e 从网格中移除。
 func (g *Grid) Remove(e *core.Entity) {
 	if c, ok := g.where[e.ID]; ok {
 		delete(g.cells[c], e.ID)
@@ -50,7 +49,7 @@ func (g *Grid) Remove(e *core.Entity) {
 	}
 }
 
-// Moved updates e's cell after its position changed.
+// Moved 在 e 的位置变化后更新其所在格子。
 func (g *Grid) Moved(e *core.Entity) {
 	old, ok := g.where[e.ID]
 	if !ok {
@@ -63,7 +62,7 @@ func (g *Grid) Moved(e *core.Entity) {
 	}
 }
 
-// Neighbors calls fn for every entity in the nine cells around cell.
+// Neighbors 对 cell 周围九宫格内的每个实体调用 fn。
 func (g *Grid) Neighbors(cell int, fn func(*core.Entity)) {
 	cx, cy := cell%g.Cols, cell/g.Cols
 	for y := max(cy-1, 0); y <= min(cy+1, g.Rows-1); y++ {
@@ -75,7 +74,7 @@ func (g *Grid) Neighbors(cell int, fn func(*core.Entity)) {
 	}
 }
 
-// InRange calls fn for every entity whose center is within r of (x, y).
+// InRange 对中心位于 (x, y) 半径 r 之内的每个实体调用 fn。
 func (g *Grid) InRange(x, y, r float64, fn func(*core.Entity)) {
 	x0 := clampInt(int((x-r)/g.Cell), 0, g.Cols-1)
 	x1 := clampInt(int((x+r)/g.Cell), 0, g.Cols-1)
@@ -92,7 +91,7 @@ func (g *Grid) InRange(x, y, r float64, fn func(*core.Entity)) {
 	}
 }
 
-// Sees reports whether an observer in cell a can see cell b.
+// Sees 报告位于格子 a 的观察者能否看到格子 b。
 func (g *Grid) Sees(a, b int) bool {
 	ax, ay := a%g.Cols, a/g.Cols
 	bx, by := b%g.Cols, b/g.Cols

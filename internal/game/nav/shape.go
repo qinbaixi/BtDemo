@@ -1,5 +1,5 @@
-// Package nav is the map's static geometry: the obstacles props make, circle
-// collision against them, and A* path finding on a grid around them.
+// Package nav 是地图的静态几何：场景物件形成的障碍物、圆形与它们的碰撞，
+// 以及在其周围网格上的 A* 寻路。
 package nav
 
 import (
@@ -8,7 +8,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/config"
 )
 
-// Vec is a point or direction on the map.
+// Vec 是地图上的一个点或方向。
 type Vec struct{ X, Y float64 }
 
 func (a Vec) Add(b Vec) Vec           { return Vec{a.X + b.X, a.Y + b.Y} }
@@ -20,24 +20,24 @@ func (a Vec) Dot(b Vec) float64       { return a.X*b.X + a.Y*b.Y }
 func lerp(a, b Vec, t float64) Vec    { return Vec{a.X + (b.X-a.X)*t, a.Y + (b.Y-a.Y)*t} }
 func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
 
-// ShapeKind is the geometry of an obstacle.
+// ShapeKind 是障碍物的几何类型。
 type ShapeKind int
 
 const (
-	Circle  ShapeKind = iota + 1 // centre A, radius R
-	Rect                         // corners A (min) and B (max)
-	Capsule                      // segment A-B, radius R
+	Circle  ShapeKind = iota + 1 // 圆心 A，半径 R
+	Rect                         // 角点 A（最小）和 B（最大）
+	Capsule                      // 线段 A-B，半径 R
 )
 
-// Shape is one obstacle in map coordinates.
+// Shape 是地图坐标系中的一个障碍物。
 type Shape struct {
 	Kind ShapeKind
 	A, B Vec
 	R    float64
 }
 
-// closest returns the point of the shape's core (centre, rectangle or
-// segment) nearest to p, and the radius around that core.
+// closest 返回形状核心（圆心、矩形或
+// 线段）中离 p 最近的点，以及该核心周围的半径。
 func (s Shape) closest(p Vec) (Vec, float64) {
 	switch s.Kind {
 	case Rect:
@@ -54,21 +54,21 @@ func (s Shape) closest(p Vec) (Vec, float64) {
 	}
 }
 
-// Dist is the distance from p to the shape's surface; 0 or less is inside.
+// Dist 是 p 到形状表面的距离；小于等于 0 表示在内部。
 func (s Shape) Dist(p Vec) float64 {
 	if s.Kind == Rect && p.X > s.A.X && p.X < s.B.X && p.Y > s.A.Y && p.Y < s.B.Y {
-		// inside: minus the distance to the nearest edge
+		// 在内部：取负的、到最近边缘的距离
 		return -math.Min(math.Min(p.X-s.A.X, s.B.X-p.X), math.Min(p.Y-s.A.Y, s.B.Y-p.Y))
 	}
 	c, r := s.closest(p)
 	return p.Dist(c) - r
 }
 
-// push moves a circle of radius r at p out of the shape, and reports whether
-// it had to.
+// push 把圆心为 p、半径为 r 的圆推出形状，并报告
+// 是否需要推出。
 func (s Shape) push(p Vec, r float64) (Vec, bool) {
 	if s.Kind == Rect && p.X > s.A.X && p.X < s.B.X && p.Y > s.A.Y && p.Y < s.B.Y {
-		// centre inside the box: leave through the nearest side
+		// 圆心在框内：从最近的一侧推出
 		l, rt, t, b := p.X-s.A.X, s.B.X-p.X, p.Y-s.A.Y, s.B.Y-p.Y
 		switch math.Min(math.Min(l, rt), math.Min(t, b)) {
 		case l:
@@ -89,12 +89,12 @@ func (s Shape) push(p Vec, r float64) (Vec, bool) {
 		return p, false
 	}
 	if l < 1e-9 {
-		d, l = Vec{0, 1}, 1 // dead centre: push toward the camera
+		d, l = Vec{0, 1}, 1 // 正中心：朝镜头方向推出
 	}
 	return c.Add(d.Scale(min / l)), true
 }
 
-// bounds is the shape's bounding box grown by pad.
+// bounds 是形状的包围盒，按 pad 向外扩大。
 func (s Shape) bounds(pad float64) (Vec, Vec) {
 	switch s.Kind {
 	case Rect:
@@ -108,8 +108,8 @@ func (s Shape) bounds(pad float64) (Vec, Vec) {
 	}
 }
 
-// ShapesFromLayout turns the props of map.yaml into obstacles. Props whose
-// kind has no shape do not block.
+// ShapesFromLayout 把 map.yaml 中的场景物件转换为障碍物。没有对应形状的场景物件
+// 不会阻挡移动。
 func ShapesFromLayout(l config.Layout) []Shape {
 	var out []Shape
 	for _, p := range l.Props {

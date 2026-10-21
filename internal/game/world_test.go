@@ -9,8 +9,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// The shipped config and every exported tree load, and a player who walks
-// into the slime field gets attacked by behavior-tree driven monsters.
+// 随附的配置和每个导出的行为树都能正常加载，走进史莱姆区域的玩家
+// 会被由行为树驱动的怪物攻击。
 func TestWorldWithShippedConfig(t *testing.T) {
 	cfg, err := config.Load("../../config", TreeNames())
 	if err != nil {
@@ -22,7 +22,7 @@ func TestWorldWithShippedConfig(t *testing.T) {
 	}
 	s := w.Join()
 	p := s.Player
-	p.X, p.Y = 1000, 900 // middle of the slime spawn
+	p.X, p.Y = 1000, 900 // 史莱姆出生点的中央
 	w.Grid.Moved(p)
 	for i := 0; i < 20*20 && p.LastAttacker == 0; i++ {
 		w.Step()
@@ -38,8 +38,8 @@ func TestWorldWithShippedConfig(t *testing.T) {
 	}
 }
 
-// A session that watches a monster gets its behavior tree trace with each
-// sync, and only while watching.
+// 监视某个怪物的会话，每次同步都会收到该怪物的行为树跟踪，
+// 且仅在监视期间收到。
 func TestWatchSendsAITrace(t *testing.T) {
 	cfg, err := config.Load("../../config", TreeNames())
 	if err != nil {

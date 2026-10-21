@@ -18,7 +18,7 @@ var kindToPB = map[core.Kind]pb.EntityKind{
 	core.KindNPC:     pb.EntityKind_NPC,
 }
 
-// entityInfo is what a client learns about an entity when it comes into view.
+// entityInfo 是实体进入视野时客户端获知的信息。
 func entityInfo(e *core.Entity) *pb.EntityInfo {
 	return &pb.EntityInfo{
 		Id: core.I32(e.ID), Kind: kindToPB[e.Kind].Enum(), Name: proto.String(e.Name),
@@ -28,7 +28,7 @@ func entityInfo(e *core.Entity) *pb.EntityInfo {
 	}
 }
 
-// entityState is the per-sync state of a visible entity.
+// entityState 是可见实体在每次同步时的状态。
 func entityState(e *core.Entity) *pb.EntityState {
 	return &pb.EntityState{
 		Id: core.I32(e.ID), X: core.F32(core.Round1(e.X)), Y: core.F32(core.Round1(e.Y)),
@@ -37,7 +37,7 @@ func entityState(e *core.Entity) *pb.EntityState {
 	}
 }
 
-// selfInfo is the player's own attributes, cooldowns and buffs.
+// selfInfo 是玩家自身的属性、冷却和增益效果。
 func selfInfo(e *core.Entity, now float64) *pb.SelfInfo {
 	si := &pb.SelfInfo{
 		Lv: core.I32(e.Level), Exp: core.I32(e.Exp), Next: core.I32(attr.ExpToNext(e.Level)), Hp: core.F32(math.Ceil(e.HP)),
@@ -60,7 +60,7 @@ func selfInfo(e *core.Entity, now float64) *pb.SelfInfo {
 	return si
 }
 
-// mapInfo is the map's props and obstacle shapes for the welcome message.
+// mapInfo 是欢迎消息中包含的地图场景物件和障碍物形状。
 func mapInfo(l config.Layout, m *nav.Map) ([]*pb.MapProp, []*pb.Obstacle) {
 	props := make([]*pb.MapProp, 0, len(l.Props))
 	for _, p := range l.Props {

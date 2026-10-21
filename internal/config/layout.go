@@ -8,22 +8,21 @@ import (
 	"path/filepath"
 )
 
-// Layout is map.yaml: the props that block movement and the collision shape
-// of each prop kind.
+// Layout 对应 map.yaml：阻挡移动的场景物件，以及每种场景物件类型的碰撞形状。
 type Layout struct {
 	Shapes map[string]Shape `yaml:"shapes"`
 	Props  []Prop           `yaml:"props"`
 }
 
-// Shape is a collision shape relative to a prop's foot point, before scaling.
-// At most one of the fields is set; none means the kind does not block.
+// Shape 是相对于场景物件落脚点（缩放前）的碰撞形状。
+// 至多设置其中一个字段；若都不设置，则该类型不阻挡移动。
 type Shape struct {
 	Circle  []float64 `yaml:"circle"`  // cx, cy, r
 	Rect    []float64 `yaml:"rect"`    // x0, y0, x1, y1
-	Capsule float64   `yaml:"capsule"` // radius along the prop's dx/dy segment
+	Capsule float64   `yaml:"capsule"` // 沿场景物件 dx/dy 线段方向的半径
 }
 
-// Prop is one placed prop.
+// Prop 是放置的一个场景物件。
 type Prop struct {
 	Kind    string  `yaml:"kind"`
 	X       float64 `yaml:"x"`
@@ -35,7 +34,7 @@ type Prop struct {
 	DY      float64 `yaml:"dy"`
 }
 
-// loadLayout reads map.yaml from dir. A missing file means an open map.
+// loadLayout 从 dir 读取 map.yaml。若文件不存在，则表示地图是开放的（无阻挡）。
 func loadLayout(dir string) (Layout, error) {
 	var m Layout
 	err := readYAML(filepath.Join(dir, "map.yaml"), &m)
