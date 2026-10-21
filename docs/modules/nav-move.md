@@ -118,5 +118,5 @@ func (m *System) Tick()               // 每帧：玩家按输入方向走
 
 ## 想改什么去哪
 
-- 加一种物件：`map.yaml` 的 `shapes` 加形状，`props` 里摆放；前端 `web/static/scenery.js` 的 `KINDS` 加画法。只是装饰、不挡路的，形状写 `{}`。
+- 加一种物件：`map.yaml` 的 `shapes` 加形状，`props` 里摆放；前端 `web/src/render/scenery.ts` 的 `KINDS` 加画法。只是装饰、不挡路的，形状写 `{}`。
 - 调寻路手感：`move.go` 顶部的 `repathEvery`、`goalMoved`、`stuckSeconds`；网格精度是 `grid.go` 的 `CellSize`。

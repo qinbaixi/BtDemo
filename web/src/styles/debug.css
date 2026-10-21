@@ -1,4 +1,4 @@
-/* Debug drawer (debug.js). The 协议 tab styles live in debug-proto.css. */
+/* Debug drawer (ui/debug.ts). The 协议 tab styles live in debug-proto.css. */
 
 .debug-btn {
   position: absolute;

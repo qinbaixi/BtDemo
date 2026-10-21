@@ -2,12 +2,14 @@
 // monster or NPC, and a "协议" tab listing every frame sent and received.
 // Toggled with the ` key or the 调试 button.
 
-import { createProtoPanel } from './debug-proto.js';
+import { createProtoPanel } from './debug-proto';
+import type { ClientEntity } from '../game/state';
+import type { AiNode, AiTrace, ClientMessage } from '../net/types';
 
 const LOG_CAP = 300;
 const STATUS_TEXT = { success: '成功', failure: '失败', running: '运行中' };
 
-function el(tag, cls, text) {
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string | null, text?: string | null): HTMLElementTagNameMap[K] {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
   if (text != null) n.textContent = text;
@@ -15,7 +17,7 @@ function el(tag, cls, text) {
 }
 
 // noteText turns a trace note from the server into a short label.
-function noteText(n) {
+function noteText(n: string) {
   if (n.startsWith('blocked:')) return `条件未过 ${n.slice(8)}`;
   if (n.startsWith('service:')) return `服务 ${n.slice(8)}`;
   return `装饰 ${n}`;
@@ -23,7 +25,7 @@ function noteText(n) {
 
 // decision picks what a tick "decided": the last task visited that did not
 // fail, with the chain of composites above it.
-function decision(nodes) {
+function decision(nodes: AiNode[]) {
   let leaf = -1;
   for (let i = nodes.length - 1; i >= 0; i--) {
     if (nodes[i].kind === 'task' && nodes[i].status !== 'failure') { leaf = i; break; }
@@ -44,14 +46,19 @@ function decision(nodes) {
   return { leaf: nodes[leaf], path, skipped };
 }
 
-const short = (name) => name.split(' ')[0];
+const short = (name: string) => name.split(' ')[0];
 
 /**
  * createDebug builds the drawer.
  *   send(obj)      sends a client message ({t:'watch', id})
  *   entity(id)     returns a client entity or undefined
  */
-export function createDebug({ send, entity }) {
+export type Debug = ReturnType<typeof createDebug>;
+
+export function createDebug({ send, entity }: {
+  send(msg: ClientMessage): void;
+  entity(id: number): ClientEntity | undefined;
+}) {
   const root = document.getElementById('debug');
   const tabs = root.querySelector('.dbg-tabs');
   const bodies = { ai: document.getElementById('dbg-ai'), proto: document.getElementById('dbg-proto') };
@@ -96,7 +103,7 @@ export function createDebug({ send, entity }) {
   clearBtn.addEventListener('click', () => { log.replaceChildren(); lastSig = ''; });
 
   tabs.addEventListener('click', (ev) => {
-    const b = ev.target.closest('button');
+    const b = (ev.target as Element).closest('button');
     if (!b) return;
     if (b.dataset.tab) selectTab(b.dataset.tab);
     else if (b.classList.contains('dbg-close')) toggle(false);
@@ -105,7 +112,7 @@ export function createDebug({ send, entity }) {
 
   function selectTab(t) {
     tab = t;
-    for (const b of tabs.querySelectorAll('[data-tab]')) b.classList.toggle('on', b.dataset.tab === t);
+    for (const b of tabs.querySelectorAll<HTMLElement>('[data-tab]')) b.classList.toggle('on', b.dataset.tab === t);
     for (const [k, body] of Object.entries(bodies)) body.classList.toggle('hidden', k !== t);
     proto.setVisible(open && t === 'proto');
     syncWatch();
@@ -202,7 +209,7 @@ export function createDebug({ send, entity }) {
     },
 
     // trace takes Sync.ai.
-    trace(t) {
+    trace(t: AiTrace) {
       if (!t || t.id !== watching) return;
       if (t.ticks.length) traceAt = performance.now();   // dead entities send no ticks
       if (t.id !== traceId) {

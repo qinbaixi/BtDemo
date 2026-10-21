@@ -8,14 +8,16 @@
 const TAU = Math.PI * 2;
 const MAX_PARTICLES = 900;
 
-const clamp01 = (t) => Math.max(0, Math.min(1, t));
-const easeOut = (t) => 1 - (1 - t) * (1 - t);
-const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-const rand = (a, b) => a + Math.random() * (b - a);
+const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
+const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
 /* ------------------------------ colour ------------------------------ */
 
-function rgbOf(hex) {
+type RGB = number[];
+
+function rgbOf(hex: unknown): RGB {
   let c = typeof hex === 'string' ? hex.replace('#', '') : '';
   if (c.length === 3) c = c.split('').map((ch) => ch + ch).join('');
   if (!/^[0-9a-f]{6}$/i.test(c)) return [255, 255, 255];
@@ -23,12 +25,12 @@ function rgbOf(hex) {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-function rgba([r, g, b], a) {
+function rgba([r, g, b]: RGB, a: number) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
 // mix moves a colour toward white by k (0..1).
-function whiten([r, g, b], k) {
+function whiten([r, g, b]: RGB, k: number): RGB {
   return [r + (255 - r) * k, g + (255 - g) * k, b + (255 - b) * k].map((v) => v | 0);
 }
 
@@ -62,9 +64,16 @@ function blit(ctx, sprite, x, y, r, alpha) {
 
 /* ------------------------------ engine ------------------------------ */
 
+export type Resolve = (id: number) => { x: number; y: number; r: number } | null;
+
 export class FX {
+  resolve: Resolve;
+  effects: any[];   // 正在播放的技能特效
+  parts: any[];     // 粒子
+  shake: number;
+
   // resolve(id) returns the live {x, y, r} of an entity, or null.
-  constructor(resolve) {
+  constructor(resolve: Resolve) {
     this.resolve = resolve;
     this.effects = [];
     this.parts = [];

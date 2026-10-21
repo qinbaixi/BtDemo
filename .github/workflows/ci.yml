@@ -19,6 +19,18 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build client (typecheck + vite)
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
       - name: gofmt
         run: |
           unformatted=$(gofmt -l .)
@@ -59,12 +71,12 @@ jobs:
             curl -sf http://localhost:8080/ >/dev/null && break
             sleep 0.5
           done
-          curl -sf http://localhost:8080/ | grep -q '<canvas'
-          curl -sf http://localhost:8080/main.js >/dev/null
+          page=$(curl -sf http://localhost:8080/)
+          echo "$page" | grep -q '<canvas'
+          js=$(echo "$page" | grep -o 'assets/[^"]*\.js' | head -1)
+          test -n "$js"
+          curl -sf "http://localhost:8080/$js" >/dev/null
           kill %1
-
-      - name: Check client syntax
-        run: node --check web/static/main.js
 
   bt-export:
     name: Exported trees match bt/

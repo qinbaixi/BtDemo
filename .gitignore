@@ -4,3 +4,8 @@
 /.bttree
 /dist
 /build
+/web/node_modules
+/web/dist/*
+!/web/dist/.gitkeep
+/web/src/net/pb.js
+/web/src/net/pb.d.ts

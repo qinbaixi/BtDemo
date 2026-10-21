@@ -1,11 +1,11 @@
-// debug-proto.js: WebSocket protobuf 收发协议调试面板（纯内容，容器由外部抽屉提供）
+// debug-proto.ts: WebSocket protobuf 收发协议调试面板（纯内容，容器由外部抽屉提供）
 // 用法: const panel = createProtoPanel(div); panel.log('in', 'sync', 123, obj); panel.setVisible(true);
 
 const CAP = 600;            // 环形缓冲与 DOM 行数上限
 const PREVIEW_MAX = 120;    // JSON 预览最大字符数
 const SYNC_TYPE = 'sync';
 
-function el(doc, tag, cls, text) {
+function el<K extends keyof HTMLElementTagNameMap>(doc: Document, tag: K, cls?: string | null, text?: string | null): HTMLElementTagNameMap[K] {
   const n = doc.createElement(tag);
   if (cls) n.className = cls;
   if (text != null) n.textContent = text;
@@ -25,7 +25,7 @@ function detailOf(obj) {
   return s === undefined ? String(obj) : s;
 }
 
-export function createProtoPanel(root) {
+export function createProtoPanel(root: HTMLElement) {
   const doc = root.ownerDocument;
   const t0 = performance.now();
   root.classList.add('dp-root');
@@ -173,7 +173,7 @@ export function createProtoPanel(root) {
   chkHide.input.addEventListener('change', rebuild);
 
   list.addEventListener('click', (ev) => {
-    const t = ev.target;
+    const t = ev.target as Element;
     if (!t || !t.closest || t.closest('.dp-detail')) return; // 选中 JSON 文本时不折叠
     const item = t.closest('.dp-item');
     const e = item && itemEntry.get(item);

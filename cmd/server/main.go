@@ -57,6 +57,9 @@ func main() {
 		srv.Shutdown(context.Background())
 	}()
 	log.Printf("BtDemo listening on %s", url)
+	if !web.Built {
+		log.Printf("警告：没有嵌入前端构建产物，请先在 web 目录运行 npm ci && npm run build 再编译服务端")
+	}
 	if *open {
 		openBrowser(url)
 	}

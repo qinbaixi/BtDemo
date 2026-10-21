@@ -1,0 +1,129 @@
+// 处理服务端消息：welcome / enter / leave / sync / toast，更新本地状态。
+
+import type { Debug } from '../ui/debug';
+import { buildSkillBar, renderSelf, setConn, showToast } from '../ui/hud';
+import { createScenery } from '../render/scenery';
+import type { ClientMessage, ServerMessage, SyncMsg, WelcomeMsg } from '../net/types';
+import { ATTACK_MS, DEATH_MS, LERP_MS, SNAP_DIST } from './config';
+import { onEvent } from './events';
+import { hypot } from './math';
+import { makeEntity, posOf, state } from './state';
+
+export interface SyncDeps {
+  send(msg: ClientMessage): void;
+  debug: Debug;
+  resendMove(): void;   // 把当前按键状态告诉服务端
+}
+
+export function handleMessage(m: ServerMessage, deps: SyncDeps): void {
+  const now = performance.now();
+  switch (m.t) {
+    case 'welcome': onWelcome(m, deps); break;
+    case 'enter':
+      for (const d of m.ents || []) {
+        if (!state.ents.has(d.id)) state.ents.set(d.id, makeEntity(d, now));
+      }
+      break;
+    case 'leave':
+      for (const id of m.ids || []) {
+        state.ents.delete(id);
+        state.bubbles.delete(id);
+        state.lands.delete(id);
+        if (id === state.target) {
+          state.target = 0;
+          deps.send({ t: 'target', target: 0 });
+        }
+      }
+      break;
+    case 'sync': onSync(m, now, deps); break;
+    case 'msg': showToast(m.text); break;
+  }
+}
+
+// resetOnClose 在连接断开时清掉旧角色的状态。
+export function resetOnClose(): void {
+  state.ents.clear();
+  state.self = null;
+  state.target = 0;
+}
+
+function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
+  state.myId = m.id;
+  state.map = m.map || state.map;
+  state.cell = (m.aoi && m.aoi.cell) || state.cell;
+  state.skills = (m.skills || []).slice().sort((a, b) => a.slot - b.slot);
+  state.skillBySlot = {};
+  for (const sk of state.skills) state.skillBySlot[sk.slot] = sk;
+
+  // welcome 表示一个全新的角色：旧角色的东西全部丢掉。
+  state.ents.clear();
+  state.fx!.clear();
+  state.lands.clear();
+  state.pending = [];
+  state.floats = [];
+  state.bubbles.clear();
+  state.self = null;
+  state.cds = {};
+  state.target = 0;
+  state.hoverSlot = 0;
+
+  // 每张不同的地图只画一次场景（重连通常拿到的是同一张）
+  const sceneKey = `${state.map.w}x${state.map.h}:${JSON.stringify(m.props || [])}`;
+  if (!state.scenery || state.sceneKey !== sceneKey) {
+    state.scenery = createScenery(state.map.w, state.map.h, m.props || []);
+    state.sceneKey = sceneKey;
+  }
+  state.obstacles = m.obstacles || [];
+  state.aiPath = null;
+
+  buildSkillBar();
+  deps.debug.setTarget(0);
+  deps.debug.reset();
+  setConn('ok', '已连接');
+  deps.resendMove();
+}
+
+function onSync(m: SyncMsg, now: number, deps: SyncDeps): void {
+  for (const s of m.ents || []) {
+    let e = state.ents.get(s.id);
+    if (!e && s.id === state.myId) {
+      e = makeEntity({ id: s.id, kind: 'player', name: '我', r: 16, x: s.x, y: s.y }, now);
+      state.ents.set(s.id, e);
+    }
+    if (!e) continue;
+    const cur = posOf(e, now);
+    const jump = hypot(cur.x, cur.y, s.x, s.y) > SNAP_DIST;
+    const mdx = s.x - e.x;
+    if (!jump && hypot(e.x, e.y, s.x, s.y) > 0.5) {
+      e.moveUntil = now + LERP_MS * 1.6;
+      if (Math.abs(mdx) > 0.3 && now - e.attackAt > ATTACK_MS) e.facing = mdx < 0 ? Math.PI : 0;
+    }
+    if (jump) { e.rx = s.x; e.ry = s.y; }
+    if (s.dead && !e.dead) e.deadAt = e.fresh ? now - DEATH_MS : now;
+    if (!s.dead) e.deadAt = -1;
+    e.px = jump ? s.x : cur.x;
+    e.py = jump ? s.y : cur.y;
+    e.x = s.x;
+    e.y = s.y;
+    e.t0 = now;
+    e.hp = s.hp;
+    e.maxHp = s.maxHp;
+    e.lv = s.lv;
+    e.act = s.act || '';
+    e.tg = s.tg || 0;
+    e.dead = !!s.dead;
+    e.fresh = false;
+  }
+  if (m.self) {
+    state.self = m.self;
+    state.selfAt = now;
+    state.cds = m.self.cds || {};
+    state.cdsAt = now;
+    renderSelf();
+  }
+  for (const ev of m.ev || []) onEvent(ev, now);
+  if (m.ai) {
+    deps.debug.trace(m.ai);
+    state.aiPath = m.ai.path.length >= 4 ? { id: m.ai.id, pts: m.ai.path, at: now } : null;
+  }
+}

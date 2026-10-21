@@ -55,7 +55,7 @@ if 该同步了 { w.Sessions.Flush() } // 5. 给每个玩家发 AOI 变化、视
 
 玩家按 `1`（斩击）攻击一只史莱姆：
 
-1. **浏览器** `main.js` 调 `protocol.js` 的 `encode({t:'cast', slot:1, target:id})`，编码成 protobuf `ClientMsg{cast}` 通过 WebSocket 发出。
+1. **浏览器** `input.ts` 调 `protocol.ts` 的 `encode({t:'cast', slot:1, target:id})`，编码成 protobuf `ClientMsg{cast}` 通过 WebSocket 发出。
 2. **server** 读 goroutine 解码成 `pb.ClientMsg`，调用 `w.Do(func(){ w.Input(s, msg) })`。
 3. **world goroutine** 执行 `session.Input`：找到技能槽 1；目标无效时自动选最近的怪；调用 `combat.Cast`。
 4. **combat.Cast** 检查冷却、距离，算伤害（`CalcDamage`），扣血（`applyDamage`），往 `State.Events` 里放 `CAST`、`DAMAGE` 事件；血量归零就 `Kill`：标记死亡、安排复活、给玩家加经验（可能触发 `LEVEL_UP` 事件）。

@@ -23,7 +23,7 @@
 
 ## 协议（proto/btdemo.proto）
 
-用 protobuf（proto2）二进制编码。服务端用 `protoc` 生成的 `internal/pb`；前端用 protobuf.js 在运行时解析同一份 `.proto`（服务端在 `/btdemo.proto` 提供），所以两边不会不一致。
+用 protobuf（proto2）二进制编码。服务端用 `protoc` 生成的 `internal/pb`；前端用 protobufjs 从同一份 `.proto` 生成 JS 代码和 TypeScript 类型（`web` 下 `npm run proto`），字段对不上时编译期就报错。服务端仍在 `/btdemo.proto` 提供原文，方便查看。
 
 客户端 → 服务端 `ClientMsg`（oneof 四选一）：
 
@@ -46,7 +46,7 @@
 
 事件 `Event` 用 `kind` 区分：施法、伤害、治疗、Buff、死亡、复活、说话、升级。
 
-**改协议的步骤**：改 `proto/btdemo.proto` → `go generate ./internal/pb`（需要 protoc，CI 会检查生成代码是否最新）→ 服务端填字段（`session/proto.go`）→ 前端在 `web/static/protocol.js` 里读字段。proto2 的可选字段在 Go 里是指针，用 `core.I32`、`core.F32`、`proto.String` 生成。
+**改协议的步骤**：改 `proto/btdemo.proto` → `go generate ./internal/pb`（需要 protoc，CI 会检查生成代码是否最新）→ 服务端填字段（`session/proto.go`）→ 前端 `npm run proto`，在 `web/src/net/types.ts` 加字段、`web/src/net/protocol.ts` 里转换（见 [前端](frontend.md)）。proto2 的可选字段在 Go 里是指针，用 `core.I32`、`core.F32`、`proto.String` 生成。
 
 ## 会话逻辑（session.go）
 
@@ -78,4 +78,4 @@
 
 ## 前端在哪里接这些消息
 
-`web/static/protocol.js` 的 `decode` 把 `ServerMsg` 转成前端用的普通对象，`main.js` 的消息处理函数更新本地状态并渲染。前端只做表现和插值，所有判定（碰撞、伤害、冷却）都以服务端为准。
+`web/src/net/protocol.ts` 的 `decode` 把 `ServerMsg` 转成前端用的普通对象，`web/src/game/sync.ts` 更新本地状态，`web/src/render/` 每帧绘制。前端只做表现和插值，所有判定（碰撞、伤害、冷却）都以服务端为准。

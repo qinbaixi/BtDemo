@@ -147,11 +147,11 @@ defer conn.Close()   // 函数返回时自动执行，常用于释放资源
 
 ```go
 // web/embed.go
-//go:embed static
+//go:embed all:dist
 var files embed.FS
 ```
 
-编译时把 `web/static` 目录整个打进二进制，所以发布时只要一个 exe 加 `config/` 目录。副作用是改了前端 JS 必须重新 `go build` 才能看到。
+编译时把前端构建产物 `web/dist` 整个打进二进制，所以发布时只要一个 exe 加 `config/` 目录。副作用是改了前端必须先 `npm run build` 再重新 `go build` 才能看到；开发前端时用 `npm run dev` 就不用每次重编服务端。`all:` 前缀表示连 `.gitkeep` 这种点开头的文件也嵌进去，保证没构建前端时也能编译。
 
 ## 常用命令
 

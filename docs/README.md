@@ -1,6 +1,6 @@
-# BtDemo 后端文档
+# BtDemo 文档
 
-这组文档讲 Go 后端是怎么搭起来的：每个模块管什么、为什么这样分、数据怎么流动、想加功能该改哪里。
+这组文档主要讲 Go 后端是怎么搭起来的：每个模块管什么、为什么这样分、数据怎么流动、想加功能该改哪里。
 
 ## 建议阅读顺序
 
@@ -18,6 +18,7 @@
 | `internal/game/spawn` | [spawn：出生与复活](modules/spawn.md) | 刷怪、创建玩家、复活 |
 | `internal/game/session` + `internal/server` | [session 和 server：连接与同步](modules/session-server.md) | WebSocket、协议、AOI 增量同步 |
 | `internal/config` | [config：配置](modules/config.md) | YAML 加载与校验 |
+| `web/` | [前端：浏览器客户端](modules/frontend.md) | TypeScript + Vite，目录结构、开发流程、改协议 |
 
 [PLAN.md](PLAN.md) 是项目开始时写的计划，保留作历史记录；有些细节（例如协议从 JSON 换成了 protobuf、`internal/game` 拆成了多个包）已经变了，以这里的文档为准。
 

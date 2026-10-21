@@ -8,7 +8,7 @@
 //   4. a white flash over the silhouette right after a hit.
 // Ground shadow and selection rings are drawn by the caller underneath.
 
-import { drawModel } from './models.js';
+import { drawModel } from './models';
 
 const OUTLINE_PX = 2.2;          // outline thickness in CSS px
 const RIM_SHIFT = 2.4;           // how far the rim band reaches inward, CSS px
@@ -16,11 +16,13 @@ const HIT_FLASH = 0.35;          // share of the hit reaction spent flashing whi
 
 // A small pool of sprite canvases, reused every frame.
 class Layer {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
   constructor() {
     this.canvas = document.createElement('canvas');
     this.ctx = this.canvas.getContext('2d');
   }
-  size(w, h) {
+  size(w: number, h: number) {
     if (this.canvas.width < w || this.canvas.height < h) {
       this.canvas.width = Math.max(this.canvas.width, w);
       this.canvas.height = Math.max(this.canvas.height, h);

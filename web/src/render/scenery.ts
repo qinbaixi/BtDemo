@@ -499,7 +499,7 @@ function paintGround(W, H, rnd, { tombs, campfires }) {
   // Tartarus lava: ink rim, molten body, white-hot core and heat haze
   g.lineCap = 'round';
   g.lineJoin = 'round';
-  for (const pass of [[13, 'rgba(255,90,20,0.18)'], [7, INK], [4.5, '#d8360c'], [2.4, '#ff8a2a'], [1, '#ffe39a']]) {
+  for (const pass of [[13, 'rgba(255,90,20,0.18)'], [7, INK], [4.5, '#d8360c'], [2.4, '#ff8a2a'], [1, '#ffe39a']] as [number, string][]) {
     g.lineWidth = pass[0];
     g.strokeStyle = pass[1];
     for (const line of LAVA) {

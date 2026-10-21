@@ -126,12 +126,18 @@ function pTaper(c, ax, ay, bx, by, ra, rb) {
 
 // The key light comes from the upper left of the screen. LX flips with the
 // model's facing so the light stays put when a character turns around.
+// cel 的可选参数：dark 阴影色、lit 亮边色（false 表示不画）、sd 阴影深度、hl 亮边宽度、lw 描边宽度。
+interface CelOpts { dark?: string; lit?: string | false; sd?: number; hl?: number; lw?: number }
+
+// 人形模型的上半身尺寸，humanoid() 算一次后给各部件用。
+interface Body { hipY: number; sy: number; sw: number; ww: number; hr: number; hx: number; hy: number }
+
 let LX = 1;
 
 // cel paints the shape built by path(c): a shadow tone over all of it, the
 // base tone shifted toward the light (leaving a hard shadow crescent on the
 // far side), a thin lit edge on the near side, and an outline.
-function cel(ctx, path, base, o = {}) {
+function cel(ctx, path, base, o: CelOpts = {}) {
   const dark = o.dark || shade(base, -0.38);
   const lit = o.lit === undefined ? shade(base, 0.3) : o.lit;
   const sd = o.sd ?? 2.2;          // shadow depth
@@ -333,7 +339,7 @@ function humanoid(ctx, q, o) {
 
   ctx.save();
   // upper body pivots at the hip for lean
-  const B = {};
+  const B = {} as Body;
   B.hipY = hipY;
   B.sy = hipY - (o.torso ?? 14) - g.bob * 0.5 + g.breathe * 0.3;  // shoulder line
   B.sw = o.shoulder ?? 8.5;                                      // half shoulder width
@@ -1085,10 +1091,10 @@ function drawSkeleton(ctx, q) {
   }, cloak, { sd: 2.4 });
   // quiver
   cel(ctx, (c) => pRrect(c, -7.5, sy - 2, 4.2, 12, 1.5), '#6a4224', { sd: 1.2 });
-  for (const [x, col] of [[-6.6, '#c8402c'], [-4.8, '#e8d8b0']]) inkLine(ctx, [x, sy - 2, x - 0.8, sy - 6], col, 1);
+  for (const [x, col] of [[-6.6, '#c8402c'], [-4.8, '#e8d8b0']] as [number, string][]) inkLine(ctx, [x, sy - 2, x - 0.8, sy - 6], col, 1);
 
   // legs: thin bones with knobby joints
-  for (const [x, a, col] of [[-2, -swingLeg, '#b8af96'], [2.2, swingLeg, bone]]) {
+  for (const [x, a, col] of [[-2, -swingLeg, '#b8af96'], [2.2, swingLeg, bone]] as [number, number, string][]) {
     const j = joint(x, hipY, a, 7.5, a - Math.max(0, a) * 0.8, 7.5);
     inkLine(ctx, [x, hipY, j.kx, j.ky, j.ex, j.ey], col, 1.8);
     flat(ctx, (c) => pEll(c, j.kx, j.ky, 1.6, 1.6), col, 1);

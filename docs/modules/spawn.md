@@ -44,6 +44,6 @@ func (sp *System) Template(t *config.Template, x, y float64) *core.Entity
 
 ## 想改什么去哪
 
-- 加新怪：`monsters.yaml` 加模板和刷怪点；用新模型的话前端 `models.js` 加画法。
+- 加新怪：`monsters.yaml` 加模板和刷怪点；用新模型的话前端 `web/src/render/models.ts` 加画法。
 - 想让怪物死后在别处复活、或不复活：改 `respawn` / `Tick`。
 - 新增需要在复活时重置的字段：在 `respawn` 里加一行。

@@ -13,7 +13,16 @@ go run ./cmd/server            # 监听 config/world.yaml 的 addr（默认 :809
 go run ./cmd/server -addr :9000 -config ./config -open   # 临时换端口，并自动打开浏览器
 ```
 
-Windows 下可以直接双击根目录的 `start.bat`：先运行 `go generate ./internal/ai/trees` 更新行为树注册表，再编译出 `dist\btdemo.exe`（连同 `config/`），启动服务并打开浏览器。需要先安装 Go 1.22+。
+前端是 TypeScript 工程，需要先构建一次（需要 Node.js 20+），构建产物会嵌进服务端：
+
+```sh
+cd web && npm ci && npm run build && cd ..   # 输出 web/dist
+go run ./cmd/server
+```
+
+改前端时用 `cd web && npm run dev` 打开 http://localhost:5173 ，保存即刷新（同时要开着 Go 服务端）。详见 [前端文档](docs/modules/frontend.md)。
+
+Windows 下可以直接双击根目录的 `start.bat`：先运行 `go generate ./internal/ai/trees` 更新行为树注册表，再构建前端，编译出 `dist\btdemo.exe`（连同 `config/`），启动服务并打开浏览器。需要先安装 Go 1.22+ 和 Node.js 20+（没装 Node.js 时沿用上次构建的前端）。
 
 ```bat
 start.bat           :: 编译并启动，端口读 config\world.yaml 的 addr
@@ -45,7 +54,11 @@ internal/server/     HTTP 与 WebSocket
 config/              world.yaml（地图、AOI、阵营、玩家）、skills.yaml、monsters.yaml、map.yaml（场景物件与碰撞）
 proto/btdemo.proto   客户端与服务端协议（proto2）
 internal/pb/         protoc 生成的 Go 代码
-web/static/          前端（原生 Canvas + JavaScript，由 go:embed 打进二进制）：main.js 主流程、protocol.js 协议、models.js 角色模型与动作、fx.js 特效、scenery.js 场景
+web/                 前端（TypeScript + Vite，构建到 web/dist 后由 go:embed 打进二进制），见 docs/modules/frontend.md
+  src/net/           协议转换与 WebSocket
+  src/game/          本地状态、消息处理、事件
+  src/render/        画面：models 模型、fx 特效、scenery 场景、ink 描边、lighting 光照
+  src/ui/            HUD 与调试面板
 tools/btregistry/    扫描导出文件生成 registry.go
 ```
 
@@ -80,17 +93,17 @@ tools/btregistry/    扫描导出文件生成 registry.go
 客户端和服务端之间每个 WebSocket 二进制帧是一个 protobuf 消息，定义在 `proto/btdemo.proto`（`syntax = "proto2"`）：浏览器发 `ClientMsg`（移动、选目标、施法），服务端发 `ServerMsg`（`Welcome`、AOI 的 `Enter` / `Leave`、10Hz 的 `Sync`、`Toast`）。
 
 - Go 端用 `google.golang.org/protobuf`，生成代码在 `internal/pb`。修改 `.proto` 后运行 `go generate ./internal/pb`（需要 `protoc` 和 `protoc-gen-go@v1.36.6`），CI 会检查生成代码是否最新。
-- 浏览器端用 `web/static/vendor/protobuf.min.js`（protobuf.js 7.4.0），运行时从服务端的 `/btdemo.proto` 加载同一份定义，不需要额外生成 JS 代码。
+- 浏览器端用 protobufjs：`web` 下 `npm run proto` 从同一份 `.proto` 生成 `src/net/pb.js` 和 TypeScript 类型（`npm run build` 会自动执行），`src/net/protocol.ts` 把它转成前端用的对象。
 
 ## 美术与特效
 
 全部用 Canvas 程序化绘制，没有图片资源，整体参考《哈迪斯》的冥界风格：角色有粗墨线描边和按阵营着色的轮廓光（玩家金色、怪物血红、NPC 青色），场景压暗后由火盆、营火、魂火、熔岩和技能特效动态照亮。`monsters.yaml` 模板的 `model` 字段（默认等于模板名）和 `world.yaml` 玩家的 `model`（默认 `knight`）决定客户端画哪个模型：`knight`、`slime`、`wolf`、`skeleton_archer`、`ogre_chief`、`guard`、`villager`。角色用硬阴影分层着色（固定左上光源，转身时光照不跟着翻），带膝肘关节的走路、蓄力、出手、收招、受击（击退、抖动和整体白闪）和各自的死亡动画（骷髅散成骨堆、史莱姆化成一滩、狼侧翻倒地）；技能、受击、治疗、增益、升级、死亡、复活都有粒子特效。
 
-- `web/static/models.js`：角色模型和动作
-- `web/static/fx.js`：技能与战斗特效（刀光、火球、骨箭、旋风斩、治疗法阵、增益光柱、暴击闪光、屏幕震动）
-- `web/static/scenery.js`：按区域生成的地表、场景物件和光源（大理石广场村庄、极乐草地、狼林、墓地、熔岩营地），与角色一起按纵深排序
-- `web/static/ink.js`：角色描边与轮廓光（每个角色缓存一张精灵图，约 24 帧每秒重绘）
-- `web/static/lighting.js`：低分辨率光照图与彩色光晕
+- `web/src/render/models.ts`：角色模型和动作
+- `web/src/render/fx.ts`：技能与战斗特效（刀光、火球、骨箭、旋风斩、治疗法阵、增益光柱、暴击闪光、屏幕震动）
+- `web/src/render/scenery.ts`：按区域生成的地表、场景物件和光源（大理石广场村庄、极乐草地、狼林、墓地、熔岩营地），与角色一起按纵深排序
+- `web/src/render/ink.ts`：角色描边与轮廓光（每个角色缓存一张精灵图，约 24 帧每秒重绘）
+- `web/src/render/lighting.ts`：低分辨率光照图与彩色光晕
 
 画质：按 `Q` 在高画质和简化画质（不描边、不打光）之间切换，地址加 `?low` 默认用简化画质；帧率持续偏低时会自动切到简化画质。
 

@@ -28,6 +28,38 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem build the browser client into web\dist (embedded into the exe)
+where npm >nul 2>nul
+if errorlevel 1 (
+  if exist web\dist\index.html (
+    echo [btdemo] 没有找到 Node.js，沿用上次构建的前端 web\dist
+  ) else (
+    echo [btdemo] 没有找到 Node.js，无法构建前端。请先安装 Node.js 20 或更新版本：https://nodejs.org/
+    pause
+    exit /b 1
+  )
+) else (
+  echo [btdemo] 构建前端...
+  pushd web
+  if not exist node_modules (
+    call npm ci --no-audit --no-fund
+    if errorlevel 1 (
+      popd
+      echo [btdemo] 安装前端依赖失败
+      pause
+      exit /b 1
+    )
+  )
+  call npm run build
+  if errorlevel 1 (
+    popd
+    echo [btdemo] 前端构建失败
+    pause
+    exit /b 1
+  )
+  popd
+)
+
 echo [btdemo] 正在编译...
 if not exist dist mkdir dist
 go build -trimpath -ldflags "-s -w" -o dist\btdemo.exe .\cmd\server

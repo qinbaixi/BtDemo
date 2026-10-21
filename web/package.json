@@ -1,0 +1,20 @@
+{
+  "name": "btdemo-client",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run proto && vite",
+    "build": "npm run proto && tsc --noEmit && vite build",
+    "typecheck": "npm run proto && tsc --noEmit",
+    "proto": "pbjs -t static-module -w es6 --no-verify --no-delimited -o src/net/pb.js ../proto/btdemo.proto && pbts -o src/net/pb.d.ts src/net/pb.js"
+  },
+  "devDependencies": {
+    "protobufjs-cli": "^2.7.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  },
+  "dependencies": {
+    "protobufjs": "^8.8.1"
+  }
+}
