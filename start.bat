@@ -2,14 +2,14 @@
 rem One-click build and run for Windows.
 rem   start.bat            build dist\btdemo.exe, then start it on port 8080 and open the browser
 rem   start.bat 9000       same, on port 9000
-rem   start.bat pack       only build dist\ (btdemo.exe + config + README) and zip it to dist\btdemo-windows.zip
+rem   start.bat build      only build dist\btdemo.exe (with config\ next to it), don't start it
 chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 
 set PORT=8080
-set PACK=
-if /i "%~1"=="pack" (set PACK=1) else if not "%~1"=="" set PORT=%~1
+set BUILDONLY=
+if /i "%~1"=="build" (set BUILDONLY=1) else if not "%~1"=="" set PORT=%~1
 
 where go >nul 2>nul
 if errorlevel 1 (
@@ -30,15 +30,8 @@ if exist dist\config rmdir /s /q dist\config
 xcopy /e /i /q /y config dist\config >nul
 copy /y README.md dist\README.md >nul
 
-if defined PACK (
-  if exist dist\btdemo-windows.zip del /q dist\btdemo-windows.zip
-  powershell -NoProfile -Command "Compress-Archive -Path dist\btdemo.exe,dist\config,dist\README.md -DestinationPath dist\btdemo-windows.zip"
-  if errorlevel 1 (
-    echo [btdemo] 打包失败
-    pause
-    exit /b 1
-  )
-  echo [btdemo] 已打包：dist\btdemo-windows.zip
+if defined BUILDONLY (
+  echo [btdemo] 已编译：dist\btdemo.exe
   exit /b 0
 )
 

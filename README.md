@@ -16,7 +16,7 @@ Windows 下可以直接双击根目录的 `start.bat`：编译出 `dist\btdemo.e
 ```bat
 start.bat           :: 编译并在 8080 端口启动
 start.bat 9000      :: 换端口
-start.bat pack      :: 只编译并打包成 dist\btdemo-windows.zip，可以拷到没装 Go 的机器上运行
+start.bat build     :: 只编译出 dist\btdemo.exe，不启动（exe 已内嵌前端，配合 dist\config 可以拷到没装 Go 的机器上运行）
 ```
 
 操作：`WASD` / 方向键移动，鼠标点击选择目标，`1`~`5` 释放技能，`G` 切换 AOI 网格显示，`Q` 切换画质。可以开多个浏览器标签页，每个标签页是一个新玩家，互相在视野内可见。
@@ -45,7 +45,7 @@ tools/btregistry/    扫描导出文件生成 registry.go
    - 任务：`FindTarget`、`ClearTarget`、`ChaseTarget`、`CastSkill`（`Slot` 对应怪物模板 `skills` 的序号）、`Wander`、`ReturnHome`、`Flee`、`Wait`、`Say`
    - 装饰器：`HasTarget`、`TargetInRange`、`HpBelow`、`FarFromHome`、`WasAttacked`、`Cooldown`、`ForceSuccess`
    - 服务：`UpdateTarget`
-2. 导出 Go：项目的导出设置已指向 `../internal/ai/trees`、包名 `trees`。在编辑器里用「Export: Go」，或运行 `scripts/export-bt.sh`（需要 `owlbt` 命令；也可以 `OWLBT="node ../BtTree/packages/server/dist/cli.js" scripts/export-bt.sh`）。
+2. 导出 Go：项目的导出设置已指向 `../internal/ai/trees`、包名 `trees`。在编辑器里用「Export: Go」，或运行 `scripts/export-bt.sh`（Windows 用 `scripts\export-bt.bat`；需要 `owlbt` 命令；也可以 `OWLBT="node ../BtTree/packages/server/dist/cli.js" scripts/export-bt.sh`）。
 3. `go generate ./internal/ai/trees` 重新生成 `registry.go`（脚本已包含这一步）。
 4. 在 `config/monsters.yaml` 的模板里用 `tree: <树文件名>` 选择行为树。
 
