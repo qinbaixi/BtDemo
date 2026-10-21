@@ -4,13 +4,15 @@
 //   1. a heavy black silhouette outline around the whole figure,
 //   2. the model itself,
 //   3. a coloured rim light along its upper-left edge (gold for players,
-//      blood red for monsters, spectral cyan for NPCs).
+//      blood red for monsters, spectral cyan for NPCs),
+//   4. a white flash over the silhouette right after a hit.
 // Ground shadow and selection rings are drawn by the caller underneath.
 
 import { drawModel } from './models.js';
 
 const OUTLINE_PX = 2.2;          // outline thickness in CSS px
 const RIM_SHIFT = 2.4;           // how far the rim band reaches inward, CSS px
+const HIT_FLASH = 0.35;          // share of the hit reaction spent flashing white
 
 // A small pool of sprite canvases, reused every frame.
 class Layer {
@@ -109,6 +111,16 @@ export function drawInked(ctx, model, p, scale, rimColor, cache, now) {
     o.globalCompositeOperation = 'lighter';
     o.globalAlpha = 0.75;
     o.drawImage(rim.canvas, 0, 0, w, h, 0, 0, w, h);
+  }
+  // 5) hit flash: the whole figure blinks white for a moment, then fades
+  const flash = p.dead < 0 && p.hit >= 0 && p.hit < HIT_FLASH ? 1 - p.hit / HIT_FLASH : 0;
+  if (flash > 0) {
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = '#fff6e8';
+    g.fillRect(0, 0, w, h);
+    o.globalCompositeOperation = 'source-over';
+    o.globalAlpha = 0.65 * flash;
+    o.drawImage(ink.canvas, 0, 0, w, h, 0, 0, w, h);
   }
   Object.assign(cache, { at: now, k, r, dead: p.dead >= 0, w, h, footX, footY });
   blitSprite(ctx, cache, p);

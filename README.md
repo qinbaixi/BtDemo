@@ -32,14 +32,15 @@ internal/game/       World：创建各系统并按顺序驱动 Step（每个系�
   core/              共享数据：Entity（按组件分组）、实体表、时钟、事件队列
   aoi/               九宫格 AOI
   attr/              属性公式、经验与升级
-  move/              移动与地图边界
+  nav/               碰撞形状、空间哈希、推出与视线检测、A* 寻路
+  move/              移动：碰撞滑动、沿寻路路径追击
   combat/            技能、伤害、Buff、死亡、敌对查询
   ai/                行为树加载校验、节点实现、决策追踪
   spawn/             刷怪、创建玩家、复活
   session/           连接会话、输入、AOI 同步与协议转换
 internal/config/     YAML 配置加载与校验
 internal/server/     HTTP 与 WebSocket
-config/              world.yaml（地图、AOI、阵营、玩家）、skills.yaml、monsters.yaml
+config/              world.yaml（地图、AOI、阵营、玩家）、skills.yaml、monsters.yaml、map.yaml（场景物件与碰撞）
 proto/btdemo.proto   客户端与服务端协议（proto2）
 internal/pb/         protoc 生成的 Go 代码
 web/static/          前端（原生 Canvas + JavaScript，由 go:embed 打进二进制）：main.js 主流程、protocol.js 协议、models.js 角色模型与动作、fx.js 特效、scenery.js 场景
@@ -81,7 +82,7 @@ tools/btregistry/    扫描导出文件生成 registry.go
 
 ## 美术与特效
 
-全部用 Canvas 程序化绘制，没有图片资源，整体参考《哈迪斯》的冥界风格：角色有粗墨线描边和按阵营着色的轮廓光（玩家金色、怪物血红、NPC 青色），场景压暗后由火盆、营火、魂火、熔岩和技能特效动态照亮。`monsters.yaml` 模板的 `model` 字段（默认等于模板名）和 `world.yaml` 玩家的 `model`（默认 `knight`）决定客户端画哪个模型：`knight`、`slime`、`wolf`、`skeleton_archer`、`ogre_chief`、`guard`、`villager`。角色有朝向、行走、攻击、受击和死亡动画；技能、受击、治疗、增益、升级、死亡、复活都有粒子特效。
+全部用 Canvas 程序化绘制，没有图片资源，整体参考《哈迪斯》的冥界风格：角色有粗墨线描边和按阵营着色的轮廓光（玩家金色、怪物血红、NPC 青色），场景压暗后由火盆、营火、魂火、熔岩和技能特效动态照亮。`monsters.yaml` 模板的 `model` 字段（默认等于模板名）和 `world.yaml` 玩家的 `model`（默认 `knight`）决定客户端画哪个模型：`knight`、`slime`、`wolf`、`skeleton_archer`、`ogre_chief`、`guard`、`villager`。角色用硬阴影分层着色（固定左上光源，转身时光照不跟着翻），带膝肘关节的走路、蓄力、出手、收招、受击（击退、抖动和整体白闪）和各自的死亡动画（骷髅散成骨堆、史莱姆化成一滩、狼侧翻倒地）；技能、受击、治疗、增益、升级、死亡、复活都有粒子特效。
 
 - `web/static/models.js`：角色模型和动作
 - `web/static/fx.js`：技能与战斗特效（刀光、火球、骨箭、旋风斩、治疗法阵、增益光柱、暴击闪光、屏幕震动）
@@ -90,6 +91,19 @@ tools/btregistry/    扫描导出文件生成 registry.go
 - `web/static/lighting.js`：低分辨率光照图与彩色光晕
 
 画质：按 `Q` 在高画质和简化画质（不描边、不打光）之间切换，地址加 `?low` 默认用简化画质；帧率持续偏低时会自动切到简化画质。
+
+## 地图碰撞与寻路
+
+`config/map.yaml` 是地图的唯一数据源：
+
+- `shapes` 按物件种类给出碰撞形状（相对物件脚下的圆 `circle: [x, y, r]`、矩形 `rect: [x0, y0, x1, y1]`，或墙用的胶囊 `capsule: 半径`，从 `(x, y)` 连到 `(x+dx, y+dy)`）；
+- `props` 列出每个物件的种类、位置和缩放 `s`、翻转 `flip`、外观变体 `v`。没有形状的种类（灌木、陶罐等装饰）不挡路。
+
+服务端启动时把它们转成 `internal/game/nav` 的碰撞体，并在 `welcome` 里把物件和碰撞体下发给客户端，客户端按服务端的物件画场景，两边看到的阻挡一致。
+
+- 移动：玩家和怪物按自身半径与碰撞体做推出，贴着墙会沿墙滑动而不是卡住；出生、复活、游荡和逃跑的落点都会挪到最近的空地。
+- 寻路：怪物追击时先做视线检测，看得见就直走；被挡住时在 16px 网格上跑 A*（按单位半径分档膨胀障碍，八方向、不切墙角），再把路径拉直。目标移动超过 24px、每隔 0.75 秒、或卡住 0.4 秒都会重新规划；目标走不到时走到离它最近的可达点。
+- 调试：按 `G` 用红色描出所有碰撞体；在调试面板里选中一个怪物，会用青色虚线画出它当前的寻路路线。
 
 ## AOI
 
