@@ -10,6 +10,7 @@ import './styles/style.css';
 import './styles/debug.css';
 import './styles/debug-proto.css';
 
+import { ATTACK_MS } from './game/config';
 import { state, fxResolve } from './game/state';
 import { handleMessage, resetOnClose } from './game/sync';
 import { castSlot, initInput, resendMove } from './input';
@@ -37,6 +38,13 @@ const conn = createConnection(protocol, {
 const debug = createDebug({ send: conn.send, entity: (id: number) => state.ents.get(id) });
 protocol.tap = (dir, type, bytes, obj) => debug.frame(dir, type, bytes, obj);
 
+// faceInput 让自己的角色朝向按住的左右键，不等服务端位置回来；攻击动作期间先朝着目标，
+// 动作结束后再转回按键方向（被墙挡住走不动时也一样）。
+function faceInput(now: number): void {
+  const me = state.ents.get(state.myId);
+  if (me && state.moveDx !== 0 && now - me.attackAt > ATTACK_MS) me.facing = state.moveDx < 0 ? Math.PI : 0;
+}
+
 function frame(): void {
   requestAnimationFrame(frame);
   const now = performance.now();
@@ -44,6 +52,7 @@ function frame(): void {
   state.lastFrame = now;
   watchFrameRate(dt);
   runPending(now);
+  faceInput(now);
   debug.setTarget(state.target);
   debug.update(now);
   updateCamera(now);

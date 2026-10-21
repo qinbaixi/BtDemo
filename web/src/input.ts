@@ -1,6 +1,6 @@
 // 键盘和鼠标输入：移动、选目标、放技能、切换显示。
 
-import { ATTACK_MS, MOVE_DIR } from './game/config';
+import { MOVE_DIR } from './game/config';
 import { clamp, hypot } from './game/math';
 import { headY, posOf, state, type ClientEntity } from './game/state';
 import type { ClientMessage } from './net/types';
@@ -33,10 +33,7 @@ function sendMove(force = false): void {
   if (!force && key === lastMove) return;
   lastMove = key;
   deps.send({ t: 'move', dx, dy });
-  // 自己的朝向跟着按键立刻转，不等服务端位置回来（攻击动作期间不转）
-  state.moveDx = dx;
-  const me = state.ents.get(state.myId);
-  if (me && dx !== 0 && performance.now() - me.attackAt > ATTACK_MS) me.facing = dx < 0 ? Math.PI : 0;
+  state.moveDx = dx;   // 自己的朝向跟着按键转，见 main.ts 的 faceInput
 }
 
 // resendMove 把当前按键状态重新发给服务端（新角色上线时）。

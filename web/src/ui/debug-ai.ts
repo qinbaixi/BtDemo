@@ -422,13 +422,12 @@ export function createAiPanel(host: HTMLElement, sub: HTMLElement, needDef: () =
     trace(t) {
       if (t.def) defs.set(t.tree, t.def);
       else if (!defs.has(t.tree)) needDef();
-      // 暂停时历史冻结（新帧不进历史、不刷新画面），方便慢慢逐帧看；日志照记
-      if (!t.ticks.length) return;
+      // 暂停时历史和日志都冻结（新帧丢弃），方便慢慢逐帧看
+      if (!t.ticks.length || paused) return;
       for (const tick of t.ticks) {
         appendLog(tick, t.tree);
-        if (!paused) hist.push({ tick, bb: t.bb, tree: t.tree });
+        hist.push({ tick, bb: t.bb, tree: t.tree });
       }
-      if (paused) return;
       if (hist.length > HIST_CAP) hist = hist.slice(hist.length - HIST_CAP);
       render();
     },
