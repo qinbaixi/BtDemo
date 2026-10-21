@@ -104,8 +104,9 @@ tools/btregistry/    扫描导出文件生成 registry.go
 - `web/src/render/scenery.ts`：按区域生成的地表、场景物件和光源（大理石广场村庄、极乐草地、狼林、墓地、熔岩营地），与角色一起按纵深排序
 - `web/src/render/pixi/inkFilter.ts`：角色描边、轮廓光和受击白闪（GPU 着色器）
 - `web/src/render/lighting.ts`：GPU 光照（暗色层挖出光斑，加彩色光晕）
+- `web/src/render/pixi/postFilter.ts`、`grade.ts`：后期处理，泛光 + LUT 调色（`B` 键开关）
 
-画质：按 `Q` 在高画质和简化画质（不描边、不打光）之间切换，地址加 `?low` 默认用简化画质；帧率持续偏低时会自动切到简化画质。
+画质：按 `Q` 在高画质和简化画质（不描边、不打光、无后期处理）之间切换，地址加 `?low` 默认用简化画质；帧率持续偏低时会自动切到简化画质。按 `B` 单独开关泛光和调色（`?nopost` 默认关闭）。
 
 ## 地图碰撞与寻路
 

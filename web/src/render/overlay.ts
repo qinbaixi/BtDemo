@@ -1,5 +1,5 @@
-// 叠在 WebGL 画布上面的 2D 画布：技能特效、环境粒子、头顶文字（名字、血条、气泡、飘字）、
-// 调试线条（碰撞体、AI 路径）和暗角。这些都在光照之上，文字用 Canvas 2D 画更清晰。
+// 叠在 WebGL 画布上面的 2D 画布：头顶文字（名字、血条、气泡、飘字）、调试线条（碰撞体、AI 路径）和暗角。
+// 这些在光照和后期处理之上，不发光、不调色，文字用 Canvas 2D 画更清晰。
 
 import { ACT_NAMES, DISPLAY, FONT, NAME_COLOR } from '../game/config';
 import { clamp, fmt } from '../game/math';
@@ -20,19 +20,23 @@ export function resizeOverlay(dpr: number): void {
 
 /**
  * drawOverlay 画一帧叠加层。shake 是屏幕震动偏移，ents 是本帧可见实体和它们的绘制位置。
- * 顺序和旧版一致：特效 → 环境粒子 → 目标连线 → 碰撞体 → AI 路径 → 头顶文字 → 气泡 → 飘字 → 暗角。
+ * 顺序：（特效 → 环境粒子）→ 目标连线 → 碰撞体 → AI 路径 → 头顶文字 → 气泡 → 飘字 → 暗角。
+ * withFx：特效和环境粒子也画在这里。开后期处理时它们在 Pixi 里画（world.ts 的 drawOverFx），这样能参与泛光。
  */
 export function drawOverlay(
   now: number, dt: number, shake: Point, mp: Point | null, ents: { e: ClientEntity; p: Point }[], debugOpen: boolean,
+  withFx: boolean,
 ): void {
   const { x: cx, y: cy } = state.cam;
   const dpr = state.dpr;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.setTransform(dpr, 0, 0, dpr, (-cx + shake.x) * dpr, (-cy + shake.y) * dpr);
-  state.fx.drawOver(ctx, now, dt);
-  if (state.scenery) state.scenery.drawAmbient(ctx, state.cam, now);
-  ctx.setTransform(dpr, 0, 0, dpr, (-cx + shake.x) * dpr, (-cy + shake.y) * dpr);
+  if (withFx) {
+    state.fx.drawOver(ctx, now, dt);
+    if (state.scenery) state.scenery.drawAmbient(ctx, state.cam, now);
+    ctx.setTransform(dpr, 0, 0, dpr, (-cx + shake.x) * dpr, (-cy + shake.y) * dpr);
+  }
   const tgt = state.ents.get(state.target);
   if (tgt && mp && tgt.id !== state.myId) drawTargetLink(tgt, mp, now);
   if (state.showAOI) { drawObstacles(); drawAOILabel(mp); }

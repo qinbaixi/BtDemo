@@ -86,7 +86,12 @@ function onKeyDown(e: KeyboardEvent): void {
     state.hq = !state.hq;
     state.slowFrames = 0;
     state.slowGraceUntil = performance.now() + 10000;   // 给完整画质 10 秒，再重新评判帧率
-    showToast(state.hq ? '画质：完整（描边 + 光照）' : '画质：简化');
+    showToast(state.hq ? '画质：完整（描边 + 光照 + 泛光调色）' : '画质：简化');
+    return;
+  }
+  if (e.code === 'KeyB') {
+    state.post = !state.post;
+    showToast(state.post ? '泛光和调色：开' : '泛光和调色：关');
     return;
   }
   if (e.code === 'Backquote') {

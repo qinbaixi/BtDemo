@@ -1,24 +1,32 @@
 // 画世界：Pixi（WebGL）负责地表、物件、角色、光照，叠加层（overlay.ts）负责特效和文字。
 //
 // 显示层次（从下到上）：
-//   world      跟随镜头：地表 → 地面标记（AOI、射程、目标圈）→ 地面特效 → 角色和物件（按脚底 y 排序）
-//   darkness   光照的暗色层（屏幕空间）
-//   glow       光源的彩色叠加（跟随镜头）
-//   overlay    另一块 2D 画布：技能特效、环境粒子、头顶文字、调试线条、暗角
+//   scene        整个画面，高画质时加后期处理（泛光 + 调色，见 pixi/postFilter.ts）
+//     world      跟随镜头：地表 → 地面标记（AOI、射程、目标圈）→ 地面特效 → 角色和物件（按脚底 y 排序）
+//     darkness   光照的暗色层（屏幕空间）
+//     glow       光源的彩色叠加（跟随镜头）
+//     fx         技能特效和环境粒子（暂时用 Canvas 2D 画，整屏一张画布；不开后期处理时改画在 overlay 上）
+//   overlay      另一块 2D 画布：头顶文字、调试线条、暗角（不参与泛光和调色，保持清晰）
 
 import { Application, Container, Graphics } from 'pixi.js';
 import { ATTACK_MS, DEATH_MS, HIT_MS, MODEL_SCALE, RIM } from '../game/config';
 import { clamp, hypot } from '../game/math';
 import { posOf, state, type ClientEntity, type Point, type Scenery } from '../game/state';
+import { makeLut } from './grade';
 import { createLighting, type Lighting } from './lighting';
 import { drawOverlay, initOverlay, resizeOverlay } from './overlay';
 import { ActorView, type Pose } from './pixi/actorView';
 import { CanvasSprite } from './pixi/canvasSprite';
+import { PostFilter } from './pixi/postFilter';
 import { SceneView } from './pixi/sceneView';
 
 let app: Application;
+let scene: Container;          // 整个画面（后期处理加在这一层）
+let post: PostFilter;
 let world: Container;          // 跟随镜头的世界层
 let glowWorld: Container;      // 光照彩色层，和 world 用同一个镜头变换
+let fxWorld: Container;        // 技能特效和环境粒子，同样跟随镜头
+let overFx: CanvasSprite;
 let groundLayer: Container;
 let marks: Graphics;           // 地面标记
 let targetRing: Container;     // 目标脚下的旋转圈
@@ -30,6 +38,9 @@ let sceneView: SceneView | null = null;
 let sceneFor: Scenery | null = null;
 let sceneRes = 0;               // 场景按这个像素密度画的，变了要重建
 const actors = new Map<number, ActorView>();
+
+// 后期处理参数：泛光强度、发光阈值（亮度 0..1）、调色强度
+const POST = { bloom: 0.8, threshold: 0.68, grade: 1 };
 
 // initWorld 创建 Pixi 应用（异步：要等 WebGL 初始化完）。
 export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasElement): Promise<void> {
@@ -64,8 +75,15 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
 
   const darkness = new Container();
   glowWorld = new Container();
-  app.stage.addChild(world, darkness, glowWorld);
+  fxWorld = new Container();
+  overFx = new CanvasSprite();
+  fxWorld.addChild(overFx);
+  scene = new Container();
+  scene.addChild(world, darkness, glowWorld, fxWorld);
+  scene.filterArea = app.screen;   // 后期处理整屏做，不用每帧算整个世界的包围盒
+  app.stage.addChild(scene);
   lighting = createLighting(app.renderer, darkness, glowWorld);
+  post = new PostFilter(makeLut(), POST);
 
   initOverlay(overlay);
   resize();
@@ -95,7 +113,7 @@ export function updateCamera(now: number): void {
 export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
   const view = state.cam;
   const shake = state.fx.shakeOffset(dt);
-  for (const c of [world, glowWorld]) c.position.set(-view.x + shake.x, -view.y + shake.y);
+  for (const c of [world, glowWorld, fxWorld]) c.position.set(-view.x + shake.x, -view.y + shake.y);
 
   const me = state.ents.get(state.myId);
   const mp = me ? posOf(me, now) : null;
@@ -130,8 +148,13 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
   }
 
   updateLights(now, mp, shake);
+  // 开后期处理时特效画进 Pixi 才能发光；不开时直接画在叠加层上，省掉每帧整屏上传纹理
+  const usePost = state.hq && state.post;
+  if (usePost !== (scene.filters?.[0] === post)) scene.filters = usePost ? [post] : null;
+  overFx.visible = usePost;
+  if (usePost) drawOverFx(now, dt, shake);
   app.renderer.render(app.stage);
-  drawOverlay(now, dt, shake, mp, ents, debugOpen);
+  drawOverlay(now, dt, shake, mp, ents, debugOpen, !usePost);
 }
 
 // poseOf 推进走路循环，并算出这一帧的模型姿势。
@@ -243,6 +266,16 @@ function drawUnderFx(now: number): void {
   }
   underFx.visible = !!box;
   if (box) underFx.paint(box, state.dpr, (g) => state.fx.drawUnder(g, now));
+}
+
+// drawOverFx 把技能特效和环境粒子画到整屏大小的画布上（世界坐标，覆盖当前镜头）。
+function drawOverFx(now: number, dt: number, shake: Point): void {
+  const v = state.cam;
+  const box = [v.x - shake.x, v.y - shake.y, v.x - shake.x + v.w, v.y - shake.y + v.h];
+  overFx.paint(box, state.dpr, (g) => {
+    state.fx.drawOver(g, now, dt);
+    if (state.scenery) state.scenery.drawAmbient(g, state.cam, now);
+  });
 }
 
 // updateLights 收集光源：自己身上的光、其他玩家、场景里的火、正在播放的特效。

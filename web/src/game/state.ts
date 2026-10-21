@@ -80,6 +80,7 @@ export interface State {
   // 完整画质：描边、轮廓光和动态光照。URL 带 ?low 时一开始就关掉，
   // Q 键切换，机器太慢时也会自动关掉。
   hq: boolean;
+  post: boolean;                  // 高画质下是否开后期处理（泛光、调色）；URL 带 ?nopost 时关掉，B 键切换
   slowFrames: number;
   slowGraceUntil: number;         // 手动按 Q 之后，到这个时间前不评判帧率
   floats: FloatText[];
@@ -112,6 +113,7 @@ export const state: State = {
   pending: [],
   lastFrame: 0,
   hq: !new URLSearchParams(location.search).has('low'),
+  post: !new URLSearchParams(location.search).has('nopost'),
   slowFrames: 0,
   slowGraceUntil: 0,
   floats: [],
