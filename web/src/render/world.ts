@@ -12,6 +12,7 @@ import { Application, Container, Graphics } from 'pixi.js';
 import { ATTACK_MS, DEATH_MS, HIT_MS, MODEL_SCALE, RIM } from '../game/config';
 import { clamp, hypot } from '../game/math';
 import { posOf, state, type ClientEntity, type Point, type Scenery } from '../game/state';
+import { art } from './art';
 import { makeLut } from './grade';
 import { createLighting, type Lighting } from './lighting';
 import { drawOverlay, initOverlay, resizeOverlay } from './overlay';
@@ -83,7 +84,7 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
   scene.filterArea = app.screen;   // 后期处理整屏做，不用每帧算整个世界的包围盒
   app.stage.addChild(scene);
   lighting = createLighting(app.renderer, darkness, glowWorld);
-  post = new PostFilter(makeLut(), POST);
+  post = new PostFilter(art.lut?.source ?? makeLut(), POST);   // 美术给了 LUT 就用美术的
 
   initOverlay(overlay);
   resize();

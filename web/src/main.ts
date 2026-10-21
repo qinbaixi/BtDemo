@@ -15,6 +15,7 @@ import { handleMessage, resetOnClose } from './game/sync';
 import { castSlot, initInput, resendMove } from './input';
 import { createConnection } from './net/connection';
 import { createProtocol } from './net/protocol';
+import { loadArt } from './render/art';
 import { FX } from './render/fx';
 import { drawWorld, initWorld, resize, updateCamera } from './render/world';
 import { createDebug } from './ui/debug';
@@ -23,7 +24,7 @@ import {
 } from './ui/hud';
 
 declare global {
-  interface Window { btdemo: { state: typeof state } }
+  interface Window { btdemo: { state: typeof state; bake?: () => Promise<unknown> } }
 }
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -73,9 +74,14 @@ function runPending(now: number): void {
 
 async function init(): Promise<void> {
   initHud(castSlot);
+  await loadArt();   // 美术资源要在建场景、建角色之前就绪
   await initWorld(canvas, document.getElementById('overlay') as HTMLCanvasElement);
   state.fx = new FX(fxResolve);
   window.btdemo = { state };   // 方便在浏览器控制台里查看
+  // ?bake：挂上美术模板导出工具（见 render/bake.ts），按需加载，不进正常游戏的主包
+  if (new URLSearchParams(location.search).has('bake')) {
+    window.btdemo.bake = async () => (await import('./render/bake')).bakeAll();
+  }
   window.addEventListener('resize', resize);
   initInput({ canvas, send: conn.send, debug });
   requestAnimationFrame(frame);

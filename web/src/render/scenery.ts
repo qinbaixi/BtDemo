@@ -15,6 +15,7 @@
 // cached as sprites; only fire, lava and souls animate.
 
 import type { MapData, Pt } from '../game/map';
+import { art } from './art';
 
 const TAU = Math.PI * 2;
 const INK = '#0b0710';
@@ -89,6 +90,14 @@ function makeLava(): Pt[][] {
 
 /* ------------------------------ public ------------------------------ */
 
+// 只有美术图、没有程序画法的物件种类：按一个中等大小的物件来做镜头裁剪
+const ART_ONLY = { w: 120, h: 160, foot: 0 };
+
+// kindDef 返回物件种类的尺寸和画法；都没有时返回 undefined（画不出来）。
+function kindDef(p) {
+  return KINDS[p.kind] || (art.props.has(p.kind) ? ART_ONLY : undefined);
+}
+
 // createScenery 按地图建场景。地图里的物件服务端也用来挡路，所以必须画在完全相同的位置；
 // 小装饰（草丛、魂火）在它们周围生成。map 为 null 表示没有地图文件：一片空地。
 export function createScenery(mapW: number, mapH: number, map: MapData | null, seed = 20261020) {
@@ -96,9 +105,9 @@ export function createScenery(mapW: number, mapH: number, map: MapData | null, s
   for (const k of Object.keys(ZONES)) ZONES[k] = map?.zones[k] || [];
   ROADS = map?.roads || [];
   LAVA = makeLava();
-  const unknown = new Set((map?.props || []).filter((p) => !KINDS[p.kind]).map((p) => p.kind));
-  if (unknown.size) console.error(`map.tmj 里的物件种类前端不会画：${[...unknown].join(', ')}（在 scenery.ts 的 KINDS 里加画法）`);
-  const blocking = (map?.props || []).filter((p) => KINDS[p.kind]);
+  const unknown = new Set((map?.props || []).filter((p) => !kindDef(p)).map((p) => p.kind));
+  if (unknown.size) console.error(`map.tmj 里的物件种类前端不会画：${[...unknown].join(', ')}（加美术图，或在 scenery.ts 的 KINDS 里加画法）`);
+  const blocking = (map?.props || []).filter((p) => kindDef(p));
   const of = (kind) => blocking.filter((p) => p.kind === kind);
   const tombs = of('tomb');
   const braziers = of('brazier');
@@ -114,7 +123,7 @@ export function createScenery(mapW: number, mapH: number, map: MapData | null, s
     const key = p.kind + ':' + p.variant + ':' + p.s.toFixed(3) + ':' + (p.flip ? 1 : 0);
     let sp = sprites.get(key);
     if (sp) return sp;
-    const def = KINDS[p.kind];
+    const def = kindDef(p);
     const w = Math.ceil(def.w * p.s);
     const h = Math.ceil(def.h * p.s);
     const c = document.createElement('canvas');
@@ -139,7 +148,7 @@ export function createScenery(mapW: number, mapH: number, map: MapData | null, s
     visible(view) {
       const out = [];
       for (const p of props) {
-        const def = KINDS[p.kind];
+        const def = kindDef(p);
         const hw = (def.w * p.s) / 2 + (p.dx ? Math.abs(p.dx * p.s) : 0);
         if (p.x + hw < view.x || p.x - hw > view.x + view.w) continue;
         // 墙段两端的 y 都要算上（dy 可能是负的）
@@ -158,11 +167,11 @@ export function createScenery(mapW: number, mapH: number, map: MapData | null, s
     propSprite: sprite,
 
     // kindOf 返回物件种类的定义：w/h 尺寸、foot 脚底偏移、tall 高物件、live 动态绘制、box 动态绘制的范围。
-    kindOf: (p) => KINDS[p.kind],
+    kindOf: kindDef,
 
     // seeThrough：高物件挡在自己的角色前面时变成半透明，保证玩家不会被挡住。
     seeThrough(p, focus) {
-      const def = KINDS[p.kind];
+      const def = kindDef(p);
       if (!focus || !def.tall || focus.y >= p.y - 4) return false;
       const hw = (def.w * p.s) / 2 - 6;
       return Math.abs(focus.x - p.x) < hw && focus.y > p.y - def.h * p.s * 0.95;
@@ -547,7 +556,7 @@ function placeDecor(W, H, rnd, blocking, soulfires) {
   const add = (kind, x, y, s = 1, variant = 0, flip = false) =>
     props.push({ kind, x, y, s: Math.round(s * 8) / 8, variant, flip });
   const clear = (x, y, r) => blocking.every((p) => {
-    const def = KINDS[p.kind];
+    const def = kindDef(p);
     if (p.dx !== undefined) return distToSeg(x, y, p.x, p.y, p.x + p.dx * p.s, p.y + p.dy * p.s) > r + 10;
     return Math.hypot(x - p.x, (y - p.y) * 1.6) > r + (def.w * p.s) * 0.4;
   });
