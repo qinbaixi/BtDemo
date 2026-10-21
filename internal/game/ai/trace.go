@@ -61,6 +61,12 @@ func (sys *System) Trace(e *core.Entity) *pb.AiTrace {
 		return nil
 	}
 	tr := &pb.AiTrace{Id: core.I32(e.ID), Tree: proto.String(e.AI.Tree.Name), Ticks: e.AITicks}
+	if len(e.Path) > 0 {
+		tr.Path = append(tr.Path, float32(e.X), float32(e.Y))
+		for _, p := range e.Path {
+			tr.Path = append(tr.Path, float32(p.X), float32(p.Y))
+		}
+	}
 	kv := func(k, v string) {
 		tr.Blackboard = append(tr.Blackboard, &pb.KeyValue{Key: proto.String(k), Value: proto.String(v)})
 	}

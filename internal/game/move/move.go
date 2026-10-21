@@ -1,53 +1,109 @@
-// Package move moves entities around the map: steering toward a point,
-// keeping inside the map bounds, and walking players by their input.
+// Package move moves entities around the map: walking players by their
+// input, steering monsters and NPCs along paths around obstacles, and keeping
+// everyone inside the map and out of props.
 package move
 
 import (
-	"math"
-
 	"github.com/qinbaixi/BtDemo/internal/game/aoi"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
+	"github.com/qinbaixi/BtDemo/internal/game/nav"
+)
+
+const (
+	repathEvery  = 0.75 // seconds between replans while following a path
+	goalMoved    = 24.0 // replan when the goal moved this far from where we planned to
+	stuckSeconds = 0.4  // replan after barely moving for this long
 )
 
 // System moves entities and keeps the AOI grid in step.
 type System struct {
 	s    *core.State
 	grid *aoi.Grid
+	nav  *nav.Map
 }
 
-// New creates the movement system.
-func New(s *core.State, grid *aoi.Grid) *System { return &System{s: s, grid: grid} }
+// New creates the movement system on the given obstacle map.
+func New(s *core.State, grid *aoi.Grid, m *nav.Map) *System {
+	return &System{s: s, grid: grid, nav: m}
+}
 
-// Toward moves e toward (x, y) by at most step pixels and reports whether it
-// arrived.
+// Nav is the obstacle map.
+func (m *System) Nav() *nav.Map { return m.nav }
+
+func pos(e *core.Entity) nav.Vec { return nav.Vec{X: e.X, Y: e.Y} }
+
+// By moves e by (dx, dy), sliding along any obstacle in the way.
+func (m *System) By(e *core.Entity, dx, dy float64) {
+	p := m.nav.Resolve(nav.Vec{X: e.X + dx, Y: e.Y + dy}, e.Radius)
+	e.X, e.Y = p.X, p.Y
+	m.grid.Moved(e)
+}
+
+// Place puts e at the free spot nearest to (x, y).
+func (m *System) Place(e *core.Entity, x, y float64) {
+	p := m.nav.NearestFree(nav.Vec{X: x, Y: y}, e.Radius)
+	e.X, e.Y = p.X, p.Y
+	m.grid.Moved(e)
+}
+
+// FreeSpot returns the spot nearest to (x, y) where e fits.
+func (m *System) FreeSpot(e *core.Entity, x, y float64) (float64, float64) {
+	p := m.nav.NearestFree(nav.Vec{X: x, Y: y}, e.Radius)
+	return p.X, p.Y
+}
+
+// Toward walks e at most step pixels along a path to (x, y) and reports
+// whether it arrived. When (x, y) cannot be reached, arriving at the closest
+// reachable spot counts. The path is replanned when the goal moves, now and
+// then while walking, and when e gets stuck.
 func (m *System) Toward(e *core.Entity, x, y, step float64) bool {
-	dx, dy := x-e.X, y-e.Y
-	d := math.Hypot(dx, dy)
-	if d <= step || d < 0.5 {
-		m.By(e, dx, dy)
+	goal := nav.Vec{X: x, Y: y}
+	st := &e.Steering
+	now := m.s.Now()
+	from := pos(e)
+	if !st.Planned || st.Goal.Dist(goal) > goalMoved || now >= st.RepathAt || st.StuckFor >= stuckSeconds {
+		st.Path = m.nav.FindPath(from, goal, e.Radius)
+		st.Goal, st.Planned = goal, true
+		st.RepathAt = now + repathEvery
+		st.StuckFor = 0
+	} else if len(st.Path) > 0 {
+		// a moving goal: keep the plan but aim the last leg at where it is now
+		st.Path[len(st.Path)-1] = goal
+		if len(st.Path) > 1 && m.nav.Clear(from, goal, e.Radius) {
+			st.Path = st.Path[:0]
+			st.Path = append(st.Path, goal)
+		}
+	}
+	left := step
+	for left > 1e-9 && len(st.Path) > 0 {
+		wp := st.Path[0]
+		d := wp.Dist(pos(e))
+		if d <= left {
+			m.By(e, wp.X-e.X, wp.Y-e.Y)
+			left -= d
+			if pos(e).Dist(wp) < 1 {
+				st.Path = st.Path[1:]
+				continue
+			}
+			break // pushed off the waypoint by an obstacle
+		}
+		m.By(e, (wp.X-e.X)/d*left, (wp.Y-e.Y)/d*left)
+		left = 0
+	}
+	if len(st.Path) == 0 {
+		st.Planned = false
 		return true
 	}
-	m.By(e, dx/d*step, dy/d*step)
+	if moved := pos(e).Dist(from); moved < step*0.25 {
+		st.StuckFor += m.s.Clock.Dt
+	} else {
+		st.StuckFor = 0
+	}
 	return false
 }
 
-// By moves e by (dx, dy), clamped to the map.
-func (m *System) By(e *core.Entity, dx, dy float64) {
-	e.X, e.Y = m.Clamp(e, e.X+dx, e.Y+dy)
-	m.grid.Moved(e)
-}
-
-// Place puts e at (x, y), clamped to the map.
-func (m *System) Place(e *core.Entity, x, y float64) {
-	e.X, e.Y = m.Clamp(e, x, y)
-	m.grid.Moved(e)
-}
-
-// Clamp keeps a point where e fits inside the map.
-func (m *System) Clamp(e *core.Entity, x, y float64) (float64, float64) {
-	mp := m.s.Cfg.World.Map
-	return math.Max(e.Radius, math.Min(mp.Width-e.Radius, x)), math.Max(e.Radius, math.Min(mp.Height-e.Radius, y))
-}
+// Stop forgets e's path.
+func (m *System) Stop(e *core.Entity) { e.Steering = core.Steering{} }
 
 // Tick walks every living player in its input direction.
 func (m *System) Tick() {

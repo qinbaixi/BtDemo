@@ -74,6 +74,36 @@ message Welcome {
   required float map_h = 3;
   required float aoi_cell = 4;
   repeated SkillInfo skills = 5;
+  repeated MapProp props = 6;         // props from map.yaml, drawn by the client
+  repeated Obstacle obstacles = 7;    // their collision shapes, for the debug overlay
+}
+
+// MapProp is one prop placed in map.yaml.
+message MapProp {
+  required string kind = 1;
+  required float x = 2;
+  required float y = 3;
+  optional float s = 4 [default = 1];
+  optional int32 variant = 5;
+  optional bool flip = 6;
+  optional float dx = 7;   // wall segments: end point relative to (x, y)
+  optional float dy = 8;
+}
+
+enum ObstacleShape {
+  CIRCLE = 1;   // centre a, radius r
+  RECT = 2;     // corners a (min) and b (max)
+  CAPSULE = 3;  // segment a-b, radius r
+}
+
+// Obstacle is a collision shape in map coordinates.
+message Obstacle {
+  required ObstacleShape shape = 1;
+  required float ax = 2;
+  required float ay = 3;
+  optional float bx = 4;
+  optional float by = 5;
+  optional float r = 6;
 }
 
 enum EntityKind {
@@ -232,6 +262,7 @@ message AiTrace {
   required string tree = 2;
   repeated AiTick ticks = 3;
   repeated KeyValue blackboard = 4;  // blackboard plus a few agent fields
+  repeated float path = 5;           // x, y pairs: the route the entity is walking, from its position
 }
 
 message Toast {

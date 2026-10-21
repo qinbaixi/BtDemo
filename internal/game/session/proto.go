@@ -5,8 +5,10 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/game/attr"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
+	"github.com/qinbaixi/BtDemo/internal/game/nav"
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
@@ -56,4 +58,37 @@ func selfInfo(e *core.Entity, now float64) *pb.SelfInfo {
 		si.Buffs = append(si.Buffs, &pb.BuffInfo{Name: proto.String(b.Cfg.Name), Left: core.F32(core.Round1(b.Until - now))})
 	}
 	return si
+}
+
+// mapInfo is the map's props and obstacle shapes for the welcome message.
+func mapInfo(l config.Layout, m *nav.Map) ([]*pb.MapProp, []*pb.Obstacle) {
+	props := make([]*pb.MapProp, 0, len(l.Props))
+	for _, p := range l.Props {
+		mp := &pb.MapProp{Kind: proto.String(p.Kind), X: core.F32(p.X), Y: core.F32(p.Y), S: core.F32(p.S)}
+		if p.Variant != 0 {
+			mp.Variant = core.I32(p.Variant)
+		}
+		if p.Flip {
+			mp.Flip = proto.Bool(true)
+		}
+		if p.DX != 0 || p.DY != 0 {
+			mp.Dx, mp.Dy = core.F32(p.DX), core.F32(p.DY)
+		}
+		props = append(props, mp)
+	}
+	shapes := m.Shapes()
+	obs := make([]*pb.Obstacle, 0, len(shapes))
+	for _, sh := range shapes {
+		o := &pb.Obstacle{Shape: pb.ObstacleShape(sh.Kind).Enum(), Ax: core.F32(sh.A.X), Ay: core.F32(sh.A.Y)}
+		switch sh.Kind {
+		case nav.Rect:
+			o.Bx, o.By = core.F32(sh.B.X), core.F32(sh.B.Y)
+		case nav.Capsule:
+			o.Bx, o.By, o.R = core.F32(sh.B.X), core.F32(sh.B.Y), core.F32(sh.R)
+		default:
+			o.R = core.F32(sh.R)
+		}
+		obs = append(obs, o)
+	}
+	return props, obs
 }

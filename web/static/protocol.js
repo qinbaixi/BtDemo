@@ -42,6 +42,7 @@ function aiTrace(a) {
       nodes: (t.nodes || []).map((n) => ({ ...n, status: String(n.status || 'FAILURE').toLowerCase(), notes: n.notes || [] })),
     })),
     bb: a.blackboard || [],
+    path: a.path || [],   // x, y pairs from the entity's position along its route
   };
 }
 
@@ -69,6 +70,8 @@ export async function loadProtocol() {
           t: 'welcome', id: w.id,
           map: { w: w.mapW, h: w.mapH }, aoi: { cell: w.aoiCell },
           skills: w.skills || [],
+          props: w.props || [],
+          obstacles: (w.obstacles || []).map((o) => ({ ...o, shape: String(o.shape).toLowerCase() })),
         };
       }
       case 'enter': return { t: 'enter', ents: (m.enter.ents || []).map(entity) };

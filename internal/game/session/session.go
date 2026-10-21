@@ -13,6 +13,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/aoi"
 	"github.com/qinbaixi/BtDemo/internal/game/combat"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
+	"github.com/qinbaixi/BtDemo/internal/game/nav"
 	"github.com/qinbaixi/BtDemo/internal/game/spawn"
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
@@ -35,12 +36,18 @@ type System struct {
 	combat   *combat.System
 	ai       *ai.System
 	spawn    *spawn.System
+	nav      *nav.Map
 	sessions map[*Session]bool
+
+	props     []*pb.MapProp // built once, sent in every welcome
+	obstacles []*pb.Obstacle
 }
 
 // New creates the session system.
-func New(s *core.State, grid *aoi.Grid, cb *combat.System, a *ai.System, sp *spawn.System) *System {
-	return &System{s: s, grid: grid, combat: cb, ai: a, spawn: sp, sessions: map[*Session]bool{}}
+func New(s *core.State, grid *aoi.Grid, m *nav.Map, cb *combat.System, a *ai.System, sp *spawn.System) *System {
+	n := &System{s: s, grid: grid, nav: m, combat: cb, ai: a, spawn: sp, sessions: map[*Session]bool{}}
+	n.props, n.obstacles = mapInfo(s.Cfg.Layout, m)
+	return n
 }
 
 // Join creates a new character for a connection and sends it the welcome.
@@ -49,10 +56,12 @@ func (n *System) Join() *Session {
 	n.sessions[s] = true
 	cfg := n.s.Cfg.World
 	welcome := &pb.Welcome{
-		Id:      core.I32(s.Player.ID),
-		MapW:    core.F32(cfg.Map.Width),
-		MapH:    core.F32(cfg.Map.Height),
-		AoiCell: core.F32(n.grid.Cell),
+		Id:        core.I32(s.Player.ID),
+		MapW:      core.F32(cfg.Map.Width),
+		MapH:      core.F32(cfg.Map.Height),
+		AoiCell:   core.F32(n.grid.Cell),
+		Props:     n.props,
+		Obstacles: n.obstacles,
 	}
 	for i, sk := range s.Player.Skills {
 		welcome.Skills = append(welcome.Skills, &pb.SkillInfo{

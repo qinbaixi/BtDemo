@@ -298,11 +298,14 @@ function onWelcome(m) {
   state.target = 0;
   state.hoverSlot = 0;
 
-  if (!state.scenery || state.scenery.w !== state.map.w || state.scenery.h !== state.map.h) {
-    state.scenery = createScenery(state.map.w, state.map.h);
-    state.scenery.w = state.map.w;
-    state.scenery.h = state.map.h;
+  // the scene is painted once per distinct map (a reconnect usually gets the same one)
+  const sceneKey = `${state.map.w}x${state.map.h}:${JSON.stringify(m.props || [])}`;
+  if (!state.scenery || state.sceneKey !== sceneKey) {
+    state.scenery = createScenery(state.map.w, state.map.h, m.props || []);
+    state.sceneKey = sceneKey;
   }
+  state.obstacles = m.obstacles || [];
+  state.aiPath = null;
 
   buildSkillBar();
   debug.setTarget(0);
@@ -351,7 +354,10 @@ function onSync(m, now) {
     renderSelf();
   }
   for (const ev of m.ev || []) onEvent(ev, now);
-  if (m.ai) debug.trace(m.ai);
+  if (m.ai) {
+    debug.trace(m.ai);
+    state.aiPath = m.ai.path.length >= 4 ? { id: m.ai.id, pts: m.ai.path, at: now } : null;
+  }
 }
 
 /* ============================== events ============================== */
@@ -526,6 +532,8 @@ function draw(now, dt) {
   if (state.scenery) state.scenery.drawAmbient(ctx, view, now);
   ctx.setTransform(dpr, 0, 0, dpr, (-cx + shake.x) * dpr, (-cy + shake.y) * dpr);
   if (tgt && mp && tgt.id !== state.myId) drawTargetLink(tgt, mp, now);
+  if (state.showAOI) drawObstacles();
+  if (debug.open) drawAiPath(now);
   for (const it of list) if (it.e) drawLabels(it.e, it.p, now);
   drawBubbles(now);
   drawFloats(now);
@@ -601,6 +609,63 @@ function drawAOI(mp) {
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = 'rgba(160,220,255,0.9)';
   ctx.fillText('AOI 视野', x0 + 8, y0 + 18);
+}
+
+// drawObstacles outlines the server's collision shapes (with the AOI grid, G).
+function drawObstacles() {
+  const v = state.cam;
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255,96,72,0.95)';
+  ctx.fillStyle = 'rgba(255,60,40,0.24)';
+  for (const o of state.obstacles) {
+    const r = o.r || 0;
+    const x0 = Math.min(o.ax, o.bx ?? o.ax) - r;
+    const x1 = Math.max(o.ax, o.bx ?? o.ax) + r;
+    const y0 = Math.min(o.ay, o.by ?? o.ay) - r;
+    const y1 = Math.max(o.ay, o.by ?? o.ay) + r;
+    if (x1 < v.x || x0 > v.x + v.w || y1 < v.y || y0 > v.y + v.h) continue;
+    ctx.beginPath();
+    if (o.shape === 'rect') {
+      ctx.rect(o.ax, o.ay, o.bx - o.ax, o.by - o.ay);
+    } else if (o.shape === 'capsule') {
+      const a = Math.atan2(o.by - o.ay, o.bx - o.ax);
+      ctx.arc(o.ax, o.ay, r, a + Math.PI / 2, a + Math.PI * 1.5);
+      ctx.arc(o.bx, o.by, r, a - Math.PI / 2, a + Math.PI / 2);
+      ctx.closePath();
+    } else {
+      ctx.arc(o.ax, o.ay, r, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// drawAiPath draws the route of the monster or NPC the debug drawer watches.
+function drawAiPath(now) {
+  const ap = state.aiPath;
+  if (!ap || now - ap.at > 1500) return;
+  const e = state.ents.get(ap.id);
+  const pts = ap.pts.slice();
+  if (e) [pts[0], pts[1]] = [posOf(e, now).x, posOf(e, now).y];
+  ctx.save();
+  ctx.setLineDash([10, 7]);
+  ctx.lineDashOffset = -now / 40;
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = 'rgba(120,230,255,0.9)';
+  ctx.beginPath();
+  ctx.moveTo(pts[0], pts[1]);
+  for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(120,230,255,0.95)';
+  for (let i = 2; i < pts.length; i += 2) {
+    ctx.beginPath();
+    ctx.arc(pts[i], pts[i + 1], i === pts.length - 2 ? 6 : 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawRangePreview(mp) {

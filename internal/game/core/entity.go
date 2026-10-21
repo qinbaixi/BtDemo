@@ -8,6 +8,7 @@ import (
 
 	"github.com/qinbaixi/BtDemo/internal/bt"
 	"github.com/qinbaixi/BtDemo/internal/config"
+	"github.com/qinbaixi/BtDemo/internal/game/nav"
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
@@ -29,6 +30,7 @@ type Entity struct {
 	Combat
 	Life
 	Control
+	Steering
 	Brain
 }
 
@@ -99,6 +101,15 @@ type Life struct {
 // Control is a player's input (owned by session, read by move).
 type Control struct {
 	MoveX, MoveY float64 // input direction, normalized or zero
+}
+
+// Steering is the route a monster or NPC is walking (owned by move).
+type Steering struct {
+	Path     []nav.Vec // waypoints still ahead; the last one is the goal
+	Goal     nav.Vec   // where the path was planned to
+	Planned  bool
+	RepathAt float64 // replan at this time even if the goal holds still
+	StuckFor float64 // seconds spent barely moving while following the path
 }
 
 // Brain is a monster's or NPC's behavior tree (owned by ai).

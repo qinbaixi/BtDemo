@@ -42,7 +42,7 @@ func (sp *System) Template(t *config.Template, x, y float64) *core.Entity {
 	e := sp.s.Ents.New()
 	e.Identity = core.Identity{ID: e.ID, Kind: core.Kind(t.Kind), Name: t.Name, Faction: t.Faction, Color: t.Color, Model: t.Model, Tmpl: t}
 	e.Radius = t.Radius
-	x, y = sp.move.Clamp(e, x, y)
+	x, y = sp.move.FreeSpot(e, x, y)
 	e.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: t.Radius}
 	e.Level, e.Base, e.Speed = t.Level, t.Attrs, t.Speed
 	e.Skills = sp.skills(t.Skills)
@@ -59,7 +59,7 @@ func (sp *System) Player() *core.Entity {
 	e.Identity = core.Identity{ID: e.ID, Kind: core.KindPlayer, Faction: "player", Name: fmt.Sprintf("%s%d", p.NamePrefix, e.ID), Color: p.Color, Model: p.Model}
 	e.Radius = p.Radius
 	x, y := sp.s.Scatter(p.Spawn.X, p.Spawn.Y, p.Spawn.Spread)
-	x, y = sp.move.Clamp(e, x, y)
+	x, y = sp.move.FreeSpot(e, x, y)
 	e.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: p.Radius}
 	e.Level, e.Base, e.Growth, e.Speed = 1, p.Attrs, p.Growth, p.Speed
 	for e.Level < p.Level {
@@ -108,6 +108,7 @@ func (sp *System) respawn(e *core.Entity) {
 		x, y = sp.s.Scatter(at.X, at.Y, at.Spread)
 	}
 	e.Cooldowns = map[string]float64{}
+	e.Steering = core.Steering{}
 	e.LastAttacker, e.LastHitAt = 0, 0
 	attr.Init(e)
 	sp.ai.Reset(e)

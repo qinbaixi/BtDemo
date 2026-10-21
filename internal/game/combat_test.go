@@ -4,6 +4,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/attr"
 	"github.com/qinbaixi/BtDemo/internal/game/combat"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
+	"github.com/qinbaixi/BtDemo/internal/game/nav"
 	"math"
 	"testing"
 
@@ -16,14 +17,14 @@ var (
 	monsterBase = config.Attrs{Str: 6, Agi: 4, Int: 2, Vit: 8}
 )
 
-// testWorld builds a world from a small hand-written config: no spawns, no
-// config files.
-func testWorld() *World {
+// testWorld builds a 1000x1000 world from a small hand-written config: no
+// spawns, no config files, and only the given obstacles.
+func testWorld(obstacles ...nav.Shape) *World {
 	cfg := &config.Config{Skills: map[string]*config.Skill{}, Templates: map[string]*config.Template{}}
 	cfg.World.Map.Width, cfg.World.Map.Height, cfg.World.AOI.Cell = 1000, 1000, 200
 	cfg.World.TickRate, cfg.World.SyncRate = 20, 10
 	cfg.World.Hostile = map[string][]string{"player": {"monster"}, "monster": {"player"}}
-	w, err := NewWorld(cfg, 1)
+	w, err := newWorld(cfg, 1, obstacles)
 	if err != nil {
 		panic(err)
 	}

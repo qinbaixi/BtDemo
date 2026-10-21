@@ -115,9 +115,10 @@ type Config struct {
 	Skills    map[string]*Skill
 	Templates map[string]*Template
 	Spawns    []Spawn
+	Layout    Layout // map.yaml
 }
 
-// Load reads world.yaml, skills.yaml and monsters.yaml from dir and checks
+// Load reads world.yaml, skills.yaml, monsters.yaml and map.yaml from dir and checks
 // that every reference resolves. knownTrees lists the behavior trees compiled
 // into the binary.
 func Load(dir string, knownTrees map[string]bool) (*Config, error) {
@@ -140,6 +141,10 @@ func Load(dir string, knownTrees map[string]bool) (*Config, error) {
 		return nil, err
 	}
 	c.Templates, c.Spawns = monsters.Templates, monsters.Spawns
+	var err error
+	if c.Layout, err = loadLayout(dir); err != nil {
+		return nil, err
+	}
 	return c, c.validate(knownTrees)
 }
 

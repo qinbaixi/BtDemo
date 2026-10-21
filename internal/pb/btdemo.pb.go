@@ -27,6 +27,65 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ObstacleShape int32
+
+const (
+	ObstacleShape_CIRCLE  ObstacleShape = 1 // centre a, radius r
+	ObstacleShape_RECT    ObstacleShape = 2 // corners a (min) and b (max)
+	ObstacleShape_CAPSULE ObstacleShape = 3 // segment a-b, radius r
+)
+
+// Enum value maps for ObstacleShape.
+var (
+	ObstacleShape_name = map[int32]string{
+		1: "CIRCLE",
+		2: "RECT",
+		3: "CAPSULE",
+	}
+	ObstacleShape_value = map[string]int32{
+		"CIRCLE":  1,
+		"RECT":    2,
+		"CAPSULE": 3,
+	}
+)
+
+func (x ObstacleShape) Enum() *ObstacleShape {
+	p := new(ObstacleShape)
+	*p = x
+	return p
+}
+
+func (x ObstacleShape) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ObstacleShape) Descriptor() protoreflect.EnumDescriptor {
+	return file_btdemo_proto_enumTypes[0].Descriptor()
+}
+
+func (ObstacleShape) Type() protoreflect.EnumType {
+	return &file_btdemo_proto_enumTypes[0]
+}
+
+func (x ObstacleShape) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Do not use.
+func (x *ObstacleShape) UnmarshalJSON(b []byte) error {
+	num, err := protoimpl.X.UnmarshalJSONEnum(x.Descriptor(), b)
+	if err != nil {
+		return err
+	}
+	*x = ObstacleShape(num)
+	return nil
+}
+
+// Deprecated: Use ObstacleShape.Descriptor instead.
+func (ObstacleShape) EnumDescriptor() ([]byte, []int) {
+	return file_btdemo_proto_rawDescGZIP(), []int{0}
+}
+
 type EntityKind int32
 
 const (
@@ -60,11 +119,11 @@ func (x EntityKind) String() string {
 }
 
 func (EntityKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_btdemo_proto_enumTypes[0].Descriptor()
+	return file_btdemo_proto_enumTypes[1].Descriptor()
 }
 
 func (EntityKind) Type() protoreflect.EnumType {
-	return &file_btdemo_proto_enumTypes[0]
+	return &file_btdemo_proto_enumTypes[1]
 }
 
 func (x EntityKind) Number() protoreflect.EnumNumber {
@@ -83,7 +142,7 @@ func (x *EntityKind) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use EntityKind.Descriptor instead.
 func (EntityKind) EnumDescriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{0}
+	return file_btdemo_proto_rawDescGZIP(), []int{1}
 }
 
 type EventKind int32
@@ -134,11 +193,11 @@ func (x EventKind) String() string {
 }
 
 func (EventKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_btdemo_proto_enumTypes[1].Descriptor()
+	return file_btdemo_proto_enumTypes[2].Descriptor()
 }
 
 func (EventKind) Type() protoreflect.EnumType {
-	return &file_btdemo_proto_enumTypes[1]
+	return &file_btdemo_proto_enumTypes[2]
 }
 
 func (x EventKind) Number() protoreflect.EnumNumber {
@@ -157,7 +216,7 @@ func (x *EventKind) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use EventKind.Descriptor instead.
 func (EventKind) EnumDescriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{1}
+	return file_btdemo_proto_rawDescGZIP(), []int{2}
 }
 
 type AiStatus int32
@@ -193,11 +252,11 @@ func (x AiStatus) String() string {
 }
 
 func (AiStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_btdemo_proto_enumTypes[2].Descriptor()
+	return file_btdemo_proto_enumTypes[3].Descriptor()
 }
 
 func (AiStatus) Type() protoreflect.EnumType {
-	return &file_btdemo_proto_enumTypes[2]
+	return &file_btdemo_proto_enumTypes[3]
 }
 
 func (x AiStatus) Number() protoreflect.EnumNumber {
@@ -216,7 +275,7 @@ func (x *AiStatus) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use AiStatus.Descriptor instead.
 func (AiStatus) EnumDescriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{2}
+	return file_btdemo_proto_rawDescGZIP(), []int{3}
 }
 
 type ClientMsg struct {
@@ -776,6 +835,8 @@ type Welcome struct {
 	MapH          *float32               `protobuf:"fixed32,3,req,name=map_h,json=mapH" json:"map_h,omitempty"`
 	AoiCell       *float32               `protobuf:"fixed32,4,req,name=aoi_cell,json=aoiCell" json:"aoi_cell,omitempty"`
 	Skills        []*SkillInfo           `protobuf:"bytes,5,rep,name=skills" json:"skills,omitempty"`
+	Props         []*MapProp             `protobuf:"bytes,6,rep,name=props" json:"props,omitempty"`         // props from map.yaml, drawn by the client
+	Obstacles     []*Obstacle            `protobuf:"bytes,7,rep,name=obstacles" json:"obstacles,omitempty"` // their collision shapes, for the debug overlay
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -845,6 +906,211 @@ func (x *Welcome) GetSkills() []*SkillInfo {
 	return nil
 }
 
+func (x *Welcome) GetProps() []*MapProp {
+	if x != nil {
+		return x.Props
+	}
+	return nil
+}
+
+func (x *Welcome) GetObstacles() []*Obstacle {
+	if x != nil {
+		return x.Obstacles
+	}
+	return nil
+}
+
+// MapProp is one prop placed in map.yaml.
+type MapProp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          *string                `protobuf:"bytes,1,req,name=kind" json:"kind,omitempty"`
+	X             *float32               `protobuf:"fixed32,2,req,name=x" json:"x,omitempty"`
+	Y             *float32               `protobuf:"fixed32,3,req,name=y" json:"y,omitempty"`
+	S             *float32               `protobuf:"fixed32,4,opt,name=s,def=1" json:"s,omitempty"`
+	Variant       *int32                 `protobuf:"varint,5,opt,name=variant" json:"variant,omitempty"`
+	Flip          *bool                  `protobuf:"varint,6,opt,name=flip" json:"flip,omitempty"`
+	Dx            *float32               `protobuf:"fixed32,7,opt,name=dx" json:"dx,omitempty"` // wall segments: end point relative to (x, y)
+	Dy            *float32               `protobuf:"fixed32,8,opt,name=dy" json:"dy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+// Default values for MapProp fields.
+const (
+	Default_MapProp_S = float32(1)
+)
+
+func (x *MapProp) Reset() {
+	*x = MapProp{}
+	mi := &file_btdemo_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapProp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapProp) ProtoMessage() {}
+
+func (x *MapProp) ProtoReflect() protoreflect.Message {
+	mi := &file_btdemo_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapProp.ProtoReflect.Descriptor instead.
+func (*MapProp) Descriptor() ([]byte, []int) {
+	return file_btdemo_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MapProp) GetKind() string {
+	if x != nil && x.Kind != nil {
+		return *x.Kind
+	}
+	return ""
+}
+
+func (x *MapProp) GetX() float32 {
+	if x != nil && x.X != nil {
+		return *x.X
+	}
+	return 0
+}
+
+func (x *MapProp) GetY() float32 {
+	if x != nil && x.Y != nil {
+		return *x.Y
+	}
+	return 0
+}
+
+func (x *MapProp) GetS() float32 {
+	if x != nil && x.S != nil {
+		return *x.S
+	}
+	return Default_MapProp_S
+}
+
+func (x *MapProp) GetVariant() int32 {
+	if x != nil && x.Variant != nil {
+		return *x.Variant
+	}
+	return 0
+}
+
+func (x *MapProp) GetFlip() bool {
+	if x != nil && x.Flip != nil {
+		return *x.Flip
+	}
+	return false
+}
+
+func (x *MapProp) GetDx() float32 {
+	if x != nil && x.Dx != nil {
+		return *x.Dx
+	}
+	return 0
+}
+
+func (x *MapProp) GetDy() float32 {
+	if x != nil && x.Dy != nil {
+		return *x.Dy
+	}
+	return 0
+}
+
+// Obstacle is a collision shape in map coordinates.
+type Obstacle struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Shape         *ObstacleShape         `protobuf:"varint,1,req,name=shape,enum=btdemo.ObstacleShape" json:"shape,omitempty"`
+	Ax            *float32               `protobuf:"fixed32,2,req,name=ax" json:"ax,omitempty"`
+	Ay            *float32               `protobuf:"fixed32,3,req,name=ay" json:"ay,omitempty"`
+	Bx            *float32               `protobuf:"fixed32,4,opt,name=bx" json:"bx,omitempty"`
+	By            *float32               `protobuf:"fixed32,5,opt,name=by" json:"by,omitempty"`
+	R             *float32               `protobuf:"fixed32,6,opt,name=r" json:"r,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Obstacle) Reset() {
+	*x = Obstacle{}
+	mi := &file_btdemo_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Obstacle) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Obstacle) ProtoMessage() {}
+
+func (x *Obstacle) ProtoReflect() protoreflect.Message {
+	mi := &file_btdemo_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Obstacle.ProtoReflect.Descriptor instead.
+func (*Obstacle) Descriptor() ([]byte, []int) {
+	return file_btdemo_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *Obstacle) GetShape() ObstacleShape {
+	if x != nil && x.Shape != nil {
+		return *x.Shape
+	}
+	return ObstacleShape_CIRCLE
+}
+
+func (x *Obstacle) GetAx() float32 {
+	if x != nil && x.Ax != nil {
+		return *x.Ax
+	}
+	return 0
+}
+
+func (x *Obstacle) GetAy() float32 {
+	if x != nil && x.Ay != nil {
+		return *x.Ay
+	}
+	return 0
+}
+
+func (x *Obstacle) GetBx() float32 {
+	if x != nil && x.Bx != nil {
+		return *x.Bx
+	}
+	return 0
+}
+
+func (x *Obstacle) GetBy() float32 {
+	if x != nil && x.By != nil {
+		return *x.By
+	}
+	return 0
+}
+
+func (x *Obstacle) GetR() float32 {
+	if x != nil && x.R != nil {
+		return *x.R
+	}
+	return 0
+}
+
 // EntityInfo is the static part of an entity, sent when it enters the AOI.
 type EntityInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -865,7 +1131,7 @@ type EntityInfo struct {
 
 func (x *EntityInfo) Reset() {
 	*x = EntityInfo{}
-	mi := &file_btdemo_proto_msgTypes[8]
+	mi := &file_btdemo_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -877,7 +1143,7 @@ func (x *EntityInfo) String() string {
 func (*EntityInfo) ProtoMessage() {}
 
 func (x *EntityInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[8]
+	mi := &file_btdemo_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -890,7 +1156,7 @@ func (x *EntityInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntityInfo.ProtoReflect.Descriptor instead.
 func (*EntityInfo) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{8}
+	return file_btdemo_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *EntityInfo) GetId() int32 {
@@ -979,7 +1245,7 @@ type Enter struct {
 
 func (x *Enter) Reset() {
 	*x = Enter{}
-	mi := &file_btdemo_proto_msgTypes[9]
+	mi := &file_btdemo_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -991,7 +1257,7 @@ func (x *Enter) String() string {
 func (*Enter) ProtoMessage() {}
 
 func (x *Enter) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[9]
+	mi := &file_btdemo_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1004,7 +1270,7 @@ func (x *Enter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Enter.ProtoReflect.Descriptor instead.
 func (*Enter) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{9}
+	return file_btdemo_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Enter) GetEnts() []*EntityInfo {
@@ -1023,7 +1289,7 @@ type Leave struct {
 
 func (x *Leave) Reset() {
 	*x = Leave{}
-	mi := &file_btdemo_proto_msgTypes[10]
+	mi := &file_btdemo_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1035,7 +1301,7 @@ func (x *Leave) String() string {
 func (*Leave) ProtoMessage() {}
 
 func (x *Leave) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[10]
+	mi := &file_btdemo_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1048,7 +1314,7 @@ func (x *Leave) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Leave.ProtoReflect.Descriptor instead.
 func (*Leave) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{10}
+	return file_btdemo_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Leave) GetIds() []int32 {
@@ -1076,7 +1342,7 @@ type EntityState struct {
 
 func (x *EntityState) Reset() {
 	*x = EntityState{}
-	mi := &file_btdemo_proto_msgTypes[11]
+	mi := &file_btdemo_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1088,7 +1354,7 @@ func (x *EntityState) String() string {
 func (*EntityState) ProtoMessage() {}
 
 func (x *EntityState) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[11]
+	mi := &file_btdemo_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1101,7 +1367,7 @@ func (x *EntityState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntityState.ProtoReflect.Descriptor instead.
 func (*EntityState) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{11}
+	return file_btdemo_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *EntityState) GetId() int32 {
@@ -1193,7 +1459,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_btdemo_proto_msgTypes[12]
+	mi := &file_btdemo_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1205,7 +1471,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[12]
+	mi := &file_btdemo_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1218,7 +1484,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{12}
+	return file_btdemo_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Event) GetKind() EventKind {
@@ -1345,7 +1611,7 @@ type Attrs struct {
 
 func (x *Attrs) Reset() {
 	*x = Attrs{}
-	mi := &file_btdemo_proto_msgTypes[13]
+	mi := &file_btdemo_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1357,7 +1623,7 @@ func (x *Attrs) String() string {
 func (*Attrs) ProtoMessage() {}
 
 func (x *Attrs) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[13]
+	mi := &file_btdemo_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1370,7 +1636,7 @@ func (x *Attrs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Attrs.ProtoReflect.Descriptor instead.
 func (*Attrs) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{13}
+	return file_btdemo_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Attrs) GetStr() float32 {
@@ -1417,7 +1683,7 @@ type Derived struct {
 
 func (x *Derived) Reset() {
 	*x = Derived{}
-	mi := &file_btdemo_proto_msgTypes[14]
+	mi := &file_btdemo_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1429,7 +1695,7 @@ func (x *Derived) String() string {
 func (*Derived) ProtoMessage() {}
 
 func (x *Derived) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[14]
+	mi := &file_btdemo_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1442,7 +1708,7 @@ func (x *Derived) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Derived.ProtoReflect.Descriptor instead.
 func (*Derived) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{14}
+	return file_btdemo_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Derived) GetMaxHp() float32 {
@@ -1511,7 +1777,7 @@ type SkillCooldown struct {
 
 func (x *SkillCooldown) Reset() {
 	*x = SkillCooldown{}
-	mi := &file_btdemo_proto_msgTypes[15]
+	mi := &file_btdemo_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1523,7 +1789,7 @@ func (x *SkillCooldown) String() string {
 func (*SkillCooldown) ProtoMessage() {}
 
 func (x *SkillCooldown) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[15]
+	mi := &file_btdemo_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1536,7 +1802,7 @@ func (x *SkillCooldown) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillCooldown.ProtoReflect.Descriptor instead.
 func (*SkillCooldown) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{15}
+	return file_btdemo_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SkillCooldown) GetSkill() string {
@@ -1563,7 +1829,7 @@ type BuffInfo struct {
 
 func (x *BuffInfo) Reset() {
 	*x = BuffInfo{}
-	mi := &file_btdemo_proto_msgTypes[16]
+	mi := &file_btdemo_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1575,7 +1841,7 @@ func (x *BuffInfo) String() string {
 func (*BuffInfo) ProtoMessage() {}
 
 func (x *BuffInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[16]
+	mi := &file_btdemo_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1588,7 +1854,7 @@ func (x *BuffInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuffInfo.ProtoReflect.Descriptor instead.
 func (*BuffInfo) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{16}
+	return file_btdemo_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *BuffInfo) GetName() string {
@@ -1624,7 +1890,7 @@ type SelfInfo struct {
 
 func (x *SelfInfo) Reset() {
 	*x = SelfInfo{}
-	mi := &file_btdemo_proto_msgTypes[17]
+	mi := &file_btdemo_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1636,7 +1902,7 @@ func (x *SelfInfo) String() string {
 func (*SelfInfo) ProtoMessage() {}
 
 func (x *SelfInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[17]
+	mi := &file_btdemo_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1649,7 +1915,7 @@ func (x *SelfInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SelfInfo.ProtoReflect.Descriptor instead.
 func (*SelfInfo) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{17}
+	return file_btdemo_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SelfInfo) GetLv() int32 {
@@ -1735,7 +2001,7 @@ type Sync struct {
 
 func (x *Sync) Reset() {
 	*x = Sync{}
-	mi := &file_btdemo_proto_msgTypes[18]
+	mi := &file_btdemo_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1747,7 +2013,7 @@ func (x *Sync) String() string {
 func (*Sync) ProtoMessage() {}
 
 func (x *Sync) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[18]
+	mi := &file_btdemo_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1760,7 +2026,7 @@ func (x *Sync) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Sync.ProtoReflect.Descriptor instead.
 func (*Sync) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{18}
+	return file_btdemo_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *Sync) GetTime() float32 {
@@ -1813,7 +2079,7 @@ type AiNode struct {
 
 func (x *AiNode) Reset() {
 	*x = AiNode{}
-	mi := &file_btdemo_proto_msgTypes[19]
+	mi := &file_btdemo_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1825,7 +2091,7 @@ func (x *AiNode) String() string {
 func (*AiNode) ProtoMessage() {}
 
 func (x *AiNode) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[19]
+	mi := &file_btdemo_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1838,7 +2104,7 @@ func (x *AiNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AiNode.ProtoReflect.Descriptor instead.
 func (*AiNode) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{19}
+	return file_btdemo_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *AiNode) GetNode() int32 {
@@ -1893,7 +2159,7 @@ type AiTick struct {
 
 func (x *AiTick) Reset() {
 	*x = AiTick{}
-	mi := &file_btdemo_proto_msgTypes[20]
+	mi := &file_btdemo_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1905,7 +2171,7 @@ func (x *AiTick) String() string {
 func (*AiTick) ProtoMessage() {}
 
 func (x *AiTick) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[20]
+	mi := &file_btdemo_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1918,7 +2184,7 @@ func (x *AiTick) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AiTick.ProtoReflect.Descriptor instead.
 func (*AiTick) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{20}
+	return file_btdemo_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *AiTick) GetTime() float32 {
@@ -1945,7 +2211,7 @@ type KeyValue struct {
 
 func (x *KeyValue) Reset() {
 	*x = KeyValue{}
-	mi := &file_btdemo_proto_msgTypes[21]
+	mi := &file_btdemo_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1957,7 +2223,7 @@ func (x *KeyValue) String() string {
 func (*KeyValue) ProtoMessage() {}
 
 func (x *KeyValue) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[21]
+	mi := &file_btdemo_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1970,7 +2236,7 @@ func (x *KeyValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyValue.ProtoReflect.Descriptor instead.
 func (*KeyValue) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{21}
+	return file_btdemo_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *KeyValue) GetKey() string {
@@ -1994,13 +2260,14 @@ type AiTrace struct {
 	Tree          *string                `protobuf:"bytes,2,req,name=tree" json:"tree,omitempty"`
 	Ticks         []*AiTick              `protobuf:"bytes,3,rep,name=ticks" json:"ticks,omitempty"`
 	Blackboard    []*KeyValue            `protobuf:"bytes,4,rep,name=blackboard" json:"blackboard,omitempty"` // blackboard plus a few agent fields
+	Path          []float32              `protobuf:"fixed32,5,rep,name=path" json:"path,omitempty"`           // x, y pairs: the route the entity is walking, from its position
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AiTrace) Reset() {
 	*x = AiTrace{}
-	mi := &file_btdemo_proto_msgTypes[22]
+	mi := &file_btdemo_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2012,7 +2279,7 @@ func (x *AiTrace) String() string {
 func (*AiTrace) ProtoMessage() {}
 
 func (x *AiTrace) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[22]
+	mi := &file_btdemo_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2025,7 +2292,7 @@ func (x *AiTrace) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AiTrace.ProtoReflect.Descriptor instead.
 func (*AiTrace) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{22}
+	return file_btdemo_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *AiTrace) GetId() int32 {
@@ -2056,6 +2323,13 @@ func (x *AiTrace) GetBlackboard() []*KeyValue {
 	return nil
 }
 
+func (x *AiTrace) GetPath() []float32 {
+	if x != nil {
+		return x.Path
+	}
+	return nil
+}
+
 type Toast struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Text          *string                `protobuf:"bytes,1,req,name=text" json:"text,omitempty"`
@@ -2065,7 +2339,7 @@ type Toast struct {
 
 func (x *Toast) Reset() {
 	*x = Toast{}
-	mi := &file_btdemo_proto_msgTypes[23]
+	mi := &file_btdemo_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2077,7 +2351,7 @@ func (x *Toast) String() string {
 func (*Toast) ProtoMessage() {}
 
 func (x *Toast) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[23]
+	mi := &file_btdemo_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2090,7 +2364,7 @@ func (x *Toast) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Toast.ProtoReflect.Descriptor instead.
 func (*Toast) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{23}
+	return file_btdemo_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Toast) GetText() string {
@@ -2137,13 +2411,31 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x06radius\x18\x06 \x01(\x02R\x06radius\x12\x1a\n" +
 	"\bcooldown\x18\a \x01(\x02R\bcooldown\x12\x14\n" +
 	"\x05color\x18\b \x01(\tR\x05color\x12\x0e\n" +
-	"\x02fx\x18\t \x01(\tR\x02fx\"\x89\x01\n" +
+	"\x02fx\x18\t \x01(\tR\x02fx\"\xe0\x01\n" +
 	"\aWelcome\x12\x0e\n" +
 	"\x02id\x18\x01 \x02(\x05R\x02id\x12\x13\n" +
 	"\x05map_w\x18\x02 \x02(\x02R\x04mapW\x12\x13\n" +
 	"\x05map_h\x18\x03 \x02(\x02R\x04mapH\x12\x19\n" +
 	"\baoi_cell\x18\x04 \x02(\x02R\aaoiCell\x12)\n" +
-	"\x06skills\x18\x05 \x03(\v2\x11.btdemo.SkillInfoR\x06skills\"\xe5\x01\n" +
+	"\x06skills\x18\x05 \x03(\v2\x11.btdemo.SkillInfoR\x06skills\x12%\n" +
+	"\x05props\x18\x06 \x03(\v2\x0f.btdemo.MapPropR\x05props\x12.\n" +
+	"\tobstacles\x18\a \x03(\v2\x10.btdemo.ObstacleR\tobstacles\"\x98\x01\n" +
+	"\aMapProp\x12\x12\n" +
+	"\x04kind\x18\x01 \x02(\tR\x04kind\x12\f\n" +
+	"\x01x\x18\x02 \x02(\x02R\x01x\x12\f\n" +
+	"\x01y\x18\x03 \x02(\x02R\x01y\x12\x0f\n" +
+	"\x01s\x18\x04 \x01(\x02:\x011R\x01s\x12\x18\n" +
+	"\avariant\x18\x05 \x01(\x05R\avariant\x12\x12\n" +
+	"\x04flip\x18\x06 \x01(\bR\x04flip\x12\x0e\n" +
+	"\x02dx\x18\a \x01(\x02R\x02dx\x12\x0e\n" +
+	"\x02dy\x18\b \x01(\x02R\x02dy\"\x85\x01\n" +
+	"\bObstacle\x12+\n" +
+	"\x05shape\x18\x01 \x02(\x0e2\x15.btdemo.ObstacleShapeR\x05shape\x12\x0e\n" +
+	"\x02ax\x18\x02 \x02(\x02R\x02ax\x12\x0e\n" +
+	"\x02ay\x18\x03 \x02(\x02R\x02ay\x12\x0e\n" +
+	"\x02bx\x18\x04 \x01(\x02R\x02bx\x12\x0e\n" +
+	"\x02by\x18\x05 \x01(\x02R\x02by\x12\f\n" +
+	"\x01r\x18\x06 \x01(\x02R\x01r\"\xe5\x01\n" +
 	"\n" +
 	"EntityInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x02(\x05R\x02id\x12&\n" +
@@ -2241,16 +2533,22 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x05nodes\x18\x02 \x03(\v2\x0e.btdemo.AiNodeR\x05nodes\"2\n" +
 	"\bKeyValue\x12\x10\n" +
 	"\x03key\x18\x01 \x02(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x02(\tR\x05value\"\x85\x01\n" +
+	"\x05value\x18\x02 \x02(\tR\x05value\"\x99\x01\n" +
 	"\aAiTrace\x12\x0e\n" +
 	"\x02id\x18\x01 \x02(\x05R\x02id\x12\x12\n" +
 	"\x04tree\x18\x02 \x02(\tR\x04tree\x12$\n" +
 	"\x05ticks\x18\x03 \x03(\v2\x0e.btdemo.AiTickR\x05ticks\x120\n" +
 	"\n" +
 	"blackboard\x18\x04 \x03(\v2\x10.btdemo.KeyValueR\n" +
-	"blackboard\"\x1b\n" +
+	"blackboard\x12\x12\n" +
+	"\x04path\x18\x05 \x03(\x02R\x04path\"\x1b\n" +
 	"\x05Toast\x12\x12\n" +
-	"\x04text\x18\x01 \x02(\tR\x04text*.\n" +
+	"\x04text\x18\x01 \x02(\tR\x04text*2\n" +
+	"\rObstacleShape\x12\n" +
+	"\n" +
+	"\x06CIRCLE\x10\x01\x12\b\n" +
+	"\x04RECT\x10\x02\x12\v\n" +
+	"\aCAPSULE\x10\x03*.\n" +
 	"\n" +
 	"EntityKind\x12\n" +
 	"\n" +
@@ -2284,68 +2582,74 @@ func file_btdemo_proto_rawDescGZIP() []byte {
 	return file_btdemo_proto_rawDescData
 }
 
-var file_btdemo_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_btdemo_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_btdemo_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_btdemo_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_btdemo_proto_goTypes = []any{
-	(EntityKind)(0),       // 0: btdemo.EntityKind
-	(EventKind)(0),        // 1: btdemo.EventKind
-	(AiStatus)(0),         // 2: btdemo.AiStatus
-	(*ClientMsg)(nil),     // 3: btdemo.ClientMsg
-	(*Move)(nil),          // 4: btdemo.Move
-	(*SetTarget)(nil),     // 5: btdemo.SetTarget
-	(*Cast)(nil),          // 6: btdemo.Cast
-	(*Watch)(nil),         // 7: btdemo.Watch
-	(*ServerMsg)(nil),     // 8: btdemo.ServerMsg
-	(*SkillInfo)(nil),     // 9: btdemo.SkillInfo
-	(*Welcome)(nil),       // 10: btdemo.Welcome
-	(*EntityInfo)(nil),    // 11: btdemo.EntityInfo
-	(*Enter)(nil),         // 12: btdemo.Enter
-	(*Leave)(nil),         // 13: btdemo.Leave
-	(*EntityState)(nil),   // 14: btdemo.EntityState
-	(*Event)(nil),         // 15: btdemo.Event
-	(*Attrs)(nil),         // 16: btdemo.Attrs
-	(*Derived)(nil),       // 17: btdemo.Derived
-	(*SkillCooldown)(nil), // 18: btdemo.SkillCooldown
-	(*BuffInfo)(nil),      // 19: btdemo.BuffInfo
-	(*SelfInfo)(nil),      // 20: btdemo.SelfInfo
-	(*Sync)(nil),          // 21: btdemo.Sync
-	(*AiNode)(nil),        // 22: btdemo.AiNode
-	(*AiTick)(nil),        // 23: btdemo.AiTick
-	(*KeyValue)(nil),      // 24: btdemo.KeyValue
-	(*AiTrace)(nil),       // 25: btdemo.AiTrace
-	(*Toast)(nil),         // 26: btdemo.Toast
+	(ObstacleShape)(0),    // 0: btdemo.ObstacleShape
+	(EntityKind)(0),       // 1: btdemo.EntityKind
+	(EventKind)(0),        // 2: btdemo.EventKind
+	(AiStatus)(0),         // 3: btdemo.AiStatus
+	(*ClientMsg)(nil),     // 4: btdemo.ClientMsg
+	(*Move)(nil),          // 5: btdemo.Move
+	(*SetTarget)(nil),     // 6: btdemo.SetTarget
+	(*Cast)(nil),          // 7: btdemo.Cast
+	(*Watch)(nil),         // 8: btdemo.Watch
+	(*ServerMsg)(nil),     // 9: btdemo.ServerMsg
+	(*SkillInfo)(nil),     // 10: btdemo.SkillInfo
+	(*Welcome)(nil),       // 11: btdemo.Welcome
+	(*MapProp)(nil),       // 12: btdemo.MapProp
+	(*Obstacle)(nil),      // 13: btdemo.Obstacle
+	(*EntityInfo)(nil),    // 14: btdemo.EntityInfo
+	(*Enter)(nil),         // 15: btdemo.Enter
+	(*Leave)(nil),         // 16: btdemo.Leave
+	(*EntityState)(nil),   // 17: btdemo.EntityState
+	(*Event)(nil),         // 18: btdemo.Event
+	(*Attrs)(nil),         // 19: btdemo.Attrs
+	(*Derived)(nil),       // 20: btdemo.Derived
+	(*SkillCooldown)(nil), // 21: btdemo.SkillCooldown
+	(*BuffInfo)(nil),      // 22: btdemo.BuffInfo
+	(*SelfInfo)(nil),      // 23: btdemo.SelfInfo
+	(*Sync)(nil),          // 24: btdemo.Sync
+	(*AiNode)(nil),        // 25: btdemo.AiNode
+	(*AiTick)(nil),        // 26: btdemo.AiTick
+	(*KeyValue)(nil),      // 27: btdemo.KeyValue
+	(*AiTrace)(nil),       // 28: btdemo.AiTrace
+	(*Toast)(nil),         // 29: btdemo.Toast
 }
 var file_btdemo_proto_depIdxs = []int32{
-	4,  // 0: btdemo.ClientMsg.move:type_name -> btdemo.Move
-	5,  // 1: btdemo.ClientMsg.target:type_name -> btdemo.SetTarget
-	6,  // 2: btdemo.ClientMsg.cast:type_name -> btdemo.Cast
-	7,  // 3: btdemo.ClientMsg.watch:type_name -> btdemo.Watch
-	10, // 4: btdemo.ServerMsg.welcome:type_name -> btdemo.Welcome
-	12, // 5: btdemo.ServerMsg.enter:type_name -> btdemo.Enter
-	13, // 6: btdemo.ServerMsg.leave:type_name -> btdemo.Leave
-	21, // 7: btdemo.ServerMsg.sync:type_name -> btdemo.Sync
-	26, // 8: btdemo.ServerMsg.toast:type_name -> btdemo.Toast
-	9,  // 9: btdemo.Welcome.skills:type_name -> btdemo.SkillInfo
-	0,  // 10: btdemo.EntityInfo.kind:type_name -> btdemo.EntityKind
-	11, // 11: btdemo.Enter.ents:type_name -> btdemo.EntityInfo
-	1,  // 12: btdemo.Event.kind:type_name -> btdemo.EventKind
-	16, // 13: btdemo.SelfInfo.base:type_name -> btdemo.Attrs
-	17, // 14: btdemo.SelfInfo.attr:type_name -> btdemo.Derived
-	18, // 15: btdemo.SelfInfo.cds:type_name -> btdemo.SkillCooldown
-	19, // 16: btdemo.SelfInfo.buffs:type_name -> btdemo.BuffInfo
-	14, // 17: btdemo.Sync.ents:type_name -> btdemo.EntityState
-	15, // 18: btdemo.Sync.ev:type_name -> btdemo.Event
-	20, // 19: btdemo.Sync.self:type_name -> btdemo.SelfInfo
-	25, // 20: btdemo.Sync.ai:type_name -> btdemo.AiTrace
-	2,  // 21: btdemo.AiNode.status:type_name -> btdemo.AiStatus
-	22, // 22: btdemo.AiTick.nodes:type_name -> btdemo.AiNode
-	23, // 23: btdemo.AiTrace.ticks:type_name -> btdemo.AiTick
-	24, // 24: btdemo.AiTrace.blackboard:type_name -> btdemo.KeyValue
-	25, // [25:25] is the sub-list for method output_type
-	25, // [25:25] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	5,  // 0: btdemo.ClientMsg.move:type_name -> btdemo.Move
+	6,  // 1: btdemo.ClientMsg.target:type_name -> btdemo.SetTarget
+	7,  // 2: btdemo.ClientMsg.cast:type_name -> btdemo.Cast
+	8,  // 3: btdemo.ClientMsg.watch:type_name -> btdemo.Watch
+	11, // 4: btdemo.ServerMsg.welcome:type_name -> btdemo.Welcome
+	15, // 5: btdemo.ServerMsg.enter:type_name -> btdemo.Enter
+	16, // 6: btdemo.ServerMsg.leave:type_name -> btdemo.Leave
+	24, // 7: btdemo.ServerMsg.sync:type_name -> btdemo.Sync
+	29, // 8: btdemo.ServerMsg.toast:type_name -> btdemo.Toast
+	10, // 9: btdemo.Welcome.skills:type_name -> btdemo.SkillInfo
+	12, // 10: btdemo.Welcome.props:type_name -> btdemo.MapProp
+	13, // 11: btdemo.Welcome.obstacles:type_name -> btdemo.Obstacle
+	0,  // 12: btdemo.Obstacle.shape:type_name -> btdemo.ObstacleShape
+	1,  // 13: btdemo.EntityInfo.kind:type_name -> btdemo.EntityKind
+	14, // 14: btdemo.Enter.ents:type_name -> btdemo.EntityInfo
+	2,  // 15: btdemo.Event.kind:type_name -> btdemo.EventKind
+	19, // 16: btdemo.SelfInfo.base:type_name -> btdemo.Attrs
+	20, // 17: btdemo.SelfInfo.attr:type_name -> btdemo.Derived
+	21, // 18: btdemo.SelfInfo.cds:type_name -> btdemo.SkillCooldown
+	22, // 19: btdemo.SelfInfo.buffs:type_name -> btdemo.BuffInfo
+	17, // 20: btdemo.Sync.ents:type_name -> btdemo.EntityState
+	18, // 21: btdemo.Sync.ev:type_name -> btdemo.Event
+	23, // 22: btdemo.Sync.self:type_name -> btdemo.SelfInfo
+	28, // 23: btdemo.Sync.ai:type_name -> btdemo.AiTrace
+	3,  // 24: btdemo.AiNode.status:type_name -> btdemo.AiStatus
+	25, // 25: btdemo.AiTick.nodes:type_name -> btdemo.AiNode
+	26, // 26: btdemo.AiTrace.ticks:type_name -> btdemo.AiTick
+	27, // 27: btdemo.AiTrace.blackboard:type_name -> btdemo.KeyValue
+	28, // [28:28] is the sub-list for method output_type
+	28, // [28:28] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_btdemo_proto_init() }
@@ -2371,8 +2675,8 @@ func file_btdemo_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_btdemo_proto_rawDesc), len(file_btdemo_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   24,
+			NumEnums:      4,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

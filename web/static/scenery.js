@@ -68,23 +68,9 @@ function roadDist(x, y) {
 
 const near = (x, y, z, r) => Math.hypot(x - z.x, y - z.y) < r;
 
-// Fixed landmarks shared by the ground painter, the props and the lights.
-const CAMPFIRE = { x: 1990, y: 1250 };
-const BRAZIERS = [[400, 905], [680, 905], [395, 640], [690, 615], [1590, 600]];
-const TOMBS = [];
-const SOULFIRES = [];
+// Lava cracks around the Tartarus camp, painted into the ground.
 const LAVA = [];             // [[x, y], ...] polyline points of lava cracks
 {
-  const g = ZONES.graveyard;
-  const r = mulberry32(77);
-  for (let row = 0; row < 4; row++) {
-    for (let col = 0; col < 6; col++) {
-      if (r() < 0.25) continue;
-      const t = { x: g.x - 230 + col * 92 + (r() - 0.5) * 20, y: g.y - 150 + row * 105 + (r() - 0.5) * 16 };
-      TOMBS.push(t);
-      if (r() < 0.35) SOULFIRES.push({ x: t.x + 18, y: t.y + 10 });
-    }
-  }
   const c = ZONES.camp;
   const lr = mulberry32(99);
   for (let i = 0; i < 7; i++) {
@@ -106,9 +92,23 @@ const LAVA = [];             // [[x, y], ...] polyline points of lava cracks
 
 /* ------------------------------ public ------------------------------ */
 
-export function createScenery(mapW, mapH, seed = 20261020) {
-  const ground = paintGround(mapW, mapH, mulberry32(seed ^ 0x5eed));
-  const props = placeProps(mapW, mapH, mulberry32(seed));
+// createScenery builds the scene for a mapW×mapH map. mapProps are the props
+// from the server's map.yaml (they block movement, so they must be drawn
+// exactly where the server has them); small decorations are added around them.
+export function createScenery(mapW, mapH, mapProps = [], seed = 20261020) {
+  const blocking = mapProps.map((p) => ({
+    kind: p.kind, x: p.x, y: p.y, s: p.s ?? 1, variant: p.variant || 0, flip: !!p.flip,
+    ...(p.dx || p.dy ? { dx: p.dx || 0, dy: p.dy || 0 } : {}),
+  })).filter((p) => KINDS[p.kind]);
+  const of = (kind) => blocking.filter((p) => p.kind === kind);
+  const tombs = of('tomb');
+  const braziers = of('brazier');
+  const campfires = of('campfire');
+  const crypts = of('crypt');
+  const houses = of('house');
+  const soulfires = tombs.filter((_, i) => i % 3 === 1).map((t) => ({ x: t.x + 18 * t.s, y: t.y + 10 }));
+  const ground = paintGround(mapW, mapH, mulberry32(seed ^ 0x5eed), { tombs, campfires });
+  const props = blocking.concat(placeDecor(mapW, mapH, mulberry32(seed), blocking, soulfires));
   const sprites = new Map();
 
   function sprite(p) {
@@ -182,15 +182,18 @@ export function createScenery(mapW, mapH, seed = 20261020) {
     lights(add, view, time) {
       const inView = (x, y, r) => x + r > view.x && x - r < view.x + view.w && y + r > view.y && y - r < view.y + view.h;
       const flick = (seed, amt) => 1 + Math.sin(time / 90 + seed) * amt + Math.sin(time / 37 + seed * 3) * amt * 0.6;
-      if (inView(CAMPFIRE.x, CAMPFIRE.y, 380)) add(CAMPFIRE.x, CAMPFIRE.y - 20, 360 * flick(1, 0.04), '#ff8a3a', 1, 0.45);
-      for (const [x, y] of BRAZIERS) {
+      for (const c of campfires) {
+        if (inView(c.x, c.y, 380)) add(c.x, c.y - 20, 360 * flick(c.x, 0.04), '#ff8a3a', 1, 0.45);
+      }
+      for (const { x, y } of braziers) {
         if (inView(x, y, 260)) add(x, y - 40, 250 * flick(x, 0.05), '#ffa64d', 0.95, 0.4);
       }
-      for (const s of SOULFIRES) {
+      for (const s of soulfires) {
         if (inView(s.x, s.y, 180)) add(s.x, s.y - 12, 160 * flick(s.x, 0.06), '#5fd8ff', 0.85, 0.45);
       }
-      const crypt = props.find((p) => p.kind === 'crypt');
-      if (crypt && inView(crypt.x, crypt.y, 200)) add(crypt.x, crypt.y - 20, 180, '#7ae0ff', 0.7, 0.35);
+      for (const c of crypts) {
+        if (inView(c.x, c.y, 200)) add(c.x, c.y - 20, 180, '#7ae0ff', 0.7, 0.35);
+      }
       for (const line of LAVA) {
         for (let i = 1; i < line.length; i += 2) {
           const [x, y] = line[i];
@@ -199,8 +202,8 @@ export function createScenery(mapW, mapH, seed = 20261020) {
           add(x, y, 130 * pulse, '#ff5a14', 0.75 * pulse, 0.5);
         }
       }
-      for (const p of props) {
-        if (p.kind !== 'house' || !inView(p.x, p.y, 120)) continue;
+      for (const p of houses) {
+        if (!inView(p.x, p.y, 120)) continue;
         add(p.x - 40 * p.s, p.y - 10, 90, '#ffb35a', 0.55, 0.25);
         add(p.x + 36 * p.s, p.y - 10, 90, '#ffb35a', 0.55, 0.25);
       }
@@ -330,7 +333,7 @@ function hatch(g, x, y, r, rnd, color, n = 14) {
   g.stroke();
 }
 
-function paintGround(W, H, rnd) {
+function paintGround(W, H, rnd, { tombs, campfires }) {
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
@@ -359,7 +362,7 @@ function paintGround(W, H, rnd) {
   for (let i = 0; i < 16; i++) {
     blob(g, camp.x + (rnd() - 0.5) * 420, camp.y + (rnd() - 0.5) * 300, 130 + rnd() * 110, 'rgba(70,24,14,0.6)');
   }
-  blob(g, CAMPFIRE.x, CAMPFIRE.y, 120, 'rgba(10,4,4,0.7)');
+  for (const c of campfires) blob(g, c.x, c.y, 120, 'rgba(10,4,4,0.7)');
 
   // ink hatching in the shadows of every zone
   for (let i = 0; i < 260; i++) {
@@ -479,7 +482,7 @@ function paintGround(W, H, rnd) {
   }
 
   // Asphodel graves: mounds and a few cracked slabs
-  for (const t of TOMBS) {
+  for (const t of tombs) {
     g.fillStyle = 'rgba(20,16,30,0.55)';
     ellipseFill(g, t.x + 2, t.y + 13, 17, 9);
   }
@@ -538,82 +541,35 @@ function paintGround(W, H, rnd) {
 
 /* ------------------------------ props ------------------------------ */
 
-function placeProps(W, H, rnd) {
+// placeDecor scatters the props that do not block movement (bushes, pots,
+// bones, soul fires), keeping them off the roads and clear of blocking props.
+function placeDecor(W, H, rnd, blocking, soulfires) {
   const props = [];
-  // scales are quantized so props share a handful of cached sprites
   const add = (kind, x, y, s = 1, variant = 0, flip = false) =>
     props.push({ kind, x, y, s: Math.round(s * 8) / 8, variant, flip });
-  const { village, forest, graveyard, camp, meadow } = ZONES;
+  const clear = (x, y, r) => blocking.every((p) => {
+    const def = KINDS[p.kind];
+    if (p.dx !== undefined) return distToSeg(x, y, p.x, p.y, p.x + p.dx, p.y + p.dy) > r + 10;
+    return Math.hypot(x - p.x, (y - p.y) * 1.6) > r + (def.w * p.s) * 0.4;
+  });
+  const { village, graveyard, camp } = ZONES;
 
-  // sanctuary
-  add('house', 360, 640, 1.0, 0);
-  add('house', 720, 610, 0.95, 1, true);
-  add('house', 300, 880, 0.9, 2);
-  add('house', 780, 960, 0.9, 1);
-  add('well', 455, 700);
-  for (const [x, y] of BRAZIERS) add('brazier', x, y);
-  add('column', 380, 760, 1, 0); add('column', 700, 760, 1, 1);
-  add('column', 420, 860, 0.9, 0); add('column', 660, 860, 0.9, 2);
-  add('amphora', 405, 662, 1, 0); add('amphora', 425, 672, 0.85, 1);
-  add('amphora', 760, 640, 1, 1); add('amphora', 744, 652, 0.85, 0);
-  add('amphora', 285, 760, 0.9, 0); add('amphora', 840, 900, 0.9, 1);
-  for (let i = 0; i < 22; i++) {
-    const a = -0.35 + (i / 22) * TAU;
-    // gaps where the roads leave the sanctuary
-    if ((a > -0.25 && a < 0.35) || (a > 4.9 && a < 5.5) || (a > 2.85 && a < 3.4)) continue;
-    const x = village.x + Math.cos(a) * 330;
-    const y = village.y + 20 + Math.sin(a) * 250;
-    const x2 = village.x + Math.cos(a + TAU / 22) * 330;
-    const y2 = village.y + 20 + Math.sin(a + TAU / 22) * 250;
-    props.push({ kind: 'wall', x, y, s: 1, variant: 0, dx: x2 - x, dy: y2 - y });
+  // painted amphorae around the sanctuary houses
+  for (const [x, y, s, v] of [[405, 662, 1, 0], [425, 672, 0.85, 1], [760, 640, 1, 1], [744, 652, 0.85, 0], [285, 760, 0.9, 0], [840, 900, 0.9, 1]]) {
+    add('amphora', x, y, s, v);
   }
-
-  // cypress grove around the wolves' clearing
-  for (let i = 0; i < 70; i++) {
-    const a = rnd() * TAU;
-    const d = 230 + rnd() * 330;
-    const x = forest.x + Math.cos(a) * d * 1.4;
-    const y = forest.y + Math.sin(a) * d * 0.7;
-    if (y > 620 || y < 30 || x < 30 || x > W - 30 || roadDist(x, y) < 50) continue;
-    add(rnd() < 0.72 ? 'cypress' : 'tree', x, y, 0.85 + rnd() * 0.4, (rnd() * 3) | 0, rnd() < 0.5);
-  }
-  // scattered trees elsewhere
-  for (let i = 0; i < 90; i++) {
-    const x = 40 + rnd() * (W - 80);
-    const y = 40 + rnd() * (H - 60);
-    if (roadDist(x, y) < 60) continue;
-    if (near(x, y, village, 400) || near(x, y, meadow, 330) || near(x, y, graveyard, 330) || near(x, y, camp, 330) || near(x, y, forest, 640)) continue;
-    add(rnd() < 0.5 ? 'tree' : 'cypress', x, y, 0.8 + rnd() * 0.45, (rnd() * 3) | 0, rnd() < 0.5);
-  }
-  // bushes and rocks
-  for (let i = 0; i < 110; i++) {
-    const x = 30 + rnd() * (W - 60);
-    const y = 30 + rnd() * (H - 40);
-    if (roadDist(x, y) < 34 || near(x, y, village, 190) || near(x, y, camp, 160) || near(x, y, graveyard, 280)) continue;
-    add(rnd() < 0.55 ? 'bush' : 'rock', x, y, 0.7 + rnd() * 0.6, (rnd() * 3) | 0, rnd() < 0.5);
-  }
-  // broken columns in the wild, remains of older temples
-  for (const [x, y] of [[1240, 700], [1290, 1080], [760, 1240], [1450, 520], [200, 1200]]) add('column', x, y, 0.95, 2, x % 2 === 0);
-
-  // Asphodel graveyard
-  TOMBS.forEach((t, i) => add('tomb', t.x, t.y, 0.9 + ((i * 37) % 10) / 40, i % 3, i % 2 === 0));
-  for (const s of SOULFIRES) add('soulfire', s.x, s.y);
-  add('deadtree', graveyard.x - 300, graveyard.y - 210, 1.2, 0);
-  add('deadtree', graveyard.x + 290, graveyard.y + 210, 1.0, 1, true);
-  add('deadtree', graveyard.x + 260, graveyard.y - 240, 0.9, 2);
-  add('crypt', graveyard.x + 30, graveyard.y - 270, 1, 0);
-
-  // Tartarus camp
-  add('tent', camp.x - 170, camp.y - 120, 1.1, 0);
-  add('tent', camp.x + 150, camp.y - 150, 1.0, 1, true);
-  add('tent', camp.x + 210, camp.y + 60, 0.95, 2);
-  add('campfire', CAMPFIRE.x, CAMPFIRE.y);
-  add('totem', camp.x + 40, camp.y - 200, 1.1);
+  for (const s of soulfires) add('soulfire', s.x, s.y);
   add('bones', camp.x - 80, camp.y + 90); add('bones', camp.x + 70, camp.y + 140, 0.9, 1, true);
   add('bones', camp.x - 220, camp.y + 40, 0.8, 2);
-  for (let i = 0; i < 26; i++) {
-    const a = 3.0 + (i / 26) * 2.9;
-    add('stake', camp.x + Math.cos(a) * 320, camp.y + Math.sin(a) * 230, 0.9 + (i % 3) * 0.1, i % 2, i % 2 === 1);
+  for (let i = 0; i < 130; i++) {
+    const x = 30 + rnd() * (W - 60);
+    const y = 30 + rnd() * (H - 40);
+    const s = 0.7 + rnd() * 0.6;
+    const v = (rnd() * 3) | 0;
+    const flip = rnd() < 0.5;
+    if (roadDist(x, y) < 34 || near(x, y, village, 190) || near(x, y, camp, 160) || near(x, y, graveyard, 280)) continue;
+    if (!clear(x, y, 22 * s)) continue;
+    add('bush', x, y, s, v, flip);
   }
   return props;
 }

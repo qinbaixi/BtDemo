@@ -3,8 +3,9 @@
 //
 //	core     shared data: entities and their components, clock, event queue
 //	aoi      nine-grid area of interest
+//	nav      obstacles from map.yaml, collision and A* path finding
 //	attr     attribute formulas, experience and level ups
-//	move     movement and map bounds
+//	move     movement: player input, path following, collision
 //	combat   skills, damage, buffs, death
 //	ai       behavior trees from BtTree and the debug trace
 //	spawn    creating monsters, NPCs and players, respawning
@@ -22,6 +23,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/combat"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/game/move"
+	"github.com/qinbaixi/BtDemo/internal/game/nav"
 	"github.com/qinbaixi/BtDemo/internal/game/session"
 	"github.com/qinbaixi/BtDemo/internal/game/spawn"
 	"github.com/qinbaixi/BtDemo/internal/pb"
@@ -35,6 +37,7 @@ type Session = session.Session
 type World struct {
 	State    *core.State
 	Grid     *aoi.Grid
+	Nav      *nav.Map
 	Attr     *attr.System
 	Move     *move.System
 	Combat   *combat.System
@@ -48,17 +51,23 @@ type World struct {
 // NewWorld builds every system, loads and validates the behavior trees and
 // spawns the configured monsters and NPCs.
 func NewWorld(cfg *config.Config, seed int64) (*World, error) {
+	return newWorld(cfg, seed, nav.ShapesFromLayout(cfg.Layout))
+}
+
+// newWorld is NewWorld with the obstacles given directly.
+func newWorld(cfg *config.Config, seed int64, obstacles []nav.Shape) (*World, error) {
 	w := &World{State: core.NewState(cfg, seed), inbox: make(chan func(), 256)}
 	w.Grid = aoi.NewGrid(cfg.World.Map.Width, cfg.World.Map.Height, cfg.World.AOI.Cell)
 	w.Attr = attr.New(w.State)
-	w.Move = move.New(w.State, w.Grid)
+	w.Nav = nav.New(cfg.World.Map.Width, cfg.World.Map.Height, obstacles)
+	w.Move = move.New(w.State, w.Grid, w.Nav)
 	w.Combat = combat.New(w.State, w.Grid, w.Attr)
 	var err error
 	if w.AI, err = ai.New(w.State, w.Combat, w.Move); err != nil {
 		return nil, err
 	}
 	w.Spawn = spawn.New(w.State, w.Grid, w.Move, w.AI)
-	w.Sessions = session.New(w.State, w.Grid, w.Combat, w.AI, w.Spawn)
+	w.Sessions = session.New(w.State, w.Grid, w.Nav, w.Combat, w.AI, w.Spawn)
 	w.Spawn.SpawnConfigured()
 	return w, nil
 }

@@ -94,6 +94,7 @@ func (sys *System) register() {
 		a := ctx.Agent.(*Agent)
 		if ctx.Fresh {
 			x, y := sys.s.Scatter(a.E.HomeX, a.E.HomeY, ctx.Node.Num("Radius", 120))
+			x, y = sys.move.FreeSpot(a.E, x, y)
 			ctx.Mem["x"], ctx.Mem["y"] = x, y
 			ctx.Mem["until"] = ctx.Now + wanderTimeout
 		}
@@ -133,7 +134,7 @@ func (sys *System) register() {
 				dx, dy, d = math.Cos(ang), math.Sin(ang), 1
 			}
 			dist := ctx.Node.Num("Distance", 160)
-			ctx.Mem["x"], ctx.Mem["y"] = sys.move.Clamp(a.E, a.E.X+dx/d*dist, a.E.Y+dy/d*dist)
+			ctx.Mem["x"], ctx.Mem["y"] = sys.move.FreeSpot(a.E, a.E.X+dx/d*dist, a.E.Y+dy/d*dist)
 			ctx.Mem["until"] = ctx.Now + fleeTimeout
 		}
 		arrived := sys.move.Toward(a.E, memFloat(ctx, "x"), memFloat(ctx, "y"), a.step(fleeSpeed))
