@@ -18,6 +18,15 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem pick up trees exported from BtTree since the last build
+echo [btdemo] 更新行为树注册表...
+go generate ./internal/ai/trees
+if errorlevel 1 (
+  echo [btdemo] 生成 registry.go 失败
+  pause
+  exit /b 1
+)
+
 echo [btdemo] 正在编译...
 if not exist dist mkdir dist
 go build -trimpath -ldflags "-s -w" -o dist\btdemo.exe .\cmd\server

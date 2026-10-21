@@ -11,7 +11,7 @@ go run ./cmd/server            # 打开 http://localhost:8080
 go run ./cmd/server -addr :9000 -config ./config
 ```
 
-Windows 下可以直接双击根目录的 `start.bat`：编译出 `dist\btdemo.exe`（连同 `config/`），启动服务并打开浏览器。需要先安装 Go 1.22+。
+Windows 下可以直接双击根目录的 `start.bat`：先运行 `go generate ./internal/ai/trees` 更新行为树注册表，再编译出 `dist\btdemo.exe`（连同 `config/`），启动服务并打开浏览器。需要先安装 Go 1.22+。
 
 ```bat
 start.bat           :: 编译并在 8080 端口启动
