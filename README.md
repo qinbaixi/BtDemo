@@ -11,6 +11,14 @@ go run ./cmd/server            # 打开 http://localhost:8080
 go run ./cmd/server -addr :9000 -config ./config
 ```
 
+Windows 下可以直接双击根目录的 `start.bat`：编译出 `dist\btdemo.exe`（连同 `config/`），启动服务并打开浏览器。需要先安装 Go 1.22+。
+
+```bat
+start.bat           :: 编译并在 8080 端口启动
+start.bat 9000      :: 换端口
+start.bat pack      :: 只编译并打包成 dist\btdemo-windows.zip，可以拷到没装 Go 的机器上运行
+```
+
 操作：`WASD` / 方向键移动，鼠标点击选择目标，`1`~`5` 释放技能，`G` 切换 AOI 网格显示，`Q` 切换画质。可以开多个浏览器标签页，每个标签页是一个新玩家，互相在视野内可见。
 
 ## 目录
