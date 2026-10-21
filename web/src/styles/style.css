@@ -24,12 +24,18 @@ html, body {
   -webkit-user-select: none;
 }
 
-#game {
+#game,
+#overlay {
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
   display: block;
+}
+
+/* 叠在 WebGL 画布上的 2D 画布：技能特效、头顶文字、调试线条。鼠标事件穿透到下面的游戏画布 */
+#overlay {
+  pointer-events: none;
 }
 
 #hud {

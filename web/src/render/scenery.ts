@@ -136,15 +136,6 @@ export function createScenery(mapW, mapH, mapProps = [], seed = 20261020) {
   return {
     props,
 
-    drawGround(ctx, view) {
-      const x0 = Math.max(0, Math.floor(view.x));
-      const y0 = Math.max(0, Math.floor(view.y));
-      const x1 = Math.min(mapW, Math.ceil(view.x + view.w));
-      const y1 = Math.min(mapH, Math.ceil(view.y + view.h));
-      if (x1 <= x0 || y1 <= y0) return;
-      ctx.drawImage(ground, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0);
-    },
-
     // visible returns the props intersecting the view, for depth sorting.
     visible(view) {
       const out = [];
@@ -158,24 +149,27 @@ export function createScenery(mapW, mapH, mapProps = [], seed = 20261020) {
       return out;
     },
 
-    // drawProp draws one prop. focus is the own player's position: tall props
-    // standing in front of it turn see-through so the player is never lost.
-    drawProp(ctx, p, time, focus) {
+    // ground 是整张地图的地表画布（世界坐标 1:1）。
+    ground,
+
+    // propSprite 返回静态物件预先画好的精灵画布（同种类、同变体只画一次）。
+    propSprite: sprite,
+
+    // kindOf 返回物件种类的定义：w/h 尺寸、foot 脚底偏移、tall 高物件、live 动态绘制、box 动态绘制的范围。
+    kindOf: (p) => KINDS[p.kind],
+
+    // seeThrough：高物件挡在自己的角色前面时变成半透明，保证玩家不会被挡住。
+    seeThrough(p, focus) {
       const def = KINDS[p.kind];
-      ctx.save();
-      if (focus && def.tall && focus.y < p.y - 4) {
-        const hw = (def.w * p.s) / 2 - 6;
-        if (Math.abs(focus.x - p.x) < hw && focus.y > p.y - def.h * p.s * 0.95) ctx.globalAlpha = 0.42;
-      }
-      if (def.live) {
-        ctx.translate(p.x, p.y);
-        ctx.scale(p.s, p.s);
-        def.live(ctx, time, p);
-      } else {
-        const sp = sprite(p);
-        ctx.drawImage(sp.canvas, p.x - sp.ox, p.y - sp.oy, sp.w, sp.h);
-      }
-      ctx.restore();
+      if (!focus || !def.tall || focus.y >= p.y - 4) return false;
+      const hw = (def.w * p.s) / 2 - 6;
+      return Math.abs(focus.x - p.x) < hw && focus.y > p.y - def.h * p.s * 0.95;
+    },
+
+    // drawLive 在 (0, 0) 处画动态物件（火盆、营火、魂火、墙），坐标是物件本地坐标，已按 s 缩放。
+    drawLive(ctx, p, time) {
+      ctx.scale(p.s, p.s);
+      KINDS[p.kind].live(ctx, time, p);
     },
 
     // lights registers the scene's light sources with the lighting pass.
@@ -792,7 +786,7 @@ const KINDS = {
     },
   },
   wall: {
-    w: 1, h: 1, foot: 0,
+    w: 1, h: 1, foot: 0, still: true,   // 画法不随时间变化：只画一次
     live(g, t, p) {
       const { dx, dy } = p;
       const len = Math.hypot(dx, dy);
@@ -827,7 +821,7 @@ const KINDS = {
     },
   },
   brazier: {
-    w: 1, h: 1, foot: 0,
+    w: 1, h: 1, foot: 0, box: [-30, -100, 30, 10],
     live(g, t, p) {
       g.fillStyle = 'rgba(0,0,0,0.4)';
       g.beginPath(); g.ellipse(0, 0, 16, 5, 0, 0, TAU); g.fill();
@@ -845,7 +839,7 @@ const KINDS = {
     },
   },
   campfire: {
-    w: 1, h: 1, foot: 0,
+    w: 1, h: 1, foot: 0, box: [-60, -180, 70, 16],
     live(g, t) {
       g.fillStyle = 'rgba(0,0,0,0.45)';
       g.beginPath(); g.ellipse(0, 2, 34, 10, 0, 0, TAU); g.fill();
@@ -867,7 +861,7 @@ const KINDS = {
     },
   },
   soulfire: {
-    w: 1, h: 1, foot: 0,
+    w: 1, h: 1, foot: 0, box: [-20, -48, 20, 8],
     live(g, t, p) {
       g.fillStyle = 'rgba(80,200,255,0.25)';
       g.beginPath(); g.ellipse(0, 0, 12, 4, 0, 0, TAU); g.fill();

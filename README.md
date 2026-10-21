@@ -57,7 +57,7 @@ internal/pb/         protoc 生成的 Go 代码
 web/                 前端（TypeScript + Vite，构建到 web/dist 后由 go:embed 打进二进制），见 docs/modules/frontend.md
   src/net/           协议转换与 WebSocket
   src/game/          本地状态、消息处理、事件
-  src/render/        画面：models 模型、fx 特效、scenery 场景、ink 描边、lighting 光照
+  src/render/        画面（PixiJS / WebGL）：world 舞台、pixi/ 角色与场景显示和描边着色器、lighting 光照、overlay 叠加层、models 模型、fx 特效、scenery 场景
   src/ui/            HUD 与调试面板
 tools/btregistry/    扫描导出文件生成 registry.go
 ```
@@ -97,13 +97,13 @@ tools/btregistry/    扫描导出文件生成 registry.go
 
 ## 美术与特效
 
-全部用 Canvas 程序化绘制，没有图片资源，整体参考《哈迪斯》的冥界风格：角色有粗墨线描边和按阵营着色的轮廓光（玩家金色、怪物血红、NPC 青色），场景压暗后由火盆、营火、魂火、熔岩和技能特效动态照亮。`monsters.yaml` 模板的 `model` 字段（默认等于模板名）和 `world.yaml` 玩家的 `model`（默认 `knight`）决定客户端画哪个模型：`knight`、`slime`、`wolf`、`skeleton_archer`、`ogre_chief`、`guard`、`villager`。角色用硬阴影分层着色（固定左上光源，转身时光照不跟着翻），带膝肘关节的走路、蓄力、出手、收招、受击（击退、抖动和整体白闪）和各自的死亡动画（骷髅散成骨堆、史莱姆化成一滩、狼侧翻倒地）；技能、受击、治疗、增益、升级、死亡、复活都有粒子特效。
+渲染用 PixiJS（WebGL）；美术目前全部是程序化绘制的占位，没有图片资源，整体参考《哈迪斯》的冥界风格：角色有粗墨线描边和按阵营着色的轮廓光（玩家金色、怪物血红、NPC 青色），场景压暗后由火盆、营火、魂火、熔岩和技能特效动态照亮。`monsters.yaml` 模板的 `model` 字段（默认等于模板名）和 `world.yaml` 玩家的 `model`（默认 `knight`）决定客户端画哪个模型：`knight`、`slime`、`wolf`、`skeleton_archer`、`ogre_chief`、`guard`、`villager`。角色用硬阴影分层着色（固定左上光源，转身时光照不跟着翻），带膝肘关节的走路、蓄力、出手、收招、受击（击退、抖动和整体白闪）和各自的死亡动画（骷髅散成骨堆、史莱姆化成一滩、狼侧翻倒地）；技能、受击、治疗、增益、升级、死亡、复活都有粒子特效。
 
 - `web/src/render/models.ts`：角色模型和动作
 - `web/src/render/fx.ts`：技能与战斗特效（刀光、火球、骨箭、旋风斩、治疗法阵、增益光柱、暴击闪光、屏幕震动）
 - `web/src/render/scenery.ts`：按区域生成的地表、场景物件和光源（大理石广场村庄、极乐草地、狼林、墓地、熔岩营地），与角色一起按纵深排序
-- `web/src/render/ink.ts`：角色描边与轮廓光（每个角色缓存一张精灵图，约 24 帧每秒重绘）
-- `web/src/render/lighting.ts`：低分辨率光照图与彩色光晕
+- `web/src/render/pixi/inkFilter.ts`：角色描边、轮廓光和受击白闪（GPU 着色器）
+- `web/src/render/lighting.ts`：GPU 光照（暗色层挖出光斑，加彩色光晕）
 
 画质：按 `Q` 在高画质和简化画质（不描边、不打光）之间切换，地址加 `?low` 默认用简化画质；帧率持续偏低时会自动切到简化画质。
 

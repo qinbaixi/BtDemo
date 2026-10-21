@@ -277,6 +277,27 @@ export class FX {
     ctx.restore();
   }
 
+  // underBounds 返回 drawUnder 这一帧会画到的范围 [x0, y0, x1, y1]（世界坐标），没有地面特效时返回 null。
+  underBounds(now: number): number[] | null {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const add = (x: number, y: number, rx: number, ry: number) => {
+      x0 = Math.min(x0, x - rx); y0 = Math.min(y0, y - ry);
+      x1 = Math.max(x1, x + rx); y1 = Math.max(y1, y + ry);
+    };
+    for (const f of this.effects) {
+      const t = (now - f.born) / f.life;
+      if (t < 0 || t >= 1) continue;
+      switch (f.kind) {
+        case 'whirl': add(f.cx, f.cy, f.radius + 4, f.radius * 0.5 + 4); break;
+        case 'heal': { const p = this.pos(f.src, { x: f.sx, y: f.sy }); add(p.x, p.y, 64, 30); break; }
+        case 'buff': { const p = this.pos(f.src, { x: f.sx, y: f.sy }); add(p.x, p.y, 64, 30); break; }
+        case 'ring': add(f.x, f.y, f.radius + 6, f.radius * 0.45 + 6); break;
+        case 'pillar': { const p = this.pos(f.anchor, f); add(p.x, p.y, 62, 26); break; }
+      }
+    }
+    return x1 > x0 ? [x0, y0, x1, y1] : null;
+  }
+
   drawOver(ctx, now, dt) {
     // Projectiles burst once on arrival, even if no frame fell near their end.
     for (const f of this.effects) {

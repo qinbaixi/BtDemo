@@ -1,7 +1,7 @@
 // Procedural character models, drawn with the Canvas 2D API in a painted,
 // hard-shaded style: every body part is a flat colour with a crisp shadow on
 // the side away from the light and a thin lit edge toward it (cel shading),
-// so figures read as solid shapes under the ink outline that ink.js adds.
+// so figures read as solid shapes under the ink outline that render/pixi/inkFilter.ts adds.
 //
 // drawModel(ctx, model, p) draws one character with its feet at (p.x, p.y).
 //   p.r       collision radius; the drawing scales with it
@@ -14,7 +14,7 @@
 //   p.dead    -1, or 0..1 progress of the death animation (stays at 1)
 //   p.time    ms clock for idle motion
 //   p.isSelf  draw the own-player ground ring
-//   p.bare    skip the ground ring and shadow (ink.js draws the model alone)
+//   p.bare    skip the ground ring and shadow (the Pixi actor view draws those itself)
 //
 // Models are drawn in local units facing +x with the feet at y = 0; a
 // standard humanoid is about 46 units tall before scaling by r / 16.

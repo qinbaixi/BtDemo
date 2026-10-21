@@ -2,7 +2,7 @@
 //
 //   net/      协议编解码（protobuf 生成代码）和 WebSocket 连接
 //   game/     本地状态、服务端消息处理、事件
-//   render/   画世界（Canvas 2D，第二步换成 Pixi）
+//   render/   画世界：Pixi（WebGL）画地表、物件、角色、光照，叠加的 2D 画布画特效和文字
 //   ui/       HUD 和调试面板（DOM）
 //   input.ts  键盘鼠标
 
@@ -16,7 +16,6 @@ import { castSlot, initInput, resendMove } from './input';
 import { createConnection } from './net/connection';
 import { createProtocol } from './net/protocol';
 import { FX } from './render/fx';
-import { createLighting } from './render/lighting';
 import { drawWorld, initWorld, resize, updateCamera } from './render/world';
 import { createDebug } from './ui/debug';
 import {
@@ -72,17 +71,18 @@ function runPending(now: number): void {
   for (const p of due) p.fn();
 }
 
-function init(): void {
-  initWorld(canvas);
+async function init(): Promise<void> {
   initHud(castSlot);
+  await initWorld(canvas, document.getElementById('overlay') as HTMLCanvasElement);
   state.fx = new FX(fxResolve);
-  state.lighting = createLighting();
   window.btdemo = { state };   // 方便在浏览器控制台里查看
-  resize(canvas);
-  window.addEventListener('resize', () => resize(canvas));
+  window.addEventListener('resize', resize);
   initInput({ canvas, send: conn.send, debug });
   requestAnimationFrame(frame);
   conn.connect();
 }
 
-init();
+init().catch((err) => {
+  console.error(err);
+  setConn('bad', '画面初始化失败（需要 WebGL）');
+});

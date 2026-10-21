@@ -19,7 +19,7 @@
 | 语言 | TypeScript | |
 | 构建 | Vite（开发热更新，`npm run build` 输出到 `web/dist`） | |
 | 协议 | protobufjs：`npm run proto` 从 `proto/btdemo.proto` 生成 `src/net/pb.js` 和类型 | |
-| 渲染 | Canvas 2D，程序化绘制 | 换成 PixiJS（WebGL），描边、光照改为着色器 |
+| 渲染 | PixiJS 8（WebGL）：地表、物件、角色、光照；描边和轮廓光是着色器。技能特效和头顶文字暂时画在叠加的 2D 画布上 | 特效改成 Pixi 粒子；模型换成美术贴图 / Spine |
 | 地图 | 服务端 `config/map.yaml` 下发物件 | Tiled 编辑器（.tmj），前后端读同一份 |
 | 界面 | DOM（HUD、调试面板） | 保持 DOM |
 
@@ -50,12 +50,17 @@ web/
       sync.ts           处理 welcome / enter / leave / sync / toast
       events.ts         事件 → 动画、特效、飘字
     render/
-      world.ts          画一帧世界：镜头、地表、按纵深排序的实体和物件、光照、头顶文字
-      models.ts         角色模型和动作（程序化绘制）
-      ink.ts            描边、轮廓光、受击白闪
-      lighting.ts       光照图
-      fx.ts             技能和战斗特效、粒子、屏幕震动
-      scenery.ts        地表、场景物件、环境光源
+      world.ts          Pixi 舞台和一帧的绘制：镜头、地面标记、角色、光照
+      overlay.ts        叠加的 2D 画布：技能特效、环境粒子、名字血条、气泡、飘字、调试线条、暗角
+      lighting.ts       GPU 光照：暗色层（擦除混合挖出光斑）+ 彩色光（加法混合）
+      pixi/
+        actorView.ts    一个角色：阴影、自己脚下的印记、身体精灵 + 墨线着色器
+        inkFilter.ts    墨线着色器：描边、轮廓光、受击白闪
+        sceneView.ts    地表切块贴图、物件精灵、动态物件（火焰）
+        canvasSprite.ts 用 Canvas 2D 画内容的精灵（程序化模型、火焰、地面特效用它接进 Pixi）
+      models.ts         角色模型和动作（程序化绘制，美术到位后替换）
+      fx.ts             技能和战斗特效、粒子、屏幕震动（Canvas 2D）
+      scenery.ts        地表、场景物件、环境光源（Canvas 2D 生成贴图）
     ui/
       hud.ts            自己 / 目标面板、技能栏、死亡遮罩、提示条、连接状态
       debug.ts          调试抽屉：AI 决策追踪
@@ -63,7 +68,23 @@ web/
     styles/             CSS，由 main.ts 引入
 ```
 
-分工：`game/` 根据服务端消息改 `state`；`render/` 每帧读 `state` 画出来，只顺带更新动画用的字段（走路相位、过期的气泡和飘字），不碰游戏逻辑；`ui/` 是 DOM。以后换 Pixi 主要替换 `render/`（`game/sync.ts` 里创建场景的那一行会跟着改）。
+分工：`game/` 根据服务端消息改 `state`；`render/` 每帧读 `state` 画出来，只顺带更新动画用的字段（走路相位、过期的气泡和飘字），不碰游戏逻辑；`ui/` 是 DOM。
+
+## 画面分层
+
+```text
+#game（WebGL，Pixi）
+  world        跟随镜头：地表 → 地面标记（AOI、边界、射程、目标圈）→ 地面特效 → 角色和物件（按脚底 y 排序）
+  darkness     光照暗色层（屏幕空间，半分辨率渲染纹理）
+  glow         光源彩色叠加（跟随镜头）
+#overlay（2D 画布，鼠标穿透）
+  技能特效 → 环境粒子 → 目标连线 → 碰撞体 / AI 路径 → 名字血条 → 气泡 → 飘字 → 暗角
+```
+
+- 程序化画的东西（模型、火焰、地面特效）先画到小画布，再作为贴图交给 Pixi（`CanvasSprite`）。角色和火焰每秒重画 24 次，位置每帧跟随插值。
+- 描边、轮廓光、受击白闪在 `inkFilter.ts` 的着色器里做，作用在角色精灵上；以后换成美术贴图或 Spine 动画，滤镜照样能用。
+- 简化画质（Q 键 / `?low`）关掉着色器和光照。
+- 美术接入时：角色在 `ActorView` 里把 `CanvasSprite` 换成贴图动画；物件在 `SceneView` 里换成图集里的精灵；特效以后改成 Pixi 粒子。
 
 ## 一帧做什么（main.ts 的 frame）
 
@@ -78,7 +99,7 @@ web/
 
 ## 开发
 
-需要 Node.js 20+。
+需要 Node.js 20+。浏览器需要支持 WebGL（不支持时连接状态会提示画面初始化失败）。
 
 ```sh
 cd web

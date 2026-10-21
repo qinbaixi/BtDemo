@@ -2,7 +2,6 @@
 // 服务端是权威：这里只保存最近一次同步的结果，加上插值和动画需要的数据。
 
 import type { FX } from '../render/fx';
-import type { createLighting } from '../render/lighting';
 import type { createScenery } from '../render/scenery';
 import type {
   EntityInfo, EntityKind, Obstacle, SelfInfo, SkillInfo,
@@ -11,7 +10,6 @@ import { KIND_COLOR, LERP_MS, MODEL_H, MODEL_SCALE } from './config';
 import { clamp, lerp } from './math';
 
 export type Scenery = ReturnType<typeof createScenery>;
-export type Lighting = ReturnType<typeof createLighting>;
 
 export interface Point { x: number; y: number }
 
@@ -44,7 +42,6 @@ export interface ClientEntity {
   hitAt: number;
   deadAt: number;
   fresh: boolean;     // 还没收到过同步：一进视野就是死的，直接显示倒地
-  ink?: object;       // 描边渲染的缓存（ink.ts）
 }
 
 export interface FloatText {
@@ -76,7 +73,6 @@ export interface State {
   sceneKey: string;
   obstacles: Obstacle[];
   aiPath: { id: number; pts: number[]; at: number } | null;
-  lighting: Lighting | null;
   vignette: { w: number; h: number; g: CanvasGradient } | null;
   lands: Map<number, { at: number; color?: string }>;   // 施法者 id -> 最近一次施法命中的时间和颜色
   pending: { at: number; fn: () => void }[];             // 等弹道飞到再播的受击
@@ -111,7 +107,6 @@ export const state: State = {
   sceneKey: '',
   obstacles: [],
   aiPath: null,
-  lighting: null,
   vignette: null,
   lands: new Map(),
   pending: [],

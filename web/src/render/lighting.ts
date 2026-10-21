@@ -1,110 +1,124 @@
-// Dynamic lighting. The world is drawn fully lit; this pass then lays a dark,
-// cool shadow over the screen with holes carved where lights are, and adds
-// each light's colour on top. Lights are collected fresh every frame from the
-// player, fires, braziers, lava and active effects.
+// 动态光照（GPU）。世界先按全亮画出来，再在上面盖一层偏冷的暗色，
+// 光源的位置把暗色“擦掉”，最后再把每个光源的颜色叠加上去。
+// 光源每帧重新收集：玩家、火盆、营火、熔岩、正在播放的特效。
+//
+// 暗色层画在半分辨率的渲染纹理里（反正是柔和的渐变），彩色光直接用加法混合的精灵画在世界里。
 
-const SCALE = 0.5;               // lightmap resolution relative to CSS pixels
+import { Container, Graphics, RenderTexture, Sprite, Texture, type Renderer } from 'pixi.js';
 
-const spriteCache = new Map();
+const SCALE = 0.5;               // 暗色层相对 CSS 像素的分辨率
+const AMBIENT = 0x0a0616;        // 没被照亮的地方盖的颜色
+const AMBIENT_ALPHA = 0.58;
 
-// falloff is a white radial sprite with a soft, slightly flattened core.
-function falloff() {
-  let s = spriteCache.get(':falloff');
-  if (s) return s;
-  s = document.createElement('canvas');
-  s.width = s.height = 128;
-  const g = s.getContext('2d');
+interface Light { x: number; y: number; radius: number; color: string; strength: number; glow: number }
+
+function radial(stops: [number, string][]): Texture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
   const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.35, 'rgba(255,255,255,0.8)');
-  grad.addColorStop(0.7, 'rgba(255,255,255,0.28)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  for (const [at, color] of stops) grad.addColorStop(at, color);
   g.fillStyle = grad;
   g.fillRect(0, 0, 128, 128);
-  spriteCache.set(':falloff', s);
-  return s;
+  return Texture.from(c);
 }
 
-// tint is a coloured radial sprite for the additive colour pass.
-function tint(color) {
-  let s = spriteCache.get(color);
-  if (s) return s;
-  s = document.createElement('canvas');
-  s.width = s.height = 128;
-  const g = s.getContext('2d');
-  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-  grad.addColorStop(0, color);
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 128, 128);
-  spriteCache.set(color, s);
-  return s;
+// 一组按需增长、每帧复用的精灵。
+class SpritePool {
+  private items: Sprite[] = [];
+  private used = 0;
+  constructor(private parent: Container, private texture: () => Texture, private blend: 'erase' | 'add') {}
+  begin(): void { this.used = 0; }
+  next(): Sprite {
+    let s = this.items[this.used];
+    if (!s) {
+      s = new Sprite(this.texture());
+      s.anchor.set(0.5);
+      s.blendMode = this.blend;
+      this.parent.addChild(s);
+      this.items.push(s);
+    }
+    s.visible = true;
+    this.used++;
+    return s;
+  }
+  end(): void { for (let i = this.used; i < this.items.length; i++) this.items[i].visible = false; }
 }
 
-export function createLighting() {
-  const map = document.createElement('canvas');
-  const m = map.getContext('2d');
-  // the coloured glow is also accumulated at low resolution, then blended
-  // over the screen in one pass
-  const tintMap = document.createElement('canvas');
-  const t = tintMap.getContext('2d');
-  const lights = [];
+export type Lighting = ReturnType<typeof createLighting>;
+
+// createLighting 返回光照层。screen 是屏幕空间的容器（暗色层放这里），
+// world 是跟着镜头走的容器（彩色光放这里）。
+export function createLighting(renderer: Renderer, screen: Container, world: Container) {
+  const lights: Light[] = [];
+
+  // 暗色层：一块铺满的暗色，加上一组用“擦除”混合挖洞的白色光斑
+  const darkScene = new Container();
+  const darkFill = new Graphics();
+  const holes = new Container();
+  darkScene.addChild(darkFill, holes);
+  const white = radial([[0, 'rgba(255,255,255,1)'], [0.35, 'rgba(255,255,255,0.8)'], [0.7, 'rgba(255,255,255,0.28)'], [1, 'rgba(255,255,255,0)']]);
+  const holePool = new SpritePool(holes, () => white, 'erase');
+  let target: RenderTexture | null = null;
+  const darkSprite = new Sprite();
+  screen.addChild(darkSprite);
+
+  // 彩色光：白色渐变贴图 + tint 着色。渐变终点是透明黑，叠加后衰减和旧版的颜色渐变一致
+  const glowLayer = new Container();
+  world.addChild(glowLayer);
+  const glowTex = radial([[0, 'rgba(255,255,255,1)'], [1, 'rgba(0,0,0,0)']]);
+  const glowPool = new SpritePool(glowLayer, () => glowTex, 'add');
 
   return {
-    // ambient is the darkness laid over unlit ground.
-    ambient: 'rgba(10,6,22,0.58)',
+    begin(): void { lights.length = 0; },
 
-    begin() { lights.length = 0; },
-
-    // add registers a light in world coordinates. glow (0..1) scales the
-    // additive colour pass; strength (0..1) how much darkness it removes.
-    add(x, y, radius, color, strength = 1, glow = 0.35) {
+    // add 登记一个世界坐标里的光源。strength (0..1) 擦掉多少暗色，glow (0..1) 彩色光强度。
+    add(x: number, y: number, radius: number, color: string, strength = 1, glow = 0.35): void {
       if (radius > 1 && strength > 0.01) lights.push({ x, y, radius, color, strength, glow });
     },
 
-    // render composites the light pass over the scene. view is the camera
-    // rectangle in world units; the caller's transform must be the identity
-    // (in CSS pixels times dpr) when this runs.
-    render(ctx, view, dpr) {
+    // render 更新光照层。view 是镜头矩形（世界坐标，已经算上屏幕震动）。
+    // enabled 为 false（简化画质）时整层隐藏。
+    render(view: { x: number; y: number; w: number; h: number }, enabled: boolean): void {
+      darkSprite.visible = enabled;
+      glowLayer.visible = enabled;
+      if (!enabled) return;
       const w = Math.ceil(view.w * SCALE);
       const h = Math.ceil(view.h * SCALE);
-      if (map.width !== w || map.height !== h) {
-        map.width = w; map.height = h;
-        tintMap.width = w; tintMap.height = h;
+      if (!target || target.width !== w || target.height !== h) {
+        target?.destroy(true);
+        target = RenderTexture.create({ width: w, height: h, resolution: 1 });
+        darkSprite.texture = target;
       }
-      t.globalCompositeOperation = 'source-over';
-      t.globalAlpha = 1;
-      t.clearRect(0, 0, w, h);
-      t.globalCompositeOperation = 'lighter';
-      m.globalCompositeOperation = 'source-over';
-      m.globalAlpha = 1;
-      m.clearRect(0, 0, w, h);
-      m.fillStyle = this.ambient;
-      m.fillRect(0, 0, w, h);
-      m.globalCompositeOperation = 'destination-out';
-      const white = falloff();
+      darkFill.clear().rect(0, 0, w, h).fill({ color: AMBIENT, alpha: AMBIENT_ALPHA });
+      holePool.begin();
+      glowPool.begin();
       for (const l of lights) {
         const x = (l.x - view.x) * SCALE;
         const y = (l.y - view.y) * SCALE;
         const r = l.radius * SCALE;
         if (x + r < 0 || y + r < 0 || x - r > w || y - r > h) continue;
-        m.globalAlpha = Math.min(1, l.strength);
-        // lights sit on the ground plane: squash them like the camera does
-        m.drawImage(white, x - r, y - r * 0.8, r * 2, r * 1.6);
+        // 光落在地面上：像镜头一样压扁
+        const s = holePool.next();
+        s.position.set(x, y);
+        s.width = r * 2;
+        s.height = r * 1.6;
+        s.alpha = Math.min(1, l.strength);
         if (l.glow > 0) {
-          const rr = r * 0.85;
-          t.globalAlpha = Math.min(1, l.glow * l.strength);
-          t.drawImage(tint(l.color), x - rr, y - rr * 0.8, rr * 2, rr * 1.6);
+          const rr = l.radius * 0.85;
+          const gsp = glowPool.next();
+          gsp.position.set(l.x, l.y);
+          gsp.width = rr * 2;
+          gsp.height = rr * 1.6;
+          gsp.tint = l.color;
+          gsp.alpha = Math.min(1, l.glow * l.strength);
         }
       }
-
-      ctx.save();
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(map, 0, 0, w, h, 0, 0, view.w, view.h);
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.drawImage(tintMap, 0, 0, w, h, 0, 0, view.w, view.h);
-      ctx.restore();
+      holePool.end();
+      glowPool.end();
+      renderer.render({ container: darkScene, target, clear: true });
+      darkSprite.position.set(0, 0);
+      darkSprite.scale.set(1 / SCALE);
     },
   };
 }
