@@ -378,6 +378,19 @@ function paintGround(W, H, rnd, { tombs, campfires }) {
     hatch(g, x, y, 26 + rnd() * 30, rnd, 'rgba(6,10,10,0.35)', 10);
   }
 
+  // 路面被踩出的泥土带，石板铺在上面，边缘有一圈压实的深色
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  for (const [wd, col] of [[46, 'rgba(30,22,20,0.28)'], [36, 'rgba(78,62,46,0.45)']] as [number, string][]) {
+    g.lineWidth = wd;
+    g.strokeStyle = col;
+    for (const road of ROADS) {
+      g.beginPath();
+      road.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.stroke();
+    }
+  }
+
   // flagstone roads
   for (const road of ROADS) {
     for (let i = 1; i < road.length; i++) {
@@ -468,6 +481,67 @@ function paintGround(W, H, rnd, { tombs, campfires }) {
     ellipseFill(g, x, y + 0.6, 2.6 + rnd() * 2, 1.8 + rnd());
     g.fillStyle = `rgb(${v},${v},${v + 8})`;
     ellipseFill(g, x, y, 1.8 + rnd() * 2, 1.2 + rnd());
+  }
+
+  // 塔尔塔罗斯营地周围的焦土裂纹（不发光的细裂缝）
+  for (const z of camp) {
+    g.lineCap = 'round';
+    for (let i = 0; i < 26; i++) {
+      const a = rnd() * TAU;
+      const d = 60 + rnd() * 230;
+      let x = z.x + Math.cos(a) * d * 1.2;
+      let y = z.y + Math.sin(a) * d * 0.75;
+      g.beginPath();
+      g.moveTo(x, y);
+      let ang = rnd() * TAU;
+      for (let k = 0; k < 4; k++) {
+        ang += (rnd() - 0.5) * 1.4;
+        x += Math.cos(ang) * (8 + rnd() * 12);
+        y += Math.sin(ang) * (5 + rnd() * 8);
+        g.lineTo(x, y);
+      }
+      g.lineWidth = 2.2;
+      g.strokeStyle = 'rgba(12,4,4,0.7)';
+      g.stroke();
+      g.lineWidth = 0.8;
+      g.strokeStyle = 'rgba(150,60,30,0.35)';
+      g.stroke();
+    }
+  }
+
+  // 草丛：几根弯曲的草叶，暗色的根、亮一点的尖；颜色随区域变化，路上、广场、营地不长
+  for (let i = 0; i < 1100; i++) {
+    const x = rnd() * W;
+    const y = rnd() * H;
+    const n = 3 + ((rnd() * 3) | 0);
+    const hgt = 4 + rnd() * 5;
+    const tone = rnd();
+    if (roadDist(x, y) < 26 || near(x, y, village, 185) || near(x, y, camp, 260)) continue;
+    const grave = near(x, y, graveyard, 260);
+    if (grave && tone < 0.6) continue;   // 墓地的草稀
+    const [root, tip] = grave ? ['#2a2a3e', '#6a6a8a']
+      : near(x, y, forest, 420) ? ['#0e2420', tone < 0.5 ? '#2f5a48' : '#3c6a50']
+        : near(x, y, meadow, 360) ? ['#3a4a22', tone < 0.5 ? '#8aa04a' : '#a8b85a']
+          : ['#1e3024', tone < 0.5 ? '#4a6a44' : '#5a7a48'];
+    g.lineCap = 'round';
+    for (let k = 0; k < n; k++) {
+      const lean = (k - (n - 1) / 2) * 0.35 + (rnd() - 0.5) * 0.3;
+      const h2 = hgt * (0.7 + rnd() * 0.5);
+      const tx = x + Math.sin(lean) * h2 * 1.1;
+      const ty = y - Math.cos(lean) * h2;
+      g.beginPath();
+      g.moveTo(x + (k - n / 2) * 0.8, y);
+      g.quadraticCurveTo(x + Math.sin(lean) * h2 * 0.3, y - h2 * 0.6, tx, ty);
+      g.lineWidth = 1.6;
+      g.strokeStyle = root;
+      g.stroke();
+      g.beginPath();
+      g.moveTo(x + Math.sin(lean) * h2 * 0.55, y - h2 * 0.55);
+      g.lineTo(tx, ty);
+      g.lineWidth = 1;
+      g.strokeStyle = tip;
+      g.stroke();
+    }
   }
 
   // darken the map edge

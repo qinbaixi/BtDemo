@@ -11,6 +11,16 @@ export const DEATH_MS = 650;         // 倒地动画
 // 每种实体的轮廓光颜色：金色的英雄、血红的怪物、幽蓝的 NPC
 export const RIM: Record<EntityKind, string> = { player: '#ffcf6a', monster: '#ff3b2e', npc: '#6fe3ff' };
 export const MODEL_SCALE = 1.25;     // 模型画得比碰撞半径略大
+// 画角色时的范围（左右、向上、向下各是绘制半径的几倍），要容得下挥舞的武器和倒地的姿势
+export const MODEL_BOX: Record<string, [number, number, number]> = {
+  default: [3, 3.5, 1.8],
+  guard: [3.6, 3.5, 1.8],
+  ogre_chief: [3.6, 4.6, 3.6],
+};
+export function modelBox(model: string, r: number): number[] {
+  const [x, up, down] = MODEL_BOX[model] || MODEL_BOX.default;
+  return [-r * x, -r * up, r * x, r * down];
+}
 // 半径 16 时每个模型的绘制高度，用来把名字放在头顶上方
 export const MODEL_H: Record<string, number> = {
   knight: 46, guard: 50, villager: 42, slime: 26, wolf: 30, skeleton_archer: 46, ogre_chief: 54,

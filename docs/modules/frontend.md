@@ -55,6 +55,8 @@ web/
       overlay.ts        叠加的 2D 画布：名字血条、气泡、飘字、调试线条、暗角（不开后期处理时还有技能特效、环境粒子）
       lighting.ts       GPU 光照：暗色层（擦除混合挖出光斑）+ 彩色光（加法混合）
       grade.ts          调色：默认调色函数烘焙成 LUT 贴图，也能加载美术给的 LUT 图片
+      art.ts            美术资源：读 art/manifest.json，有图的角色/物件/地表/LUT 用图，没有的继续程序画
+      bake.ts           把程序画的模型和物件按美术规范导出成模板（地址带 ?bake 时可用）
       pixi/
         actorView.ts    一个角色：阴影、自己脚下的印记、身体精灵 + 墨线着色器
         inkFilter.ts    墨线着色器：描边、轮廓光、受击白闪
@@ -98,7 +100,7 @@ web/
 - 程序化画的东西（模型、火焰、地面特效）先画到小画布，再作为贴图交给 Pixi（`CanvasSprite`）。角色和火焰每秒重画 24 次，位置每帧跟随插值。
 - 描边、轮廓光、受击白闪在 `inkFilter.ts` 的着色器里做，作用在角色精灵上；以后换成美术贴图或 Spine 动画，滤镜照样能用。
 - 简化画质（Q 键 / `?low`）关掉着色器、光照和后期处理。
-- 美术接入时：角色在 `ActorView` 里把 `CanvasSprite` 换成贴图动画；物件在 `SceneView` 里换成图集里的精灵；特效以后改成 Pixi 粒子。
+- 美术资源：图片和清单放 `web/public/art/`（格式见 [美术规范](../art-spec.md)）。启动时 `art.ts` 先加载清单，`ActorView` 有图就播帧动画、`SceneView` 有图就用图，没有的照旧程序画，所以可以逐个替换。程序模型绘制范围按 `game/config.ts` 的 `MODEL_BOX`，导出模板的格子大小也由它决定。特效以后改成 Pixi 粒子。
 
 ## 一帧做什么（main.ts 的 frame）
 

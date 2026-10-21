@@ -3,10 +3,10 @@
 // 用途：给美术当“描红模板”——尺寸、锚点、动画帧数都已经对好，照着重画、替换掉就行。
 // 也用来验证资源管线：把导出的东西原样放进 web/public/art/，画面应该和程序画的一样。
 //
-// 只在地址带 ?bake 时挂到 window.btdemo.bake 上，不影响正常游戏。仓库里的 art/templates/
+// 只在地址带 ?bake 时挂到 window.btdemo.bake 上，不影响正常游戏。项目文件里的 btdemo/art-templates/
 // 就是用它导出的（脚本见 docs/art-spec.md）。
 
-import { MODEL_SCALE } from '../game/config';
+import { MODEL_SCALE, modelBox } from '../game/config';
 import { state } from '../game/state';
 import type { AnimName, CharacterArt, Manifest, PropArt } from './art';
 import { drawModel } from './models';
@@ -54,7 +54,7 @@ export function bakeAll(): Baked {
 export function bakeCharacter(model: string, radius: number, color?: string): { canvas: HTMLCanvasElement; def: CharacterArt } {
   const r = radius * MODEL_SCALE;
   // 和 ActorView 画程序模型时的范围一样，容得下武器和倒地
-  const box = [-r * 3, -r * 3.5, r * 3, r * 1.3];
+  const box = modelBox(model, r);
   const fw = Math.ceil((box[2] - box[0]) * PPU);
   const fh = Math.ceil((box[3] - box[1]) * PPU);
   const cols = Math.max(...ANIMS.map((a) => a[1]));

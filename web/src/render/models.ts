@@ -220,6 +220,30 @@ function glint(ctx, x, y, r, color, a = 1) {
   ctx.restore();
 }
 
+// rivets 画一排小铆钉：暗色底加一个亮点，表现金属件的细节。
+function rivets(ctx, pts, r = 0.6, color = '#f4e2b0') {
+  for (let i = 0; i < pts.length; i += 2) {
+    ctx.fillStyle = 'rgba(11,7,16,0.55)';
+    ctx.beginPath(); ctx.arc(pts[i] + 0.2, pts[i + 1] + 0.25, r + 0.25, 0, TAU); ctx.fill();
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(pts[i], pts[i + 1], r, 0, TAU); ctx.fill();
+  }
+}
+
+// folds 画几条衣褶 / 纹理线（半透明暗色），给大块颜色加一点质感。
+function folds(ctx, lines, color = 'rgba(20,10,30,0.4)', w = 0.8) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = w;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (const l of lines) {
+    ctx.moveTo(l[0], l[1]);
+    if (l.length === 6) ctx.quadraticCurveTo(l[2], l[3], l[4], l[5]);
+    else ctx.lineTo(l[2], l[3]);
+  }
+  ctx.stroke();
+}
+
 // joint follows a two-segment limb from (x, y): angles are from straight
 // down, positive swings toward +x (forward).
 function joint(x, y, a1, l1, a2, l2) {
@@ -482,6 +506,12 @@ function drawKnight(ctx, q) {
         c.quadraticCurveTo(-2, B.hipY + 2, B.sw - 3, B.sy + 2);
         c.closePath();
       }, shade(color, -0.42), { dark: shade(color, -0.65), lit: shade(color, -0.15), sd: 3 });
+      // 披风的褶皱和金色滚边
+      folds(ctx, [
+        [-B.sw - 1, B.sy + 4, -B.sw - 4 - run * 0.5, B.sy + 12, -B.sw - 3 - run * 0.8 - sway, B.hipY + 9],
+        [-B.sw + 2, B.sy + 6, -B.sw - 0.5 - run * 0.3, B.hipY + 2, -B.sw - run * 0.4 - sway * 0.5, B.hipY + 9],
+      ], 'rgba(10,6,24,0.45)', 0.9);
+      line(ctx, [-B.sw - 5 - run - sway, B.hipY + 12, -B.sw - 1 - run * 0.6 - sway * 0.5, B.hipY + 9, -B.sw + 2 - run * 0.4, B.hipY + 13], gold, 0.9);
     },
     offhand(ctx, q, B, hand) {
       // round shield with a gold sunburst boss
@@ -493,7 +523,21 @@ function drawKnight(ctx, q) {
       ctx.beginPath();
       ctx.ellipse(x, y, 5.6, 7.3, 0, 0, TAU);
       ctx.stroke();
+      // 盾面上的放射纹和一圈铆钉
+      ctx.strokeStyle = shade(gold, -0.25);
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU + 0.2;
+        ctx.moveTo(x + 0.5 + Math.cos(a) * 3, y + Math.sin(a) * 3.8);
+        ctx.lineTo(x + 0.5 + Math.cos(a) * 5, y + Math.sin(a) * 6.4);
+      }
+      ctx.stroke();
+      const rv = [];
+      for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU + 0.5; rv.push(x + Math.cos(a) * 6.4, y + Math.sin(a) * 8.2); }
+      rivets(ctx, rv, 0.55);
       cel(ctx, (c) => pEll(c, x + 0.5, y, 2.4, 3), gold, { sd: 1, lw: 1 });
+      glint(ctx, x - 0.3, y - 1.2, 2.2, 'rgba(255,240,200,0.8)');
     },
     torsoDetail(ctx, q, B) {
       // tunic skirt under the cuirass, then a gold-trimmed belt
@@ -512,6 +556,9 @@ function drawKnight(ctx, q) {
       ctx.moveTo(-4, B.sy + 5);
       ctx.quadraticCurveTo(0.5, B.sy + 8, 5, B.sy + 4.5);
       ctx.stroke();
+      // 腹甲的分片和胸口的亮光
+      folds(ctx, [[-B.ww + 0.5, B.hipY - 6, 0.5, B.hipY - 4.6, B.ww - 0.5, B.hipY - 6.2], [-B.ww + 1, B.hipY - 9.5, 0.5, B.hipY - 8.2, B.ww - 1, B.hipY - 9.6]], 'rgba(40,40,70,0.45)', 0.8);
+      line(ctx, [-2.5, B.sy + 3.2, 1.5, B.sy + 2.6], 'rgba(255,255,255,0.7)', 0.9);
       // pauldron
       cel(ctx, (c) => {
         c.moveTo(B.sw - 6, B.sy - 1);
@@ -542,6 +589,7 @@ function drawKnight(ctx, q) {
         c.closePath();
       }, steel, { sd: 2 });
       line(ctx, [hx - hr + 1, hy - 1.6, hx + hr - 1, hy - 1.6], gold, 1.3);
+      rivets(ctx, [hx - hr + 2.2, hy + 1.8, hx - 3.4, hy + 3.4], 0.5);
       // crest plume sweeping back, in the player's colour
       const sway = Math.sin(q.time / 240) * 1.2 + (q.moving ? -1.8 : 0);
       cel(ctx, (c) => {
@@ -551,6 +599,11 @@ function drawKnight(ctx, q) {
         c.quadraticCurveTo(hx - 4, hy - hr - 1, hx - 1.2, hy - hr + 0.2);
         c.closePath();
       }, shade(color, 0.05), { sd: 1.6 });
+      // 羽饰的发丝
+      folds(ctx, [
+        [hx + 0.5, hy - hr - 2.5, hx - 4, hy - hr - 4, hx - hr - 2 + sway, hy - hr - 1.5],
+        [hx - 1, hy - hr - 0.8, hx - 5, hy - hr - 1, hx - hr - 3.5 + sway, hy - 2],
+      ], shade(color, -0.35), 0.7);
       glint(ctx, hx - 2.5, hy - 5, 3, 'rgba(255,255,255,0.55)');
     },
     weaponBehindHand: true,
@@ -572,6 +625,10 @@ function drawKnight(ctx, q) {
       // gold crossguard and pommel
       inkLine(ctx, [h.x - nx * 4.2 + dx * 0.6, h.y - ny * 4.2 + dy * 0.6, h.x + nx * 4.2 + dx * 0.6, h.y + ny * 4.2 + dy * 0.6], gold, 1.8);
       flat(ctx, (c) => pEll(c, h.x - dx * 3.4, h.y - dy * 3.4, 1.5, 1.5), gold, 1);
+      // 护手中央的红宝石，剑身上一道高光
+      flat(ctx, (c) => pEll(c, h.x + dx * 0.6, h.y + dy * 0.6, 0.9, 0.9), '#ff4a3a');
+      glint(ctx, h.x + dx * 0.6, h.y + dy * 0.6, 1.8, 'rgba(255,90,60,0.7)');
+      line(ctx, [h.x + dx * 5 + nx * 0.6, h.y + dy * 5 + ny * 0.6, h.x + dx * 11 + nx * 0.6, h.y + dy * 11 + ny * 0.6], 'rgba(255,255,255,0.85)', 0.6);
       if (q.ph && q.ph.strike > 0 && q.ph.back < 0.4) {
         // a crisp crescent trailing the blade: thick at the edge, tapering
         // to nothing behind it, shrinking into the blade on the follow-through
@@ -640,6 +697,7 @@ function drawGuard(ctx, q) {
         c.lineTo(B.sw - 3, B.sy + 1);
         c.closePath();
       }, crest, { sd: 2.4 });
+      folds(ctx, [[-B.sw - 0.5, B.sy + 3, -B.sw - 3, B.sy + 9, -B.sw - 2, B.hipY + 4]], 'rgba(40,0,10,0.5)', 0.9);
     },
     offhand(ctx, q, B, hand) {
       // aspis: a big bronze round shield with a painted emblem
@@ -656,6 +714,10 @@ function drawGuard(ctx, q) {
       ctx.lineTo(x + 0.6, y + 2);
       ctx.lineTo(x + 4.6, y + 4.5);
       ctx.stroke();
+      // 盾沿一圈铆钉
+      const rv = [];
+      for (let i = 0; i < 10; i++) { const a = (i / 10) * TAU; rv.push(x + Math.cos(a) * 9.3, y + Math.sin(a) * 11.2); }
+      rivets(ctx, rv, 0.5, '#ffe2a0');
       glint(ctx, x - 4, y - 6, 3.5, 'rgba(255,230,170,0.5)');
     },
     torsoDetail(ctx, q, B) {
@@ -696,6 +758,12 @@ function drawGuard(ctx, q) {
         c.quadraticCurveTo(hx - 2, hy - hr - 1.5, hx + hr - 0.5, hy - hr + 2.5);
         c.closePath();
       }, crest, { sd: 1.8 });
+      // 马鬃的发丝、护颊的边线
+      folds(ctx, [
+        [hx + hr - 1, hy - hr - 1, hx, hy - hr - 6, hx - hr - 1.5 + sway, hy - hr + 0.5],
+        [hx + 2, hy - hr - 0.5, hx - 3, hy - hr - 2.5, hx - hr - 2.5 + sway, hy + 1],
+      ], 'rgba(60,0,10,0.55)', 0.7);
+      folds(ctx, [[hx + hr - 1.2, hy + 3.4, hx + hr - 2.2, hy + 6.4]], 'rgba(70,40,10,0.7)', 0.8);
       glint(ctx, hx - 2, hy - 4.5, 3, 'rgba(255,240,200,0.55)');
     },
     weaponBehindHand: true,
@@ -710,6 +778,10 @@ function drawGuard(ctx, q) {
       const x1 = h.x + dx * 20;
       const y1 = h.y + dy * 20;
       inkLine(ctx, [x0, y0, x1, y1], '#8a5a2b', 2);
+      // 枪尾的铜尖和握把缠绳
+      flat(ctx, (c) => pPoly(c, [x0 + dy * 1.4, y0 - dx * 1.4, x0 - dx * 4, y0 - dy * 4, x0 - dy * 1.4, y0 + dx * 1.4]), bronze, 1);
+      folds(ctx, [[h.x - dx * 3 + dy * 1.1, h.y - dy * 3 - dx * 1.1, h.x - dx * 1.8 - dy * 1.1, h.y - dy * 1.8 + dx * 1.1],
+        [h.x + dx * 3 + dy * 1.1, h.y + dy * 3 - dx * 1.1, h.x + dx * 4.2 - dy * 1.1, h.y + dy * 4.2 + dx * 1.1]], '#e8dcc2', 0.8);
       // leaf-shaped head
       const nx = dy;
       const ny = -dx;
@@ -745,12 +817,18 @@ function drawVillager(ctx, q) {
     back(ctx, q, B) {
       // satchel on the far hip
       cel(ctx, (c) => pRrect(c, -B.sw - 1.5, B.hipY - 7, 6, 7, 2), '#8a5a32', { sd: 1.6 });
+      // 包盖和铜扣
+      flat(ctx, (c) => pRrect(c, -B.sw - 1.5, B.hipY - 7, 6, 3, 1.5), '#6a4224', 1);
+      flat(ctx, (c) => pEll(c, -B.sw + 1.5, B.hipY - 4.2, 0.8, 0.8), '#e2b04a');
     },
     torsoDetail(ctx, q, B) {
       // rope belt, apron and strap
       cel(ctx, (c) => pPoly(c, [-B.ww + 1, B.sy + 6, B.ww - 0.5, B.sy + 6, B.ww + 1.4, B.hipY + 5, -B.ww + 0.4, B.hipY + 5]), '#efe6d2', { sd: 1.4, lw: 1.1 });
       line(ctx, [-B.ww, B.hipY - 1, B.ww + 0.6, B.hipY - 1.6], '#7a4a24', 1.6);
       line(ctx, [B.sw - 2, B.sy, -B.ww + 0.5, B.hipY - 2], '#6a4022', 1.4);
+      // 围裙上的补丁和衣褶
+      flat(ctx, (c) => pRrect(c, 0.5, B.hipY - 4.5, 3.2, 3, 0.5), '#c9b896');
+      folds(ctx, [[0.8, B.hipY - 4.2, 3.4, B.hipY - 1.8], [-B.ww + 1.5, B.sy + 8, -B.ww + 1, B.hipY + 4], [2.5, B.sy + 9, 3.5, B.hipY + 4]], 'rgba(80,60,40,0.4)', 0.7);
     },
     head(ctx, q, B) {
       const { hx, hy, hr } = B;
@@ -765,6 +843,12 @@ function drawVillager(ctx, q) {
       cel(ctx, (c) => pEll(c, hx + 0.5, hy - 4.4, hr + 4.6, 2.8), '#e6c264', { sd: 1.2 });
       cel(ctx, (c) => { c.moveTo(hx - 5.5, hy - 4.6); c.quadraticCurveTo(hx - 5, hy - 11.5, hx + 0.5, hy - 11.5); c.quadraticCurveTo(hx + 6, hy - 11.5, hx + 6.5, hy - 4.6); c.closePath(); }, '#ddb554', { sd: 1.6 });
       line(ctx, [hx - 5.4, hy - 6.4, hx + 6.4, hy - 6.4], '#b8402c', 1.6, 'butt');
+      // 帽带上插一朵日光兰
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * TAU;
+        flat(ctx, (c) => pEll(c, hx - 4 + Math.cos(a) * 1.2, hy - 7.6 + Math.sin(a) * 1.2, 0.9, 0.9), '#f8f0dc');
+      }
+      flat(ctx, (c) => pEll(c, hx - 4, hy - 7.6, 0.7, 0.7), '#e09a2a');
       ctx.strokeStyle = 'rgba(120,80,20,0.5)';
       ctx.lineWidth = 0.8;
       ctx.beginPath();
@@ -851,6 +935,18 @@ function drawSlime(ctx, q) {
   pEll(ctx, 1.5, -h * 0.35, w * 0.42, h * 0.24);
   ctx.fill();
   ctx.globalAlpha /= 0.4;
+  // 肚子里没消化完的小骷髅，随身体一起晃
+  if (q.dead < 0) {
+    ctx.save();
+    ctx.globalAlpha *= 0.35;
+    ctx.translate(-w * 0.25, -h * 0.28 + Math.sin(t * 1.3) * 1.2);
+    ctx.rotate(0.5 + Math.sin(t * 0.8) * 0.2);
+    ctx.fillStyle = shade(color, -0.55);
+    ctx.beginPath(); pEll(ctx, 0, 0, 3.2, 2.8); pRrect(ctx, -1.6, 1.6, 3.2, 2, 0.6); ctx.fill();
+    ctx.fillStyle = shade(color, 0.1);
+    ctx.beginPath(); pEll(ctx, -1, -0.2, 0.8, 0.9); pEll(ctx, 1.1, -0.2, 0.8, 0.9); ctx.fill();
+    ctx.restore();
+  }
   for (let i = 0; i < 4; i++) {
     const k = (t * 0.35 + i * 0.27) % 1;
     const bx = Math.sin(i * 2.3 + t) * w * 0.4;
@@ -871,6 +967,15 @@ function drawSlime(ctx, q) {
   ctx.beginPath();
   pEll(ctx, -w * 0.62, -h * 0.47, 1.3, 1.6);
   ctx.fill();
+  // 底部一圈反光（透明果冻贴地的那一圈更亮）
+  ctx.strokeStyle = `${shade(color, 0.5)}`;
+  ctx.globalAlpha *= 0.6;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.8, -1.5);
+  ctx.quadraticCurveTo(0, 0.5, w * 0.8, -1.5);
+  ctx.stroke();
+  ctx.globalAlpha /= 0.6;
 
   // face
   const fy = -h * 0.48;
@@ -958,6 +1063,8 @@ function drawWolf(ctx, q) {
     cel(ctx, (c) => pTaper(c, x, by + 2, j.kx, j.ky, w + 1.2, w * 0.8), color, { sd: 1.2, lw: 1.3 });
     cel(ctx, (c) => pTaper(c, j.kx, j.ky, j.ex, j.ey, w * 0.8, w * 0.65), color, { sd: 1, lw: 1.3 });
     flat(ctx, (c) => pEll(c, j.ex + 1.6, j.ey - 0.6, 2.6, 1.6), shade(color, -0.1), 1.2);
+    // 爪子
+    line(ctx, [j.ex + 3.4, j.ey - 0.4, j.ex + 4.6, j.ey + 0.6, j.ex + 2.6, j.ey + 0.2, j.ex + 3.6, j.ey + 1.2], '#e8e0cc', 0.6);
   };
   const g = moving ? Math.sin(ph) : 0;
   const gl = moving ? 0.7 : 0;
@@ -1008,6 +1115,20 @@ function drawWolf(ctx, q) {
     c.lineTo(12, by - 6);
     c.closePath();
   }, dark, { sd: 1.4, lw: 1.3 });
+  // 冥犬身上的熔岩裂纹：随呼吸明暗，扑咬时更亮
+  if (q.dead < 0) {
+    const pulse = 0.55 + 0.3 * Math.sin(t * 3.2) + (ap ? 0.3 : 0);
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const veins = [[-10, by - 3, -6, by - 5, -3, by - 2.5, 1, by - 4.5], [3, by - 1, 6, by - 4, 9, by - 2.2], [-8, by + 1.5, -4, by + 0.5]];
+    for (const [wd, col] of [[2.6, `rgba(255,90,20,${0.35 * pulse})`], [1, `rgba(255,190,90,${pulse})`]] as [number, string][]) {
+      for (const v of veins) line(ctx, v, col, wd);
+    }
+    ctx.restore();
+  }
+  // 毛的走向
+  folds(ctx, [[-11, by - 4, -8.5, by - 2.8], [-6, by - 6.4, -3.6, by - 5.2], [5, by - 7.4, 7.6, by - 6], [10, by - 3.6, 12, by - 1.8]], shade(color, -0.45), 0.8);
   ctx.restore();
 
   leg(-6, (-g * gl + 0.05 + rearK) * deadLegs + deadK * 1.4, true, color, 2.6);
@@ -1049,6 +1170,9 @@ function drawWolf(ctx, q) {
   flat(ctx, (c) => pPoly(c, [-0.4, -3.6, 4, -3.4, 3.6, -1.6, 0.2, -2]), eye, 1);
   if (q.dead < 0) glint(ctx, 2, -2.8, 4, ap ? 'rgba(255,80,40,0.8)' : 'rgba(255,170,60,0.5)');
   line(ctx, [-1, -4.8, 4.6, -3.4], OUTLINE, 1.3);
+  // 脸颊的毛和眼角的旧伤疤
+  flat(ctx, (c) => pPoly(c, [-5.6, 0.6, -8, 2.6, -5, 2, -6.6, 4, -3, 2.6]), color, 1);
+  line(ctx, [1.6, -6, 3.2, -1.2], 'rgba(255,220,200,0.55)', 0.6);
   ctx.restore();
   ctx.restore();
 }
@@ -1089,6 +1213,9 @@ function drawSkeleton(ctx, q) {
     c.lineTo(3, sy + 4);
     c.closePath();
   }, cloak, { sd: 2.4 });
+  // 斗篷上的破洞和褶
+  flat(ctx, (c) => { pEll(c, -7.5 - sway * 0.6, hipY - 2, 0.9, 1.4); pEll(c, -5.5, sy + 8, 0.7, 1); }, 'rgba(10,6,20,0.85)');
+  folds(ctx, [[-4, sy, -8, sy + 8, -8 - sway, hipY + 3]], 'rgba(10,6,20,0.5)', 0.8);
   // quiver
   cel(ctx, (c) => pRrect(c, -7.5, sy - 2, 4.2, 12, 1.5), '#6a4224', { sd: 1.2 });
   for (const [x, col] of [[-6.6, '#c8402c'], [-4.8, '#e8d8b0']] as [number, string][]) inkLine(ctx, [x, sy - 2, x - 0.8, sy - 6], col, 1);
@@ -1099,6 +1226,18 @@ function drawSkeleton(ctx, q) {
     inkLine(ctx, [x, hipY, j.kx, j.ky, j.ex, j.ey], col, 1.8);
     flat(ctx, (c) => pEll(c, j.kx, j.ky, 1.6, 1.6), col, 1);
     flat(ctx, (c) => pPoly(c, [j.ex - 2, j.ey - 1.4, j.ex + 3.6, j.ey - 0.6, j.ex + 3.4, j.ey + 0.4, j.ex - 2, j.ey + 0.4]), col, 1.1);
+  }
+  // 胸腔里燃着一团幽蓝的魂火（画在肋骨后面）
+  {
+    const f = 0.7 + 0.3 * Math.sin(t * 6.3) + 0.15 * Math.sin(t * 17);
+    glint(ctx, 1, sy + 7, 7 * f, 'rgba(70,200,255,0.55)');
+    flat(ctx, (c) => {
+      c.moveTo(-1.6, sy + 10);
+      c.quadraticCurveTo(-2.2, sy + 6, 0.6, sy + 3.2 - f * 1.5);
+      c.quadraticCurveTo(1.2, sy + 6, 3.2, sy + 6.4);
+      c.quadraticCurveTo(3.4, sy + 9.4, 0.8, sy + 10.4);
+      c.closePath();
+    }, `rgba(170,240,255,${0.75 * f})`);
   }
   // pelvis, spine, ribs
   cel(ctx, (c) => { c.moveTo(-4.5, hipY - 1); c.lineTo(4.5, hipY - 1); c.lineTo(3, hipY + 2.6); c.lineTo(-3, hipY + 2.6); c.closePath(); }, bone, { sd: 1, lw: 1.2 });
@@ -1137,6 +1276,8 @@ function drawSkeleton(ctx, q) {
   }, bone, { sd: 1.4, lw: 1.3 });
   // sockets with a cold fire inside, and teeth
   flat(ctx, (c) => { pEll(c, 3.3, hy - 0.5, 1.6, 1.9); pEll(c, 6.9, hy - 0.4, 1.3, 1.7); }, '#120e18');
+  // 头骨上的裂纹
+  line(ctx, [2.2, hy - 4.2, 3, hy - 2.8, 2.4, hy - 2], 'rgba(60,50,40,0.7)', 0.6);
   const glow = 0.65 + 0.35 * Math.sin(t * 5);
   glint(ctx, 3.4, hy - 0.4, 3.4, `rgba(90,230,255,${glow})`);
   glint(ctx, 6.9, hy - 0.3, 2.8, `rgba(90,230,255,${glow})`);
@@ -1288,6 +1429,11 @@ function drawOgre(ctx, q) {
   }, skin, { sd: 3.4 });
   // belly and war paint
   flat(ctx, (c) => pEll(c, 4.5, hipY - 7, 7, 6.4), shade(skin, 0.18));
+  // 旧伤疤（淡色缝线）
+  line(ctx, [-9, sy + 8, -4, sy + 12], shade(skin, 0.35), 0.8);
+  folds(ctx, [[-8.2, sy + 8.6, -7.4, sy + 8], [-6.6, sy + 10, -5.8, sy + 9.4], [-5, sy + 11.2, -4.2, sy + 10.6]], shade(skin, 0.4), 0.6);
+  // 肚脐和肚皮的褶
+  folds(ctx, [[1, hipY - 4.4, 4.5, hipY - 3.6, 8, hipY - 4.8]], shade(skin, -0.3), 0.8);
   ctx.strokeStyle = accent;
   ctx.lineWidth = 1.6;
   ctx.lineCap = 'round';
@@ -1297,6 +1443,7 @@ function drawOgre(ctx, q) {
   // belt, skull buckle and loincloth
   cel(ctx, (c) => pPoly(c, [-9, hipY - 1, 9, hipY - 1, 6, hipY + 8, 1, hipY + 6, -4, hipY + 8.5, -8, hipY + 6]), accent, { sd: 1.8 });
   flat(ctx, (c) => pRrect(c, -11, hipY - 3.5, 22, 3.6, 1.2), '#3e2616', 1.2);
+  rivets(ctx, [-8.5, hipY - 1.7, -5, hipY - 1.7, 5.5, hipY - 1.7, 9, hipY - 1.7], 0.6, '#c8ccd6');
   cel(ctx, (c) => pEll(c, 1.2, hipY - 1.8, 2.6, 2.4), '#ece4cc', { sd: 0.8, lw: 1 });
   flat(ctx, (c) => { pEll(c, 0.4, -0.4 + hipY - 2, 0.6, 0.7); pEll(c, 2, hipY - 2.4, 0.6, 0.7); }, '#2a1a10');
   // spiked shoulder plate on the near shoulder
@@ -1307,6 +1454,18 @@ function drawOgre(ctx, q) {
     c.quadraticCurveTo(7, sy + 3, 1.5, sy + 4);
     c.closePath();
   }, iron, { sd: 2 });
+  // 肩甲后面的一圈兽毛领
+  flat(ctx, (c) => {
+    c.moveTo(-12, sy + 1);
+    for (let i = 0; i <= 8; i++) {
+      const x = -12 + i * 2;
+      c.lineTo(x + 1, sy - 4.5 - (i % 2) * 1.6 + Math.sin(t * 2 + i) * 0.3);
+      c.lineTo(x + 2, sy - 1.5);
+    }
+    c.lineTo(4, sy + 2);
+    c.closePath();
+  }, '#4a3326', 1.2);
+  rivets(ctx, [4.5, sy - 1, 9.5, sy - 2.5, 12.6, sy + 1.6], 0.55, '#c8ccd6');
   for (const [x, y, a] of [[5, sy - 5.5, -0.4], [10, sy - 5.6, 0.2], [14, sy - 1.5, 0.9]]) {
     ctx.save(); ctx.translate(x, y); ctx.rotate(a);
     cel(ctx, (c) => pPoly(c, [-1.7, 0, 0, -5.5, 1.7, 0]), '#d8dce2', { sd: 0.6, lw: 1 });
@@ -1327,6 +1486,12 @@ function drawOgre(ctx, q) {
   // underbite with tusks
   cel(ctx, (c) => { c.moveTo(hx - 1, hy + 3); c.lineTo(hx + 8, hy + 2); c.quadraticCurveTo(hx + 8.5, hy + 6.5, hx + 2, hy + 6.5); c.closePath(); }, shade(skin, -0.08), { sd: 1, lw: 1.2 });
   for (const tx of [hx + 2.4, hx + 6.4]) cel(ctx, (c) => pPoly(c, [tx - 1.2, hy + 3, tx + 0.2, hy - 1.6, tx + 1.2, hy + 3]), '#f2ead6', { sd: 0.5, lw: 1 });
+  // 金鼻环
+  ctx.strokeStyle = '#e2b04a';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.arc(hx + 7.2, hy + 1.6, 1.2, -0.5, PI + 0.8);
+  ctx.stroke();
   // brow and burning eyes
   flat(ctx, (c) => pPoly(c, [hx - 1, hy - 2.6, hx + 8, hy - 2, hx + 7.6, hy - 0.2, hx - 0.6, hy - 1]), shade(skin, -0.35));
   const eye = q.dead >= 0 ? '#555' : '#ffd23a';
@@ -1351,6 +1516,7 @@ function drawOgre(ctx, q) {
   cel(ctx, (c) => pTaper(c, arm.kx, arm.ky, arm.ex, arm.ey, 4.2, 4), skin, { sd: 1.6, lw: 1.4 });
   // iron bracer
   cel(ctx, (c) => pTaper(c, lerp(arm.kx, arm.ex, 0.25), lerp(arm.ky, arm.ey, 0.25), lerp(arm.kx, arm.ex, 0.75), lerp(arm.ky, arm.ey, 0.75), 4.6, 4.4), iron, { sd: 1.2, lw: 1.2 });
+  rivets(ctx, [lerp(arm.kx, arm.ex, 0.4), lerp(arm.ky, arm.ey, 0.4), lerp(arm.kx, arm.ex, 0.6), lerp(arm.ky, arm.ey, 0.6)], 0.55, '#d8dce2');
   ctx.save();
   ctx.translate(arm.ex, arm.ey);
   const clubA = ang + arc3(ap, 0, -0.2, 0.15);
@@ -1363,6 +1529,8 @@ function drawOgre(ctx, q) {
     c.quadraticCurveTo(8, -14, 3, -3);
     c.closePath();
   }, '#8a5a2e', { sd: 2.2 });
+  // 木纹和一道裂口
+  folds(ctx, [[-2.5, -6, -4.5, -14, -3, -22], [1.5, -5, 2.5, -13, 1, -24], [3.6, -8, 4.6, -11]], 'rgba(50,25,10,0.55)', 0.8);
   // iron band and spikes
   line(ctx, [-6.2, -15, 6.2, -15], '#3a3a44', 2.2, 'butt');
   for (const [x, y, d] of [[-6, -10, -1], [6.4, -12, 1], [-6, -20, -1], [5.6, -21, 1], [0, -27.5, 0]]) {

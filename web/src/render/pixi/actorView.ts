@@ -3,7 +3,7 @@
 // 阴影、印记、着色器两种情况都一样。
 
 import { Container, Graphics, Sprite, Texture } from 'pixi.js';
-import { MODEL_SCALE } from '../../game/config';
+import { MODEL_SCALE, modelBox } from '../../game/config';
 import { art, type LoadedCharacter } from '../art';
 import { drawModel } from '../models';
 import { CanvasSprite } from './canvasSprite';
@@ -71,7 +71,7 @@ export class ActorView {
       this.showFrame(pose);
     } else if (now - this.drawnAt >= REDRAW_MS || r !== this.drawnR || res !== this.drawnRes || dead !== this.drawnDead) {
       // 范围要容得下武器和倒地的姿势
-      const box = [-r * 3, -r * 3.5, r * 3, r * 1.3];
+      const box = modelBox(this.model, r);
       this.canvasBody!.paint(box, res, (g) => drawModel(g, this.model, { ...pose, x: 0, y: 0, bare: true }));
       this.drawnAt = now;
       this.drawnR = r;
