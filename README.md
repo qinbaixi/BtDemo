@@ -7,15 +7,15 @@
 ## 运行
 
 ```sh
-go run ./cmd/server            # 打开 http://localhost:8080
-go run ./cmd/server -addr :9000 -config ./config
+go run ./cmd/server            # 监听 config/world.yaml 的 addr（默认 :8090），打开 http://localhost:8090
+go run ./cmd/server -addr :9000 -config ./config -open   # 临时换端口，并自动打开浏览器
 ```
 
 Windows 下可以直接双击根目录的 `start.bat`：先运行 `go generate ./internal/ai/trees` 更新行为树注册表，再编译出 `dist\btdemo.exe`（连同 `config/`），启动服务并打开浏览器。需要先安装 Go 1.22+。
 
 ```bat
-start.bat           :: 编译并在 8080 端口启动
-start.bat 9000      :: 换端口
+start.bat           :: 编译并启动，端口读 config\world.yaml 的 addr
+start.bat 9000      :: 临时换端口
 start.bat build     :: 只编译出 dist\btdemo.exe，不启动（exe 已内嵌前端，配合 dist\config 可以拷到没装 Go 的机器上运行）
 ```
 

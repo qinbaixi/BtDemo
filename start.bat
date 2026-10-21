@@ -1,15 +1,16 @@
 @echo off
 rem One-click build and run for Windows.
-rem   start.bat            build dist\btdemo.exe, then start it on port 8080 and open the browser
-rem   start.bat 9000       same, on port 9000
+rem   start.bat            build dist\btdemo.exe, then start it and open the browser
+rem                        (the port is addr in config\world.yaml)
+rem   start.bat 9000       same, but on port 9000
 rem   start.bat build      only build dist\btdemo.exe (with config\ next to it), don't start it
 chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 
-set PORT=8080
+set ARGS=
 set BUILDONLY=
-if /i "%~1"=="build" (set BUILDONLY=1) else if not "%~1"=="" set PORT=%~1
+if /i "%~1"=="build" (set BUILDONLY=1) else if not "%~1"=="" set ARGS=-addr %~1
 
 where go >nul 2>nul
 if errorlevel 1 (
@@ -44,8 +45,6 @@ if defined BUILDONLY (
   exit /b 0
 )
 
-echo [btdemo] 启动服务：http://localhost:%PORT%  （关闭此窗口或按 Ctrl+C 停止）
-rem open the browser once the server has had a moment to start
-start "" /min cmd /c "timeout /t 2 /nobreak >nul & start http://localhost:%PORT%"
-dist\btdemo.exe -addr :%PORT% -config dist\config
+echo [btdemo] 启动服务（端口见 config\world.yaml 的 addr；关闭此窗口或按 Ctrl+C 停止）
+dist\btdemo.exe -config dist\config -open %ARGS%
 pause

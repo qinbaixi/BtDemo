@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -50,6 +51,7 @@ type World struct {
 	} `yaml:"aoi"`
 	TickRate int                 `yaml:"tick_rate"`
 	SyncRate int                 `yaml:"sync_rate"`
+	Addr     string              `yaml:"addr"` // HTTP listen address, e.g. ":8090" or "127.0.0.1:8090"
 	Hostile  map[string][]string `yaml:"hostile"`
 	Player   Player              `yaml:"player"`
 }
@@ -160,6 +162,7 @@ func (c *Config) validate(knownTrees map[string]bool) error {
 	if w.TickRate <= 0 {
 		w.TickRate = 20
 	}
+	w.Addr = NormalizeAddr(w.Addr)
 	if w.SyncRate <= 0 {
 		w.SyncRate = 10
 	}
@@ -240,4 +243,17 @@ func (c *Config) Hostile(a, b string) bool {
 		}
 	}
 	return false
+}
+
+// NormalizeAddr turns a bare port such as "8090" into ":8090" and defaults
+// an empty address to ":8080".
+func NormalizeAddr(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return ":8080"
+	}
+	if !strings.Contains(addr, ":") {
+		return ":" + addr
+	}
+	return addr
 }
