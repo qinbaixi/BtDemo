@@ -96,6 +96,8 @@ export function createScenery(mapW: number, mapH: number, map: MapData | null, s
   for (const k of Object.keys(ZONES)) ZONES[k] = map?.zones[k] || [];
   ROADS = map?.roads || [];
   LAVA = makeLava();
+  const unknown = new Set((map?.props || []).filter((p) => !KINDS[p.kind]).map((p) => p.kind));
+  if (unknown.size) console.error(`map.tmj 里的物件种类前端不会画：${[...unknown].join(', ')}（在 scenery.ts 的 KINDS 里加画法）`);
   const blocking = (map?.props || []).filter((p) => KINDS[p.kind]);
   const of = (kind) => blocking.filter((p) => p.kind === kind);
   const tombs = of('tomb');
@@ -140,7 +142,10 @@ export function createScenery(mapW: number, mapH: number, map: MapData | null, s
         const def = KINDS[p.kind];
         const hw = (def.w * p.s) / 2 + (p.dx ? Math.abs(p.dx * p.s) : 0);
         if (p.x + hw < view.x || p.x - hw > view.x + view.w) continue;
-        if (p.y - def.h * p.s > view.y + view.h || p.y + Math.max(20, (p.dy || 0) * p.s) < view.y) continue;
+        // 墙段两端的 y 都要算上（dy 可能是负的）
+        const top = Math.min(p.y, p.y + (p.dy || 0) * p.s) - def.h * p.s;
+        const bottom = Math.max(p.y + 20, p.y + (p.dy || 0) * p.s);
+        if (top > view.y + view.h || bottom < view.y) continue;
         out.push(p);
       }
       return out;

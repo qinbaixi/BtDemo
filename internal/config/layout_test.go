@@ -24,6 +24,7 @@ func TestLayoutRejectsBadMaps(t *testing.T) {
 		"wall as point": tmj(`{"name":"shape.wall","value":"capsule 8"}`, `{"id":1,"type":"wall","x":10,"y":10,"point":true}`),
 		"long polyline": tmj(`{"name":"shape.wall","value":"capsule 8"}`, `{"id":1,"type":"wall","x":10,"y":10,"polyline":[{"x":0,"y":0},{"x":5,"y":0},{"x":5,"y":5}]}`),
 		"infinite":      []byte(`{"orientation":"orthogonal","infinite":true}`),
+		"no tile size":  []byte(`{"orientation":"orthogonal","width":2,"height":2}`),
 	} {
 		if _, err := parseLayout(body); err == nil {
 			t.Errorf("%s: parsed without error", name)

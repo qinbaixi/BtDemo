@@ -19,8 +19,8 @@
 | 语言 | TypeScript | |
 | 构建 | Vite（开发热更新，`npm run build` 输出到 `web/dist`） | |
 | 协议 | protobufjs：`npm run proto` 从 `proto/btdemo.proto` 生成 `src/net/pb.js` 和类型 | |
-| 渲染 | PixiJS 8（WebGL）：地表、物件、角色、光照；描边和轮廓光是着色器。技能特效和头顶文字暂时画在叠加的 2D 画布上 | 特效改成 Pixi 粒子；模型换成美术贴图 / Spine |
-| 地图 | 服务端 `config/map.yaml` 下发物件 | Tiled 编辑器（`config/map.tmj`），前后端读同一份（已完成，见 [地图](map.md)） |
+| 渲染 | PixiJS 8（WebGL）：地表、物件、角色、光照；描边和轮廓光是着色器。技能特效暂时用 Canvas 2D 画（开后期处理时交给 Pixi 以便发光），头顶文字画在叠加的 2D 画布上 | 特效改成 Pixi 粒子；模型换成美术贴图 / Spine |
+| 地图 | （旧）服务端 `config/map.yaml` 下发物件 | Tiled 编辑器（`config/map.tmj`），前后端读同一份（已完成，见 [地图](map.md)） |
 | 界面 | DOM（HUD、调试面板） | 保持 DOM |
 
 选型理由：Pixi 只管渲染、不带游戏逻辑，适合“服务端权威、客户端只做表现”的结构；2D 性能好，描边光照可以写成着色器；Spine 骨骼动画有官方运行时。
@@ -52,7 +52,7 @@ web/
       events.ts         事件 → 动画、特效、飘字
     render/
       world.ts          Pixi 舞台和一帧的绘制：镜头、地面标记、角色、光照
-      overlay.ts        叠加的 2D 画布：技能特效、环境粒子、名字血条、气泡、飘字、调试线条、暗角
+      overlay.ts        叠加的 2D 画布：名字血条、气泡、飘字、调试线条、暗角（不开后期处理时还有技能特效、环境粒子）
       lighting.ts       GPU 光照：暗色层（擦除混合挖出光斑）+ 彩色光（加法混合）
       grade.ts          调色：默认调色函数烘焙成 LUT 贴图，也能加载美术给的 LUT 图片
       pixi/

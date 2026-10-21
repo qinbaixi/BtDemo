@@ -231,7 +231,7 @@ func (c *Config) validate(knownTrees map[string]bool) error {
 			return err
 		}
 	}
-	if l := c.Layout; l.Width != 0 && (l.Width != w.Map.Width || l.Height != w.Map.Height) {
+	if l := c.Layout; l.Source != nil && (l.Width != w.Map.Width || l.Height != w.Map.Height) {
 		return fmt.Errorf("%s is %gx%g but world.yaml map is %gx%g; change one to match", MapFile, l.Width, l.Height, w.Map.Width, w.Map.Height)
 	}
 	for _, p := range c.Layout.Props {

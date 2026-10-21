@@ -50,13 +50,13 @@ export function parseMap(text: string): MapData {
   const out: MapData = {
     w: m.width * m.tilewidth, h: m.height * m.tileheight, props: [], zones: {}, roads: [], key: text,
   };
-  for (const o of layer(m.layers, 'zones')) {
+  for (const o of layer(m.layers, 'zones') || []) {
     if (o.name) (out.zones[o.name] ??= []).push({ x: o.x, y: o.y });
   }
-  for (const o of layer(m.layers, 'roads')) {
+  for (const o of layer(m.layers, 'roads') || []) {
     if (o.polyline?.length > 1) out.roads.push(o.polyline.map((p) => [o.x + p.x, o.y + p.y] as Pt));
   }
-  for (const o of layer(m.layers, 'props')) {
+  for (const o of layer(m.layers, 'props') || []) {
     const kind = o.type || o.class;
     if (!kind) continue;
     const prop = (name: string) => o.properties?.find((p) => p.name === name)?.value;
@@ -77,12 +77,12 @@ export function parseMap(text: string): MapData {
   return out;
 }
 
-// layer 按名字找对象图层（会进入图层组）。
-function layer(layers: TmjLayer[] | undefined, name: string): TmjObject[] {
+// layer 按名字找对象图层（会进入图层组），和服务端一样取第一个同名图层。
+function layer(layers: TmjLayer[] | undefined, name: string): TmjObject[] | null {
   for (const l of layers || []) {
     if (l.type === 'objectgroup' && l.name === name) return l.objects || [];
     const inner = layer(l.layers, name);
-    if (inner.length) return inner;
+    if (inner) return inner;
   }
-  return [];
+  return null;
 }

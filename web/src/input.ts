@@ -91,7 +91,7 @@ function onKeyDown(e: KeyboardEvent): void {
   }
   if (e.code === 'KeyB') {
     state.post = !state.post;
-    showToast(state.post ? '泛光和调色：开' : '泛光和调色：关');
+    showToast((state.post ? '泛光和调色：开' : '泛光和调色：关') + (state.hq ? '' : '（简化画质下不生效，按 Q 切回完整画质）'));
     return;
   }
   if (e.code === 'Backquote') {

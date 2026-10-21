@@ -68,7 +68,7 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   state.target = 0;
   state.hoverSlot = 0;
 
-  loadScene();
+  loadScene().catch((err) => console.error('场景创建失败', err));
   state.obstacles = m.obstacles || [];
   state.aiPath = null;
 
@@ -125,7 +125,7 @@ function onSync(m: SyncMsg, now: number, deps: SyncDeps): void {
 }
 
 // loadScene 下载地图并建场景。每次 welcome 都重新下载（服务端可能换了地图），
-// 内容没变就不重画。下载完成前画面只有角色，没有地表。
+// 内容没变就不重画。第一次下载完成前画面只有角色，没有地表；下载失败时保留原来的场景。
 let sceneLoad = 0;
 async function loadScene(): Promise<void> {
   const seq = ++sceneLoad;
@@ -135,7 +135,8 @@ async function loadScene(): Promise<void> {
     map = await loadMap();
   } catch (err) {
     console.error('地图加载失败', err);
-    showToast('地图加载失败，场景为空地');
+    showToast('地图加载失败，刷新页面重试');
+    if (state.scenery) return;
   }
   if (seq !== sceneLoad) return;   // 期间又收到了新的 welcome
   const key = `${w}x${h}:${map?.key ?? ''}`;

@@ -116,6 +116,9 @@ func parseLayout(data []byte) (Layout, error) {
 	if m.Orientation != "orthogonal" || m.Infinite {
 		return Layout{}, errors.New("map must be orthogonal and not infinite")
 	}
+	if m.Width <= 0 || m.Height <= 0 || m.TileWidth <= 0 || m.TileHeight <= 0 {
+		return Layout{}, errors.New("map width, height, tilewidth and tileheight must be positive")
+	}
 	l := Layout{
 		Width:  float64(m.Width * m.TileWidth),
 		Height: float64(m.Height * m.TileHeight),
