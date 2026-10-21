@@ -1,15 +1,19 @@
-package game
+package ai
 
 import (
 	"math"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/qinbaixi/BtDemo/internal/bt"
+	"github.com/qinbaixi/BtDemo/internal/game/core"
+	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
 // Agent is what the behavior tree runtime passes to handlers (ctx.Agent).
 type Agent struct {
-	W *World
-	E *Entity
+	sys *System
+	E   *core.Entity
 }
 
 // Speed multipliers and timeouts used by the movement tasks.
@@ -24,12 +28,12 @@ const (
 )
 
 // step is how far the agent may move this tick at the given speed multiplier.
-func (a *Agent) step(mult float64) float64 { return a.E.Attr.Speed * mult * a.W.Dt }
+func (a *Agent) step(mult float64) float64 { return a.E.Attr.Speed * mult * a.sys.s.Clock.Dt }
 
 // target returns the agent's current target if it is still alive. Otherwise it
 // clears the target and returns nil.
-func (a *Agent) target() *Entity {
-	t := a.W.Get(a.E.Target)
+func (a *Agent) target() *core.Entity {
+	t := a.sys.s.Ents.Get(a.E.Target)
 	if !t.Alive() {
 		a.E.Target = 0
 		return nil
@@ -43,13 +47,12 @@ func memFloat(ctx *bt.Ctx, key string) float64 {
 	return v
 }
 
-func clampPos(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
-
-// RegisterAI binds every task, condition and service used by bt/owl-bt.json to game code.
-func (w *World) RegisterAI(reg *bt.Registry) {
+// register binds every task, condition and service used by bt/owl-bt.json to game code.
+func (sys *System) register() {
+	reg := sys.reg
 	reg.Task("find_target", func(ctx *bt.Ctx) bt.Status {
 		a := ctx.Agent.(*Agent)
-		t := a.W.NearestHostile(a.E, ctx.Node.Num("Range", 250))
+		t := sys.combat.NearestHostile(a.E, ctx.Node.Num("Range", 250))
 		if t == nil {
 			return bt.Failure
 		}
@@ -68,10 +71,10 @@ func (w *World) RegisterAI(reg *bt.Registry) {
 		if t == nil {
 			return bt.Failure
 		}
-		if EdgeDist(a.E, t) <= ctx.Node.Num("StopRange", 40) {
+		if core.EdgeDist(a.E, t) <= ctx.Node.Num("StopRange", 40) {
 			return bt.Success
 		}
-		a.W.MoveToward(a.E, t.X, t.Y, a.step(1))
+		sys.move.Toward(a.E, t.X, t.Y, a.step(1))
 		return bt.Running
 	})
 
@@ -81,7 +84,7 @@ func (w *World) RegisterAI(reg *bt.Registry) {
 		if slot < 1 || slot > len(a.E.Skills) {
 			return bt.Failure
 		}
-		if a.W.Cast(a.E, a.E.Skills[slot-1], a.E.Target) != nil {
+		if sys.combat.Cast(a.E, a.E.Skills[slot-1], a.E.Target) != nil {
 			return bt.Failure
 		}
 		return bt.Success
@@ -90,11 +93,11 @@ func (w *World) RegisterAI(reg *bt.Registry) {
 	reg.Task("wander", func(ctx *bt.Ctx) bt.Status {
 		a := ctx.Agent.(*Agent)
 		if ctx.Fresh {
-			x, y := a.W.scatter(a.E.HomeX, a.E.HomeY, ctx.Node.Num("Radius", 120))
+			x, y := sys.s.Scatter(a.E.HomeX, a.E.HomeY, ctx.Node.Num("Radius", 120))
 			ctx.Mem["x"], ctx.Mem["y"] = x, y
 			ctx.Mem["until"] = ctx.Now + wanderTimeout
 		}
-		arrived := a.W.MoveToward(a.E, memFloat(ctx, "x"), memFloat(ctx, "y"), a.step(wanderSpeed))
+		arrived := sys.move.Toward(a.E, memFloat(ctx, "x"), memFloat(ctx, "y"), a.step(wanderSpeed))
 		if arrived || ctx.Now >= memFloat(ctx, "until") {
 			return bt.Success
 		}
@@ -103,7 +106,7 @@ func (w *World) RegisterAI(reg *bt.Registry) {
 
 	reg.Task("return_home", func(ctx *bt.Ctx) bt.Status {
 		a := ctx.Agent.(*Agent)
-		if !a.W.MoveToward(a.E, a.E.HomeX, a.E.HomeY, a.step(returnHomeSpeed)) {
+		if !sys.move.Toward(a.E, a.E.HomeX, a.E.HomeY, a.step(returnHomeSpeed)) {
 			return bt.Running
 		}
 		a.E.HP = a.E.Attr.MaxHP
@@ -116,7 +119,7 @@ func (w *World) RegisterAI(reg *bt.Registry) {
 		if ctx.Fresh {
 			threat := a.target()
 			if threat == nil {
-				if last := a.W.Get(a.E.LastAttacker); last.Alive() {
+				if last := sys.s.Ents.Get(a.E.LastAttacker); last.Alive() {
 					threat = last
 				}
 			}
@@ -126,17 +129,14 @@ func (w *World) RegisterAI(reg *bt.Registry) {
 			dx, dy := a.E.X-threat.X, a.E.Y-threat.Y
 			d := math.Hypot(dx, dy)
 			if d < 1e-6 { // standing on top of the threat: pick any direction
-				ang := a.W.Rand.Float64() * 2 * math.Pi
+				ang := sys.s.Rand.Float64() * 2 * math.Pi
 				dx, dy, d = math.Cos(ang), math.Sin(ang), 1
 			}
 			dist := ctx.Node.Num("Distance", 160)
-			m := a.W.Cfg.World.Map
-			r := a.E.Radius
-			ctx.Mem["x"] = clampPos(a.E.X+dx/d*dist, r, m.Width-r)
-			ctx.Mem["y"] = clampPos(a.E.Y+dy/d*dist, r, m.Height-r)
+			ctx.Mem["x"], ctx.Mem["y"] = sys.move.Clamp(a.E, a.E.X+dx/d*dist, a.E.Y+dy/d*dist)
 			ctx.Mem["until"] = ctx.Now + fleeTimeout
 		}
-		arrived := a.W.MoveToward(a.E, memFloat(ctx, "x"), memFloat(ctx, "y"), a.step(fleeSpeed))
+		arrived := sys.move.Toward(a.E, memFloat(ctx, "x"), memFloat(ctx, "y"), a.step(fleeSpeed))
 		if arrived || ctx.Now >= memFloat(ctx, "until") {
 			return bt.Success
 		}
@@ -156,7 +156,7 @@ func (w *World) RegisterAI(reg *bt.Registry) {
 	reg.Task("say", func(ctx *bt.Ctx) bt.Status {
 		a := ctx.Agent.(*Agent)
 		if text := ctx.Node.Str("Text", ""); text != "" {
-			a.W.Say(a.E, text)
+			sys.s.Events.Emit(a.E, &core.Event{Kind: pb.EventKind_SAY.Enum(), Id: core.I32(a.E.ID), Text: proto.String(text)})
 		}
 		return bt.Success
 	})
@@ -168,7 +168,7 @@ func (w *World) RegisterAI(reg *bt.Registry) {
 	reg.Condition("target_in_range", func(ctx *bt.Ctx) bool {
 		a := ctx.Agent.(*Agent)
 		t := a.target()
-		return t != nil && EdgeDist(a.E, t) <= ctx.Node.Num("Range", 60)
+		return t != nil && core.EdgeDist(a.E, t) <= ctx.Node.Num("Range", 60)
 	})
 
 	reg.Condition("hp_below", func(ctx *bt.Ctx) bool {
@@ -178,8 +178,7 @@ func (w *World) RegisterAI(reg *bt.Registry) {
 
 	reg.Condition("far_from_home", func(ctx *bt.Ctx) bool {
 		a := ctx.Agent.(*Agent)
-		e := a.E
-		return math.Hypot(e.X-e.HomeX, e.Y-e.HomeY) > ctx.Node.Num("Distance", 400)
+		return a.E.HomeDist() > ctx.Node.Num("Distance", 400)
 	})
 
 	reg.Condition("was_attacked", func(ctx *bt.Ctx) bool {
@@ -191,15 +190,15 @@ func (w *World) RegisterAI(reg *bt.Registry) {
 		a := ctx.Agent.(*Agent)
 		e := a.E
 		r := ctx.Node.Num("Range", 250)
-		if t := a.target(); t != nil && Dist(e, t) <= r*lostTargetFactor {
+		if t := a.target(); t != nil && core.Dist(e, t) <= r*lostTargetFactor {
 			return
 		}
 		e.Target = 0
-		if atk := a.W.Get(e.LastAttacker); atk.Alive() && a.W.Hostile(e, atk) && ctx.Now-e.LastHitAt <= attackerWindow {
+		if atk := sys.s.Ents.Get(e.LastAttacker); atk.Alive() && sys.s.Hostile(e, atk) && ctx.Now-e.LastHitAt <= attackerWindow {
 			e.Target = atk.ID
 			return
 		}
-		if t := a.W.NearestHostile(e, r); t != nil {
+		if t := sys.combat.NearestHostile(e, r); t != nil {
 			e.Target = t.ID
 		}
 	})

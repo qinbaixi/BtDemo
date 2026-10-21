@@ -1,21 +1,29 @@
-package game
+// Package aoi is the nine-grid area of interest: the map is cut into square
+// cells and an observer sees the entities in its own cell and the eight
+// cells around it.
+package aoi
 
-import "math"
+import (
+	"math"
 
-// Grid is a nine-grid AOI: the map is cut into square cells and an observer
-// sees the entities in its own cell and the eight cells around it.
+	"github.com/qinbaixi/BtDemo/internal/game/core"
+)
+
+// Grid indexes entities by cell. It keeps track of which cell each entity is
+// in, so entities carry no AOI bookkeeping of their own.
 type Grid struct {
 	Cell       float64
 	Cols, Rows int
-	cells      []map[int]*Entity
+	cells      []map[int]*core.Entity
+	where      map[int]int // entity id -> cell
 }
 
 // NewGrid creates a grid covering a w×h map.
 func NewGrid(w, h, cell float64) *Grid {
-	g := &Grid{Cell: cell, Cols: int(math.Ceil(w / cell)), Rows: int(math.Ceil(h / cell))}
-	g.cells = make([]map[int]*Entity, g.Cols*g.Rows)
+	g := &Grid{Cell: cell, Cols: int(math.Ceil(w / cell)), Rows: int(math.Ceil(h / cell)), where: map[int]int{}}
+	g.cells = make([]map[int]*core.Entity, g.Cols*g.Rows)
 	for i := range g.cells {
-		g.cells[i] = map[int]*Entity{}
+		g.cells[i] = map[int]*core.Entity{}
 	}
 	return g
 }
@@ -28,36 +36,35 @@ func (g *Grid) CellOf(x, y float64) int {
 }
 
 // Add puts e into the grid.
-func (g *Grid) Add(e *Entity) {
-	e.cell = g.CellOf(e.X, e.Y)
-	g.cells[e.cell][e.ID] = e
-	e.inGrid = true
+func (g *Grid) Add(e *core.Entity) {
+	c := g.CellOf(e.X, e.Y)
+	g.cells[c][e.ID] = e
+	g.where[e.ID] = c
 }
 
 // Remove takes e out of the grid.
-func (g *Grid) Remove(e *Entity) {
-	if !e.inGrid {
-		return
+func (g *Grid) Remove(e *core.Entity) {
+	if c, ok := g.where[e.ID]; ok {
+		delete(g.cells[c], e.ID)
+		delete(g.where, e.ID)
 	}
-	delete(g.cells[e.cell], e.ID)
-	e.inGrid = false
 }
 
 // Moved updates e's cell after its position changed.
-func (g *Grid) Moved(e *Entity) {
-	if !e.inGrid {
+func (g *Grid) Moved(e *core.Entity) {
+	old, ok := g.where[e.ID]
+	if !ok {
 		return
 	}
-	c := g.CellOf(e.X, e.Y)
-	if c != e.cell {
-		delete(g.cells[e.cell], e.ID)
-		e.cell = c
+	if c := g.CellOf(e.X, e.Y); c != old {
+		delete(g.cells[old], e.ID)
 		g.cells[c][e.ID] = e
+		g.where[e.ID] = c
 	}
 }
 
 // Neighbors calls fn for every entity in the nine cells around cell.
-func (g *Grid) Neighbors(cell int, fn func(*Entity)) {
+func (g *Grid) Neighbors(cell int, fn func(*core.Entity)) {
 	cx, cy := cell%g.Cols, cell/g.Cols
 	for y := max(cy-1, 0); y <= min(cy+1, g.Rows-1); y++ {
 		for x := max(cx-1, 0); x <= min(cx+1, g.Cols-1); x++ {
@@ -69,7 +76,7 @@ func (g *Grid) Neighbors(cell int, fn func(*Entity)) {
 }
 
 // InRange calls fn for every entity whose center is within r of (x, y).
-func (g *Grid) InRange(x, y, r float64, fn func(*Entity)) {
+func (g *Grid) InRange(x, y, r float64, fn func(*core.Entity)) {
 	x0 := clampInt(int((x-r)/g.Cell), 0, g.Cols-1)
 	x1 := clampInt(int((x+r)/g.Cell), 0, g.Cols-1)
 	y0 := clampInt(int((y-r)/g.Cell), 0, g.Rows-1)

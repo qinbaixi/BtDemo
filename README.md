@@ -28,7 +28,15 @@ cmd/server/          入口
 bt/                  owl-bt 项目：owl-bt.json（游戏节点类型）+ trees/*.json（行为树），用 BtTree 编辑器打开
 internal/ai/trees/   BtTree 导出的 Go 文件（DO NOT EDIT）与 go generate 生成的 registry.go
 internal/bt/         行为树运行时：解释导出的 map[int]map[string]any
-internal/game/       世界循环、实体、AOI、属性、技能 / 伤害、AI 节点实现
+internal/game/       World：创建各系统并按顺序驱动 Step（每个系统一个包）
+  core/              共享数据：Entity（按组件分组）、实体表、时钟、事件队列
+  aoi/               九宫格 AOI
+  attr/              属性公式、经验与升级
+  move/              移动与地图边界
+  combat/            技能、伤害、Buff、死亡、敌对查询
+  ai/                行为树加载校验、节点实现、决策追踪
+  spawn/             刷怪、创建玩家、复活
+  session/           连接会话、输入、AOI 同步与协议转换
 internal/config/     YAML 配置加载与校验
 internal/server/     HTTP 与 WebSocket
 config/              world.yaml（地图、AOI、阵营、玩家）、skills.yaml、monsters.yaml
@@ -49,7 +57,7 @@ tools/btregistry/    扫描导出文件生成 registry.go
 3. `go generate ./internal/ai/trees` 重新生成 `registry.go`（脚本已包含这一步）。
 4. 在 `config/monsters.yaml` 的模板里用 `tree: <树文件名>` 选择行为树。
 
-启动时会校验：模板引用的树必须存在；树里用到的每个节点类型都必须在 `internal/game/ai.go` 中有实现，否则启动失败并指出节点。新增节点类型时，在 `owl-bt.json` 中声明、在 `ai.go` 中用 `reg.Task` / `reg.Condition` / `reg.Service` 注册同名（snake_case）处理函数即可。
+启动时会校验：模板引用的树必须存在；树里用到的每个节点类型都必须在 `internal/game/ai/nodes.go` 中有实现，否则启动失败并指出节点。新增节点类型时，在 `owl-bt.json` 中声明、在 `nodes.go` 中用 `reg.Task` / `reg.Condition` / `reg.Service` 注册同名（snake_case）处理函数即可。
 
 ### 运行时语义
 
@@ -61,7 +69,7 @@ tools/btregistry/    扫描导出文件生成 registry.go
 ## 属性与伤害
 
 - 基础属性：力量、敏捷、智力、体质；玩家每升一级按 `world.yaml` 的 `growth` 成长。
-- 派生属性：生命上限、攻击、法强、防御、法抗、暴击率、暴击伤害、移速（公式见 `internal/game/attr.go`），再叠加 Buff 的百分比加成。
+- 派生属性：生命上限、攻击、法强、防御、法抗、暴击率、暴击伤害、移速（公式见 `internal/game/attr/attr.go`），再叠加 Buff 的百分比加成。
 - 伤害 = `(攻击 × 系数 + 固定值) × (1 − 防御 / (防御 + 100)) × 暴击 × 随机 0.95~1.05`；物理技能用攻击 / 防御，法术技能用法强 / 法抗。
 
 ## 协议

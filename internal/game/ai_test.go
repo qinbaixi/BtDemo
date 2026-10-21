@@ -1,35 +1,34 @@
 package game
 
 import (
+	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"testing"
 
 	"github.com/qinbaixi/BtDemo/internal/bt"
 )
 
 // aiInstance loads raw as a tree for e, checks that every node has a handler, and returns a runnable instance.
-func aiInstance(t *testing.T, w *World, e *Entity, raw map[int]map[string]any) *bt.Instance {
+func aiInstance(t *testing.T, w *World, e *core.Entity, raw map[int]map[string]any) *bt.Instance {
 	t.Helper()
 	tr, err := bt.Load("test", 1, raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg := bt.NewRegistry()
-	w.RegisterAI(reg)
-	if err := tr.Validate(reg); err != nil {
+	if err := tr.Validate(w.AI.Registry()); err != nil {
 		t.Fatal(err)
 	}
-	return bt.NewInstance(tr, reg, &Agent{W: w, E: e}, w.Rand)
+	return w.AI.Instance(e, tr)
 }
 
 // tickAI advances the world clock by one tick and ticks inst.
 func tickAI(w *World, inst *bt.Instance) bt.Status {
-	w.Now += w.Dt
-	return inst.Tick(w.Now)
+	w.State.Clock.Now += w.State.Clock.Dt
+	return inst.Tick(w.State.Clock.Now)
 }
 
 // condHolds reports whether the condition sub (with props) passes for e. It hangs the
 // condition on a Wait(0) under a selector, so Success means the condition held.
-func condHolds(t *testing.T, w *World, e *Entity, sub string, props map[string]any) bool {
+func condHolds(t *testing.T, w *World, e *core.Entity, sub string, props map[string]any) bool {
 	t.Helper()
 	inst := aiInstance(t, w, e, map[int]map[string]any{
 		1: {"node_id": 1, "type": "composite", "sub_type": "selector", "children": []int{2}},
@@ -53,10 +52,10 @@ func TestFindTargetAndChase(t *testing.T) {
 	if st := tickAI(w, inst); st != bt.Success || m.Target != p.ID {
 		t.Fatalf("first tick: status %v, target %d; want success, target %d", st, m.Target, p.ID)
 	}
-	prev := Dist(m, p)
+	prev := core.Dist(m, p)
 	for i := 0; ; i++ {
 		if i > 200 {
-			t.Fatalf("chase did not reach stop range, edge distance %v", EdgeDist(m, p))
+			t.Fatalf("chase did not reach stop range, edge distance %v", core.EdgeDist(m, p))
 		}
 		st := tickAI(w, inst)
 		if st == bt.Success {
@@ -65,17 +64,17 @@ func TestFindTargetAndChase(t *testing.T) {
 		if st != bt.Running {
 			t.Fatalf("tick %d: status %v, want running while chasing", i, st)
 		}
-		if d := Dist(m, p); d > prev+1e-9 {
+		if d := core.Dist(m, p); d > prev+1e-9 {
 			t.Fatalf("tick %d: monster moved away, distance %v -> %v", i, prev, d)
 		} else {
 			prev = d
 		}
 	}
-	if EdgeDist(m, p) > 40 {
-		t.Errorf("edge distance %v after chase, want <= 40", EdgeDist(m, p))
+	if core.EdgeDist(m, p) > 40 {
+		t.Errorf("edge distance %v after chase, want <= 40", core.EdgeDist(m, p))
 	}
-	if Dist(m, p) >= 100 {
-		t.Errorf("distance %v, want closer than the start (100)", Dist(m, p))
+	if core.Dist(m, p) >= 100 {
+		t.Errorf("distance %v, want closer than the start (100)", core.Dist(m, p))
 	}
 }
 
@@ -144,12 +143,12 @@ func TestFleeMovesAwayFromAttacker(t *testing.T) {
 	w := testWorld()
 	m := addTestEntity(w, 1, "monster", 500, 500, monsterBase)
 	p := addTestEntity(w, 2, "player", 560, 500, playerBase)
-	m.LastAttacker, m.LastHitAt = p.ID, w.Now
+	m.LastAttacker, m.LastHitAt = p.ID, w.State.Clock.Now
 	inst := aiInstance(t, w, m, map[int]map[string]any{
 		1: {"node_id": 1, "type": "composite", "sub_type": "selector", "children": []int{2}},
 		2: {"node_id": 2, "type": "task", "sub_type": "flee", "properties": map[string]any{"Distance": 160}},
 	})
-	before := Dist(m, p)
+	before := core.Dist(m, p)
 	st := bt.Running
 	for i := 0; i < 200 && st == bt.Running; i++ {
 		st = tickAI(w, inst)
@@ -157,7 +156,7 @@ func TestFleeMovesAwayFromAttacker(t *testing.T) {
 	if st != bt.Success {
 		t.Fatalf("flee ended with %v, want success", st)
 	}
-	if after := Dist(m, p); after < before+100 {
+	if after := core.Dist(m, p); after < before+100 {
 		t.Errorf("distance from attacker %v -> %v, want it to grow by about 160", before, after)
 	}
 }
@@ -224,7 +223,7 @@ func TestUpdateTargetPrefersRecentAttacker(t *testing.T) {
 		3: {"node_id": 3, "type": "service", "sub_type": "update_target", "properties": map[string]any{"Range": 250}},
 	})
 
-	m.LastAttacker, m.LastHitAt = far.ID, w.Now
+	m.LastAttacker, m.LastHitAt = far.ID, w.State.Clock.Now
 	tickAI(w, inst)
 	if m.Target != far.ID {
 		t.Errorf("after a recent hit: target %d, want attacker %d", m.Target, far.ID)

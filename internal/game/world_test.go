@@ -1,6 +1,7 @@
 package game
 
 import (
+	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"testing"
 
 	"github.com/qinbaixi/BtDemo/internal/config"
@@ -29,7 +30,7 @@ func TestWorldWithShippedConfig(t *testing.T) {
 	if p.LastAttacker == 0 {
 		t.Fatal("no monster attacked the player within 20s")
 	}
-	if a := w.Get(p.LastAttacker); a == nil || a.Kind != KindMonster {
+	if a := w.Get(p.LastAttacker); a == nil || a.Kind != core.KindMonster {
 		t.Fatalf("attacker %v is not a monster", a)
 	}
 	if len(s.Out) == 0 {
@@ -52,7 +53,7 @@ func TestWatchSendsAITrace(t *testing.T) {
 	p := s.Player
 	p.X, p.Y = 1000, 900
 	w.Grid.Moved(p)
-	m := w.nearestMonster(p, 400)
+	m := w.Combat.NearestMonster(p, 400)
 	if m == nil {
 		t.Fatal("no monster near the slime spawn")
 	}
