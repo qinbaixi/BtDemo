@@ -105,8 +105,9 @@ type Control struct {
 
 // Steering is the route a monster or NPC is walking (owned by move).
 type Steering struct {
-	Path     []nav.Vec // waypoints still ahead; the last one is the goal
+	Path     []nav.Vec // waypoints still ahead
 	Goal     nav.Vec   // where the path was planned to
+	Reaches  bool      // the path ends on the goal (false: it stops at the closest reachable spot)
 	Planned  bool
 	RepathAt float64 // replan at this time even if the goal holds still
 	StuckFor float64 // seconds spent barely moving while following the path

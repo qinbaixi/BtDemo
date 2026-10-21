@@ -150,9 +150,9 @@ export function createScenery(mapW, mapH, mapProps = [], seed = 20261020) {
       const out = [];
       for (const p of props) {
         const def = KINDS[p.kind];
-        const hw = (def.w * p.s) / 2 + (p.dx ? Math.abs(p.dx) : 0);
+        const hw = (def.w * p.s) / 2 + (p.dx ? Math.abs(p.dx * p.s) : 0);
         if (p.x + hw < view.x || p.x - hw > view.x + view.w) continue;
-        if (p.y - def.h * p.s > view.y + view.h || p.y + Math.max(20, p.dy || 0) < view.y) continue;
+        if (p.y - def.h * p.s > view.y + view.h || p.y + Math.max(20, (p.dy || 0) * p.s) < view.y) continue;
         out.push(p);
       }
       return out;
@@ -549,7 +549,7 @@ function placeDecor(W, H, rnd, blocking, soulfires) {
     props.push({ kind, x, y, s: Math.round(s * 8) / 8, variant, flip });
   const clear = (x, y, r) => blocking.every((p) => {
     const def = KINDS[p.kind];
-    if (p.dx !== undefined) return distToSeg(x, y, p.x, p.y, p.x + p.dx, p.y + p.dy) > r + 10;
+    if (p.dx !== undefined) return distToSeg(x, y, p.x, p.y, p.x + p.dx * p.s, p.y + p.dy * p.s) > r + 10;
     return Math.hypot(x - p.x, (y - p.y) * 1.6) > r + (def.w * p.s) * 0.4;
   });
   const { village, graveyard, camp } = ZONES;

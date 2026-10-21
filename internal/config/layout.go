@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"path/filepath"
 )
 
@@ -15,7 +16,7 @@ type Layout struct {
 }
 
 // Shape is a collision shape relative to a prop's foot point, before scaling.
-// Exactly one of the fields is set.
+// At most one of the fields is set; none means the kind does not block.
 type Shape struct {
 	Circle  []float64 `yaml:"circle"`  // cx, cy, r
 	Rect    []float64 `yaml:"rect"`    // x0, y0, x1, y1
@@ -64,8 +65,13 @@ func loadLayout(dir string) (Layout, error) {
 				return m, fmt.Errorf("map.yaml: shape %s: capsule radius must be positive", name)
 			}
 		}
-		if n != 1 {
-			return m, fmt.Errorf("map.yaml: shape %s must have exactly one of circle, rect, capsule", name)
+		if n > 1 {
+			return m, fmt.Errorf("map.yaml: shape %s must have only one of circle, rect, capsule", name)
+		}
+		for _, v := range append(append([]float64{sh.Capsule}, sh.Circle...), sh.Rect...) {
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				return m, fmt.Errorf("map.yaml: shape %s has a non-finite number", name)
+			}
 		}
 	}
 	for i := range m.Props {
@@ -73,13 +79,19 @@ func loadLayout(dir string) (Layout, error) {
 		if p.S == 0 {
 			p.S = 1
 		}
-		if p.S < 0 {
+		if !(p.S > 0) || math.IsInf(p.S, 0) {
 			return m, fmt.Errorf("map.yaml: prop %d (%s): s must be positive", i+1, p.Kind)
 		}
-		if p.Kind == "" {
-			return m, fmt.Errorf("map.yaml: prop %d has no kind", i+1)
+		for _, v := range []float64{p.X, p.Y, p.DX, p.DY} {
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				return m, fmt.Errorf("map.yaml: prop %d (%s) has a non-finite number", i+1, p.Kind)
+			}
 		}
-		if sh, ok := m.Shapes[p.Kind]; ok && sh.Capsule != 0 && p.DX == 0 && p.DY == 0 {
+		sh, ok := m.Shapes[p.Kind]
+		if !ok {
+			return m, fmt.Errorf("map.yaml: prop %d has kind %q missing from shapes (use {} for decor that does not block)", i+1, p.Kind)
+		}
+		if sh.Capsule != 0 && p.DX == 0 && p.DY == 0 {
 			return m, fmt.Errorf("map.yaml: prop %d (%s) needs dx or dy for its capsule shape", i+1, p.Kind)
 		}
 	}

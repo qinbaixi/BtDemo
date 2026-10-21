@@ -93,3 +93,33 @@ func TestChaseFindsWayAroundWall(t *testing.T) {
 		t.Fatalf("monster did not reach the player: %.0f px apart, at (%.0f, %.0f)", d, m.X, m.Y)
 	}
 }
+
+// A goal sealed off by walls: the mover walks to the closest spot it can
+// reach, counts that as arrived, and only searches again on the replan
+// schedule rather than every tick.
+func TestUnreachableGoalDoesNotReplanEveryTick(t *testing.T) {
+	box := []nav.Shape{
+		{Kind: nav.Capsule, A: nav.Vec{X: 600, Y: 400}, B: nav.Vec{X: 800, Y: 400}, R: 10},
+		{Kind: nav.Capsule, A: nav.Vec{X: 800, Y: 400}, B: nav.Vec{X: 800, Y: 600}, R: 10},
+		{Kind: nav.Capsule, A: nav.Vec{X: 800, Y: 600}, B: nav.Vec{X: 600, Y: 600}, R: 10},
+		{Kind: nav.Capsule, A: nav.Vec{X: 600, Y: 600}, B: nav.Vec{X: 600, Y: 400}, R: 10},
+	}
+	w := testWorld(box...)
+	m := addTestEntity(w, 1, "monster", 300, 500, monsterBase)
+	arrived := false
+	for i := 0; i < 400 && !arrived; i++ {
+		w.State.Clock.Now += w.State.Clock.Dt
+		arrived = w.Move.Toward(m, 700, 500, 6)
+	}
+	if !arrived {
+		t.Fatalf("never settled next to the box: at (%.0f, %.0f)", m.X, m.Y)
+	}
+	if m.X > 600-m.Radius+0.5 || m.X < 560 {
+		t.Fatalf("stopped at (%.0f, %.0f), want just outside the west wall", m.X, m.Y)
+	}
+	planAt := m.Steering.RepathAt
+	w.State.Clock.Now += w.State.Clock.Dt
+	if !w.Move.Toward(m, 700, 500, 6) || m.Steering.RepathAt != planAt {
+		t.Fatal("replanned on the very next tick after settling")
+	}
+}

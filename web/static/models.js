@@ -225,7 +225,8 @@ function joint(x, y, a1, l1, a2, l2) {
 /* ------------------------------ entry ------------------------------- */
 
 export function drawModel(ctx, model, p) {
-  const s = (p.r || 14) / 16;
+  const R = p.r || 14;
+  const s = R / 16;
   const dir = Math.cos(p.facing || 0) < -0.1 ? -1 : 1;
   const dead = p.dead >= 0 ? clamp01(p.dead) : -1;
   const hit = p.hit >= 0 && p.hit < 1 ? p.hit : -1;
@@ -239,13 +240,13 @@ export function drawModel(ctx, model, p) {
     ctx.strokeStyle = `rgba(255,214,90,${0.45 + 0.3 * pulse})`;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.ellipse(0, 0, (p.r + 8) * 1.1, (p.r + 8) * 0.45, 0, 0, TAU);
+    ctx.ellipse(0, 0, (R + 8) * 1.1, (R + 8) * 0.45, 0, 0, TAU);
     ctx.stroke();
   }
   if (!p.bare) {
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(0, 0, p.r * 1.05, p.r * 0.42, 0, 0, TAU);
+    ctx.ellipse(0, 0, R * 1.05, R * 0.42, 0, 0, TAU);
     ctx.fill();
   }
 

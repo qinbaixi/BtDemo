@@ -131,7 +131,7 @@ func ShapesFromLayout(l config.Layout) []Shape {
 				A: Vec{math.Min(a.X, b.X), math.Min(a.Y, b.Y)},
 				B: Vec{math.Max(a.X, b.X), math.Max(a.Y, b.Y)}})
 		case sh.Capsule > 0:
-			out = append(out, Shape{Kind: Capsule, A: Vec{p.X, p.Y}, B: Vec{p.X + p.DX, p.Y + p.DY}, R: sh.Capsule * p.S})
+			out = append(out, Shape{Kind: Capsule, A: Vec{p.X, p.Y}, B: Vec{p.X + p.DX*p.S, p.Y + p.DY*p.S}, R: sh.Capsule * p.S})
 		}
 	}
 	return out

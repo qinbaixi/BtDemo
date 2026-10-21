@@ -232,6 +232,11 @@ func (c *Config) validate(knownTrees map[string]bool) error {
 			return err
 		}
 	}
+	for i, p := range c.Layout.Props {
+		if p.X < 0 || p.Y < 0 || p.X > w.Map.Width || p.Y > w.Map.Height {
+			return fmt.Errorf("map.yaml: prop %d (%s) at (%g, %g) is off the %gx%g map", i+1, p.Kind, p.X, p.Y, w.Map.Width, w.Map.Height)
+		}
+	}
 	for i, s := range c.Spawns {
 		if c.Templates[s.Template] == nil {
 			return fmt.Errorf("monsters.yaml: spawn %d uses unknown template %q", i, s.Template)

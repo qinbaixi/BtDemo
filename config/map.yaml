@@ -7,7 +7,9 @@
 # 每种物件的碰撞形状，坐标相对脚下的点，随 s 缩放，flip 时左右镜像：
 #   circle: [cx, cy, r]          圆
 #   rect:   [x0, y0, x1, y1]     轴对齐矩形
-#   capsule: r                   wall 专用：沿墙段、半径为 r 的胶囊体
+#   capsule: r                   wall 专用：沿墙段（dx / dy 也随 s 缩放，不受 flip 影响）、半径为 r 的胶囊体
+#   {}                           不挡路的装饰
+# props 里的每个种类都必须在这里列出。
 shapes:
   house:    { rect: [-62, -44, 62, 6] }
   crypt:    { rect: [-56, -46, 56, 6] }

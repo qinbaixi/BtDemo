@@ -64,9 +64,10 @@ func (m *System) Toward(e *core.Entity, x, y, step float64) bool {
 	if !st.Planned || st.Goal.Dist(goal) > goalMoved || now >= st.RepathAt || st.StuckFor >= stuckSeconds {
 		st.Path = m.nav.FindPath(from, goal, e.Radius)
 		st.Goal, st.Planned = goal, true
+		st.Reaches = len(st.Path) > 0 && st.Path[len(st.Path)-1] == goal
 		st.RepathAt = now + repathEvery
 		st.StuckFor = 0
-	} else if len(st.Path) > 0 {
+	} else if st.Reaches && len(st.Path) > 0 {
 		// a moving goal: keep the plan but aim the last leg at where it is now
 		st.Path[len(st.Path)-1] = goal
 		if len(st.Path) > 1 && m.nav.Clear(from, goal, e.Radius) {
@@ -91,7 +92,12 @@ func (m *System) Toward(e *core.Entity, x, y, step float64) bool {
 		left = 0
 	}
 	if len(st.Path) == 0 {
-		st.Planned = false
+		// at the goal, plan afresh next time; at the closest spot to an
+		// unreachable goal, keep the plan so the search only reruns on the
+		// usual schedule instead of every tick
+		if pos(e).Dist(goal) < 2 {
+			st.Planned = false
+		}
 		return true
 	}
 	if moved := pos(e).Dist(from); moved < step*0.25 {
