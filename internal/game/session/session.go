@@ -23,6 +23,7 @@ type Session struct {
 	Player  *core.Entity
 	Out     chan []byte // 编码后的 pb.ServerMsg 帧
 	Watch   int         // 本会话想要查看其行为树跟踪的实体
+	defSent string      // 已经给本会话发过结构的行为树名；换了观察对象或树时重发
 	visible map[int]bool
 }
 
@@ -97,6 +98,7 @@ func (n *System) Input(s *Session, msg *pb.ClientMsg) {
 		e.Target = int(m.Target.GetId())
 	case *pb.ClientMsg_Watch:
 		s.Watch = int(m.Watch.GetId())
+		s.defSent = ""
 	case *pb.ClientMsg_Cast:
 		slot := int(m.Cast.GetSlot())
 		if slot < 1 || slot > len(e.Skills) {
@@ -198,7 +200,10 @@ func (n *System) Flush() {
 			}
 		}
 		if s.Watch != 0 && now[s.Watch] != nil {
-			sync.Ai = n.ai.Trace(now[s.Watch])
+			sync.Ai = n.ai.Trace(now[s.Watch], s.defSent)
+			if d := sync.Ai.GetDef(); d != nil {
+				s.defSent = sync.Ai.GetTree()
+			}
 		}
 		n.send(s, &pb.ServerMsg{Msg: &pb.ServerMsg_Sync{Sync: sync}})
 	}

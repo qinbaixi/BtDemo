@@ -2,6 +2,7 @@ package ai
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -16,7 +17,8 @@ const maxTraceTicks = 8
 
 // recordTrace 将被追踪实体最近一次的 tick 复制到其缓冲区中。
 func (sys *System) recordTrace(e *core.Entity) {
-	tick := &pb.AiTick{Time: core.F32(core.Round1(sys.s.Now()))}
+	// 时间保留两位小数：一帧 0.05 秒，保留一位会让相邻两帧时间相同
+	tick := &pb.AiTick{Time: core.F32(math.Round(sys.s.Now()*100) / 100)}
 	for _, st := range e.AI.Trace {
 		tick.Nodes = append(tick.Nodes, &pb.AiNode{
 			Node:   core.I32(st.Node.ID),
@@ -25,7 +27,17 @@ func (sys *System) recordTrace(e *core.Entity) {
 			Name:   proto.String(sys.nodeLabel(st.Node)),
 			Status: pb.AiStatus(st.Status).Enum(),
 			Notes:  append([]string(nil), st.Notes...),
+			Fresh:  proto.Bool(st.Fresh),
+			Why:    append([]string(nil), st.Why...),
 		})
+		n := tick.Nodes[len(tick.Nodes)-1]
+		for _, c := range st.Checks {
+			ck := &pb.AiCheck{Node: core.I32(c.Node.ID), Pass: proto.Bool(c.Pass)}
+			if c.Why != "" {
+				ck.Why = proto.String(c.Why)
+			}
+			n.Checks = append(n.Checks, ck)
+		}
 	}
 	// 至少保留一个同步间隔的 tick，同步较慢时也不会丢弃任何数据
 	limit := max(maxTraceTicks, sys.s.Cfg.World.TickRate/max(1, sys.s.Cfg.World.SyncRate))
@@ -55,12 +67,15 @@ func (sys *System) nodeLabel(n *bt.Node) string {
 }
 
 // Trace 为被观察实体构建追踪消息，无法构建时返回 nil。每次同步时，会为每个正在
-// 观察的会话调用一次。
-func (sys *System) Trace(e *core.Entity) *pb.AiTrace {
+// 观察的会话调用一次。defSent 是这个会话已经拿到结构的树名，和实体的树不同时附上整棵树的结构。
+func (sys *System) Trace(e *core.Entity, defSent string) *pb.AiTrace {
 	if e == nil || e.AI == nil {
 		return nil
 	}
 	tr := &pb.AiTrace{Id: core.I32(e.ID), Tree: proto.String(e.AI.Tree.Name), Ticks: e.AITicks}
+	if defSent != e.AI.Tree.Name {
+		tr.Def = sys.treeDef(e.AI.Tree)
+	}
 	if len(e.Path) > 0 {
 		tr.Path = append(tr.Path, float32(e.X), float32(e.Y))
 		for _, p := range e.Path {
@@ -91,4 +106,60 @@ func (sys *System) Trace(e *core.Entity) *pb.AiTrace {
 // ClearTraces 丢弃自上次同步以来记录的 tick。
 func (sys *System) ClearTraces() {
 	sys.s.Ents.Each(func(e *core.Entity) { e.AITicks = nil })
+}
+
+// treeDef 把整棵树的结构转成协议消息，按树缓存（树加载后不会变）。
+func (sys *System) treeDef(t *bt.Tree) *pb.AiTreeDef {
+	if d, ok := sys.defs[t]; ok {
+		return d
+	}
+	ids := func(ns []*bt.Node) []int32 {
+		out := make([]int32, len(ns))
+		for i, n := range ns {
+			out[i] = int32(n.ID)
+		}
+		return out
+	}
+	d := &pb.AiTreeDef{Root: core.I32(t.Root.ID)}
+	for _, id := range sortedNodeIDs(t) {
+		n := t.Nodes[id]
+		tn := &pb.AiTreeNode{
+			Id:         core.I32(n.ID),
+			Kind:       proto.String(string(n.Kind)),
+			SubType:    proto.String(n.SubType),
+			Children:   ids(n.Children),
+			Decorators: ids(n.Decorators),
+			Services:   ids(n.Services),
+		}
+		if n.Label != "" {
+			tn.Label = proto.String(n.Label)
+		}
+		keys := make([]string, 0, len(n.Props))
+		for k := range n.Props {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			tn.Props = append(tn.Props, &pb.KeyValue{Key: proto.String(k), Value: proto.String(fmt.Sprint(n.Props[k]))})
+		}
+		switch n.Kind {
+		case bt.KindDecorator:
+			tn.Inverse = proto.Bool(n.Inverse)
+			tn.Periodic = proto.Bool(n.Periodic)
+		case bt.KindService:
+			tn.Interval = core.F32(n.Interval)
+		}
+		d.Nodes = append(d.Nodes, tn)
+	}
+	sys.defs[t] = d
+	return d
+}
+
+func sortedNodeIDs(t *bt.Tree) []int {
+	ids := make([]int, 0, len(t.Nodes))
+	for id := range t.Nodes {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	return ids
 }

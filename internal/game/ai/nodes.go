@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"fmt"
 	"math"
 
 	"google.golang.org/protobuf/proto"
@@ -51,11 +52,14 @@ func (sys *System) register() {
 	reg := sys.reg
 	reg.Task("find_target", func(ctx *bt.Ctx) bt.Status {
 		a := ctx.Agent.(*Agent)
-		t := sys.combat.NearestHostile(a.E, ctx.Node.Num("Range", 250))
+		r := ctx.Node.Num("Range", 250)
+		t := sys.combat.NearestHostile(a.E, r)
 		if t == nil {
+			ctx.Explain("%.0f 范围内没有敌人", r)
 			return bt.Failure
 		}
 		a.E.Target = t.ID
+		ctx.Explain("找到 %s，距离 %.0f", who(t), core.Dist(a.E, t))
 		return bt.Success
 	})
 
@@ -68,12 +72,16 @@ func (sys *System) register() {
 		a := ctx.Agent.(*Agent)
 		t := a.target()
 		if t == nil {
+			ctx.Explain("目标已丢失")
 			return bt.Failure
 		}
-		if core.EdgeDist(a.E, t) <= ctx.Node.Num("StopRange", 40) {
+		d, stop := core.EdgeDist(a.E, t), ctx.Node.Num("StopRange", 40)
+		if d <= stop {
+			ctx.Explain("已贴近 %s：距离 %.0f ≤ %.0f", who(t), d, stop)
 			return bt.Success
 		}
 		sys.move.Toward(a.E, t.X, t.Y, a.step(1))
+		ctx.Explain("追击 %s：距离 %.0f > %.0f", who(t), d, stop)
 		return bt.Running
 	})
 
@@ -81,10 +89,18 @@ func (sys *System) register() {
 		a := ctx.Agent.(*Agent)
 		slot := int(ctx.Node.Num("Slot", 1))
 		if slot < 1 || slot > len(a.E.Skills) {
+			ctx.Explain("没有第 %d 个技能（共 %d 个）", slot, len(a.E.Skills))
 			return bt.Failure
 		}
-		if sys.combat.Cast(a.E, a.E.Skills[slot-1], a.E.Target) != nil {
+		sk := a.E.Skills[slot-1]
+		if err := sys.combat.Cast(a.E, sk, a.E.Target); err != nil {
+			ctx.Explain("%s 放不出：%v", sk.Name, err)
 			return bt.Failure
+		}
+		if t := sys.s.Ents.Get(a.E.Target); t != nil && ctx.Tracing() {
+			ctx.Explain("对 %s 施放 %s", who(t), sk.Name)
+		} else {
+			ctx.Explain("施放 %s", sk.Name)
 		}
 		return bt.Success
 	})
@@ -97,20 +113,18 @@ func (sys *System) register() {
 			ctx.Mem["x"], ctx.Mem["y"] = x, y
 			ctx.Mem["until"] = ctx.Now + wanderTimeout
 		}
-		arrived := sys.move.Toward(a.E, memFloat(ctx, "x"), memFloat(ctx, "y"), a.step(wanderSpeed))
-		if arrived || ctx.Now >= memFloat(ctx, "until") {
-			return bt.Success
-		}
-		return bt.Running
+		return sys.walkTo(ctx, a, wanderSpeed, "闲逛")
 	})
 
 	reg.Task("return_home", func(ctx *bt.Ctx) bt.Status {
 		a := ctx.Agent.(*Agent)
 		if !sys.move.Toward(a.E, a.E.HomeX, a.E.HomeY, a.step(returnHomeSpeed)) {
+			ctx.Explain("回家中，离家 %.0f", a.E.HomeDist())
 			return bt.Running
 		}
 		a.E.HP = a.E.Attr.MaxHP
 		a.E.Target = 0
+		ctx.Explain("到家，回满血并清除目标")
 		return bt.Success
 	})
 
@@ -124,6 +138,7 @@ func (sys *System) register() {
 				}
 			}
 			if threat == nil {
+				ctx.Explain("没有可躲的威胁")
 				return bt.Failure
 			}
 			dx, dy := a.E.X-threat.X, a.E.Y-threat.Y
@@ -135,55 +150,76 @@ func (sys *System) register() {
 			dist := ctx.Node.Num("Distance", 160)
 			ctx.Mem["x"], ctx.Mem["y"] = sys.move.FreeSpot(a.E, a.E.X+dx/d*dist, a.E.Y+dy/d*dist)
 			ctx.Mem["until"] = ctx.Now + fleeTimeout
+			ctx.Explain("躲开 %s", who(threat))
 		}
-		arrived := sys.move.Toward(a.E, memFloat(ctx, "x"), memFloat(ctx, "y"), a.step(fleeSpeed))
-		if arrived || ctx.Now >= memFloat(ctx, "until") {
-			return bt.Success
-		}
-		return bt.Running
+		return sys.walkTo(ctx, a, fleeSpeed, "逃跑")
 	})
 
 	reg.Task("wait", func(ctx *bt.Ctx) bt.Status {
 		if ctx.Fresh {
 			ctx.Mem["until"] = ctx.Now + ctx.Node.Num("Seconds", 1)
 		}
-		if ctx.Now >= memFloat(ctx, "until") {
-			return bt.Success
+		if left := memFloat(ctx, "until") - ctx.Now; left > 0 {
+			ctx.Explain("还要等 %.1fs", left)
+			return bt.Running
 		}
-		return bt.Running
+		return bt.Success
 	})
 
 	reg.Task("say", func(ctx *bt.Ctx) bt.Status {
 		a := ctx.Agent.(*Agent)
 		if text := ctx.Node.Str("Text", ""); text != "" {
 			sys.s.Events.Emit(a.E, &core.Event{Kind: pb.EventKind_SAY.Enum(), Id: core.I32(a.E.ID), Text: proto.String(text)})
+			ctx.Explain("说：%s", text)
 		}
 		return bt.Success
 	})
 
 	reg.Condition("has_target", func(ctx *bt.Ctx) bool {
-		return ctx.Agent.(*Agent).target() != nil
+		t := ctx.Agent.(*Agent).target()
+		if t == nil {
+			ctx.Explain("没有目标")
+			return false
+		}
+		ctx.Explain("目标 %s", who(t))
+		return true
 	})
 
 	reg.Condition("target_in_range", func(ctx *bt.Ctx) bool {
 		a := ctx.Agent.(*Agent)
 		t := a.target()
-		return t != nil && core.EdgeDist(a.E, t) <= ctx.Node.Num("Range", 60)
+		if t == nil {
+			ctx.Explain("没有目标")
+			return false
+		}
+		d, r := core.EdgeDist(a.E, t), ctx.Node.Num("Range", 60)
+		ctx.Explain("到 %s 的距离 %.0f %s %.0f", who(t), d, cmp(d <= r, "≤", ">"), r)
+		return d <= r
 	})
 
 	reg.Condition("hp_below", func(ctx *bt.Ctx) bool {
 		a := ctx.Agent.(*Agent)
-		return a.E.HPRatio()*100 < ctx.Node.Num("Percent", 30)
+		hp, p := a.E.HPRatio()*100, ctx.Node.Num("Percent", 30)
+		ctx.Explain("生命 %.0f%% %s %.0f%%", hp, cmp(hp < p, "<", "≥"), p)
+		return hp < p
 	})
 
 	reg.Condition("far_from_home", func(ctx *bt.Ctx) bool {
 		a := ctx.Agent.(*Agent)
-		return a.E.HomeDist() > ctx.Node.Num("Distance", 400)
+		d, lim := a.E.HomeDist(), ctx.Node.Num("Distance", 400)
+		ctx.Explain("离家 %.0f %s %.0f", d, cmp(d > lim, ">", "≤"), lim)
+		return d > lim
 	})
 
 	reg.Condition("was_attacked", func(ctx *bt.Ctx) bool {
 		a := ctx.Agent.(*Agent)
-		return a.E.LastAttacker != 0 && ctx.Now-a.E.LastHitAt <= ctx.Node.Num("Seconds", 3)
+		if a.E.LastAttacker == 0 {
+			ctx.Explain("没被攻击过")
+			return false
+		}
+		ago, lim := ctx.Now-a.E.LastHitAt, ctx.Node.Num("Seconds", 3)
+		ctx.Explain("%.1fs 前受击 %s %.0fs", ago, cmp(ago <= lim, "≤", ">"), lim)
+		return ago <= lim
 	})
 
 	reg.Service("update_target", func(ctx *bt.Ctx) {
@@ -191,15 +227,46 @@ func (sys *System) register() {
 		e := a.E
 		r := ctx.Node.Num("Range", 250)
 		if t := a.target(); t != nil && core.Dist(e, t) <= r*lostTargetFactor {
+			ctx.Explain("保持目标 %s", who(t))
 			return
 		}
 		e.Target = 0
 		if atk := sys.s.Ents.Get(e.LastAttacker); atk.Alive() && sys.s.Hostile(e, atk) && ctx.Now-e.LastHitAt <= attackerWindow {
 			e.Target = atk.ID
+			ctx.Explain("改打攻击者 %s", who(atk))
 			return
 		}
 		if t := sys.combat.NearestHostile(e, r); t != nil {
 			e.Target = t.ID
+			ctx.Explain("选最近的敌人 %s", who(t))
+			return
 		}
+		ctx.Explain("%.0f 范围内没有敌人", r)
 	})
+}
+
+// walkTo 让 agent 走向 ctx.Mem 里记的目的地（x、y），到达或超时（until）算成功。
+func (sys *System) walkTo(ctx *bt.Ctx, a *Agent, speed float64, what string) bt.Status {
+	x, y := memFloat(ctx, "x"), memFloat(ctx, "y")
+	if sys.move.Toward(a.E, x, y, a.step(speed)) {
+		ctx.Explain("%s到达 (%.0f, %.0f)", what, x, y)
+		return bt.Success
+	}
+	if left := memFloat(ctx, "until") - ctx.Now; left > 0 {
+		ctx.Explain("%s去 (%.0f, %.0f)，还剩 %.0f，%.1fs 后放弃", what, x, y, math.Hypot(x-a.E.X, y-a.E.Y), left)
+		return bt.Running
+	}
+	ctx.Explain("%s超时，没走到 (%.0f, %.0f)", what, x, y)
+	return bt.Success
+}
+
+// who 是调试说明里实体的写法，例如“史莱姆#12”。
+func who(e *core.Entity) string { return fmt.Sprintf("%s#%d", e.Name, e.ID) }
+
+// cmp 按比较结果挑一个符号。
+func cmp(ok bool, yes, no string) string {
+	if ok {
+		return yes
+	}
+	return no
 }

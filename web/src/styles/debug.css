@@ -20,7 +20,7 @@
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(440px, 100vw);
+  width: min(600px, 100vw);
   display: flex;
   flex-direction: column;
   background: rgba(12, 22, 17, 0.92);
@@ -129,3 +129,80 @@
 .dbg-line .s { margin-left: 6px; color: var(--muted); }
 .dbg-line .args { margin-left: 44px; color: #9fd3ff; font-family: ui-monospace, Menlo, Consolas, monospace; }
 .dbg-line .skip { margin-left: 44px; color: #c99; }
+
+/* 行为树视图（ui/debug-ai.ts） */
+#dbg-ai { gap: 0; }
+.bt-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 3px 0; }
+.bt-bar .dbg-btn { padding: 2px 8px; }
+.bt-bar .dbg-btn:disabled { opacity: 0.4; cursor: default; }
+.bt-bar .hidden { display: none; }
+.bt-frame { margin-left: 6px; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; }
+.bt-legend { margin-left: auto; color: var(--muted); font-size: 11px; }
+.bt-legend i, .bt-strip i {
+  display: inline-block; width: 8px; height: 8px; margin: 0 3px 0 6px; border-radius: 2px; vertical-align: -1px;
+}
+.st-none { --c: #555c66; }
+.st-success { --c: var(--good); }
+.st-failure { --c: var(--danger); }
+.st-running { --c: var(--gold); }
+.bt-legend i, .bt-strip i { background: var(--c); }
+
+.bt-tree {
+  flex: 3;
+  min-height: 120px;
+  overflow: auto;
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 4px 0;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.bt-empty, .bt-hint { padding: 8px; color: var(--muted); font-family: var(--font); }
+.bt-row, .bt-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 8px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.bt-row { min-height: 21px; border-left: 3px solid transparent; }
+.bt-row:hover, .bt-sub:hover { background: rgba(255, 255, 255, 0.04); }
+.bt-row.sel { background: rgba(255, 213, 74, 0.14); }
+.bt-row.st-running { border-left-color: var(--gold); }
+.bt-row.st-none { opacity: 0.55; }
+.bt-caret { flex: none; width: 12px; color: var(--muted); text-align: center; }
+.bt-caret:not(:empty):hover { color: var(--gold); }
+.bt-ord { flex: none; min-width: 16px; color: var(--muted); font-size: 10px; text-align: right; }
+.bt-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.bt-row.st-running .bt-dot { box-shadow: 0 0 6px var(--gold); }
+.bt-kind { flex: none; padding: 0 5px; border-radius: 3px; font: 11px var(--font); }
+.bt-kind.k-composite { background: rgba(110, 170, 255, 0.18); color: #9fd3ff; }
+.bt-kind.k-task { background: rgba(160, 230, 160, 0.14); color: #a8e6a0; }
+.bt-name { color: var(--text); font-family: var(--font); }
+.bt-props { color: #9fd3ff; font-size: 11px; }
+.bt-res { margin-left: auto; padding-left: 10px; color: var(--c); font: 11px var(--font); }
+.bt-row.st-none .bt-res { color: var(--muted); }
+
+.bt-sub { min-height: 18px; font-size: 11px; color: var(--muted); cursor: default; }
+.bt-dname { color: #d9c7ff; font-family: var(--font); }
+.bt-svc .bt-dname { color: #ffd59a; }
+.bt-flag { color: var(--muted); font: 10px var(--font); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 3px; padding: 0 4px; }
+.bt-badge { padding: 0 5px; border-radius: 3px; font: 11px var(--font); }
+.bt-badge.pass { background: rgba(90, 200, 120, 0.2); color: var(--good); }
+.bt-badge.fail { background: rgba(230, 90, 90, 0.2); color: #ff8f8f; }
+.bt-badge.on { background: rgba(255, 213, 74, 0.16); color: var(--gold); }
+.bt-badge.off { color: var(--muted); }
+.bt-why { color: #e6e1d3; font-family: var(--font); white-space: normal; }
+.bt-task .bt-why { color: #bfe8b8; }
+.bt-inner .bt-why { color: var(--gold); }
+
+.bt-detail { max-height: 26vh; overflow: auto; }
+.bt-detail h5 { margin: 4px 0; }
+.bt-strip { display: flex; flex-wrap: wrap; gap: 1px; }
+.bt-strip i { margin: 0; width: 6px; height: 12px; cursor: pointer; }
+.bt-strip i.cur { outline: 2px solid #fff; outline-offset: 0; }
+.dbg-line { cursor: pointer; }
+.dbg-line.gone { opacity: 0.5; }
+#dbg-ai .dbg-logbox { flex: 1; max-height: 24vh; }

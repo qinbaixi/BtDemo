@@ -1958,7 +1958,10 @@ type AiNode struct {
 	Kind          *string                `protobuf:"bytes,3,req,name=kind" json:"kind,omitempty"` // composite | task
 	Name          *string                `protobuf:"bytes,4,req,name=name" json:"name,omitempty"` // sub_type plus its properties, e.g. "cast_skill Slot=1"
 	Status        *AiStatus              `protobuf:"varint,5,req,name=status,enum=btdemo.AiStatus" json:"status,omitempty"`
-	Notes         []string               `protobuf:"bytes,6,rep,name=notes" json:"notes,omitempty"` // blocked:<decorator>, <decorator> (changed the result), service:<name>
+	Notes         []string               `protobuf:"bytes,6,rep,name=notes" json:"notes,omitempty"`   // blocked:<decorator>, <decorator> (changed the result), service:<name>[ <why>]
+	Checks        []*AiCheck             `protobuf:"bytes,7,rep,name=checks" json:"checks,omitempty"` // condition decorators (and cooldowns) checked this tick, in order
+	Fresh         *bool                  `protobuf:"varint,8,opt,name=fresh" json:"fresh,omitempty"`  // entered this tick; false = still running from the last tick (only periodic conditions re-checked)
+	Why           []string               `protobuf:"bytes,9,rep,name=why" json:"why,omitempty"`       // what the task saw, e.g. "distance 85 > 60"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2035,6 +2038,267 @@ func (x *AiNode) GetNotes() []string {
 	return nil
 }
 
+func (x *AiNode) GetChecks() []*AiCheck {
+	if x != nil {
+		return x.Checks
+	}
+	return nil
+}
+
+func (x *AiNode) GetFresh() bool {
+	if x != nil && x.Fresh != nil {
+		return *x.Fresh
+	}
+	return false
+}
+
+func (x *AiNode) GetWhy() []string {
+	if x != nil {
+		return x.Why
+	}
+	return nil
+}
+
+// AiCheck is one condition decorator check on a visited node.
+type AiCheck struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Node          *int32                 `protobuf:"varint,1,req,name=node" json:"node,omitempty"` // decorator node id
+	Pass          *bool                  `protobuf:"varint,2,req,name=pass" json:"pass,omitempty"` // after inverse
+	Why           *string                `protobuf:"bytes,3,opt,name=why" json:"why,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AiCheck) Reset() {
+	*x = AiCheck{}
+	mi := &file_btdemo_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AiCheck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AiCheck) ProtoMessage() {}
+
+func (x *AiCheck) ProtoReflect() protoreflect.Message {
+	mi := &file_btdemo_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AiCheck.ProtoReflect.Descriptor instead.
+func (*AiCheck) Descriptor() ([]byte, []int) {
+	return file_btdemo_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *AiCheck) GetNode() int32 {
+	if x != nil && x.Node != nil {
+		return *x.Node
+	}
+	return 0
+}
+
+func (x *AiCheck) GetPass() bool {
+	if x != nil && x.Pass != nil {
+		return *x.Pass
+	}
+	return false
+}
+
+func (x *AiCheck) GetWhy() string {
+	if x != nil && x.Why != nil {
+		return *x.Why
+	}
+	return ""
+}
+
+// AiTreeDef is the whole tree of the watched entity, sent with the first
+// trace after a watch starts (and when the tree changes) so the debug panel
+// can draw every node, visited or not.
+type AiTreeDef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Root          *int32                 `protobuf:"varint,1,req,name=root" json:"root,omitempty"`
+	Nodes         []*AiTreeNode          `protobuf:"bytes,2,rep,name=nodes" json:"nodes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AiTreeDef) Reset() {
+	*x = AiTreeDef{}
+	mi := &file_btdemo_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AiTreeDef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AiTreeDef) ProtoMessage() {}
+
+func (x *AiTreeDef) ProtoReflect() protoreflect.Message {
+	mi := &file_btdemo_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AiTreeDef.ProtoReflect.Descriptor instead.
+func (*AiTreeDef) Descriptor() ([]byte, []int) {
+	return file_btdemo_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *AiTreeDef) GetRoot() int32 {
+	if x != nil && x.Root != nil {
+		return *x.Root
+	}
+	return 0
+}
+
+func (x *AiTreeDef) GetNodes() []*AiTreeNode {
+	if x != nil {
+		return x.Nodes
+	}
+	return nil
+}
+
+type AiTreeNode struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            *int32                 `protobuf:"varint,1,req,name=id" json:"id,omitempty"`
+	Kind          *string                `protobuf:"bytes,2,req,name=kind" json:"kind,omitempty"` // composite | task | decorator | service
+	SubType       *string                `protobuf:"bytes,3,req,name=sub_type,json=subType" json:"sub_type,omitempty"`
+	Props         []*KeyValue            `protobuf:"bytes,4,rep,name=props" json:"props,omitempty"`
+	Children      []int32                `protobuf:"varint,5,rep,name=children" json:"children,omitempty"`
+	Decorators    []int32                `protobuf:"varint,6,rep,name=decorators" json:"decorators,omitempty"`
+	Services      []int32                `protobuf:"varint,7,rep,name=services" json:"services,omitempty"`
+	Inverse       *bool                  `protobuf:"varint,8,opt,name=inverse" json:"inverse,omitempty"`     // decorator: inverse_check_condition
+	Periodic      *bool                  `protobuf:"varint,9,opt,name=periodic" json:"periodic,omitempty"`   // decorator: re-checked while the node runs
+	Interval      *float32               `protobuf:"fixed32,10,opt,name=interval" json:"interval,omitempty"` // service: seconds between ticks
+	Label         *string                `protobuf:"bytes,11,opt,name=label" json:"label,omitempty"`         // the name given in the editor, if any
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AiTreeNode) Reset() {
+	*x = AiTreeNode{}
+	mi := &file_btdemo_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AiTreeNode) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AiTreeNode) ProtoMessage() {}
+
+func (x *AiTreeNode) ProtoReflect() protoreflect.Message {
+	mi := &file_btdemo_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AiTreeNode.ProtoReflect.Descriptor instead.
+func (*AiTreeNode) Descriptor() ([]byte, []int) {
+	return file_btdemo_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *AiTreeNode) GetId() int32 {
+	if x != nil && x.Id != nil {
+		return *x.Id
+	}
+	return 0
+}
+
+func (x *AiTreeNode) GetKind() string {
+	if x != nil && x.Kind != nil {
+		return *x.Kind
+	}
+	return ""
+}
+
+func (x *AiTreeNode) GetSubType() string {
+	if x != nil && x.SubType != nil {
+		return *x.SubType
+	}
+	return ""
+}
+
+func (x *AiTreeNode) GetProps() []*KeyValue {
+	if x != nil {
+		return x.Props
+	}
+	return nil
+}
+
+func (x *AiTreeNode) GetChildren() []int32 {
+	if x != nil {
+		return x.Children
+	}
+	return nil
+}
+
+func (x *AiTreeNode) GetDecorators() []int32 {
+	if x != nil {
+		return x.Decorators
+	}
+	return nil
+}
+
+func (x *AiTreeNode) GetServices() []int32 {
+	if x != nil {
+		return x.Services
+	}
+	return nil
+}
+
+func (x *AiTreeNode) GetInverse() bool {
+	if x != nil && x.Inverse != nil {
+		return *x.Inverse
+	}
+	return false
+}
+
+func (x *AiTreeNode) GetPeriodic() bool {
+	if x != nil && x.Periodic != nil {
+		return *x.Periodic
+	}
+	return false
+}
+
+func (x *AiTreeNode) GetInterval() float32 {
+	if x != nil && x.Interval != nil {
+		return *x.Interval
+	}
+	return 0
+}
+
+func (x *AiTreeNode) GetLabel() string {
+	if x != nil && x.Label != nil {
+		return *x.Label
+	}
+	return ""
+}
+
 type AiTick struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Time          *float32               `protobuf:"fixed32,1,req,name=time" json:"time,omitempty"`
@@ -2045,7 +2309,7 @@ type AiTick struct {
 
 func (x *AiTick) Reset() {
 	*x = AiTick{}
-	mi := &file_btdemo_proto_msgTypes[21]
+	mi := &file_btdemo_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2057,7 +2321,7 @@ func (x *AiTick) String() string {
 func (*AiTick) ProtoMessage() {}
 
 func (x *AiTick) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[21]
+	mi := &file_btdemo_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2070,7 +2334,7 @@ func (x *AiTick) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AiTick.ProtoReflect.Descriptor instead.
 func (*AiTick) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{21}
+	return file_btdemo_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *AiTick) GetTime() float32 {
@@ -2097,7 +2361,7 @@ type KeyValue struct {
 
 func (x *KeyValue) Reset() {
 	*x = KeyValue{}
-	mi := &file_btdemo_proto_msgTypes[22]
+	mi := &file_btdemo_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2109,7 +2373,7 @@ func (x *KeyValue) String() string {
 func (*KeyValue) ProtoMessage() {}
 
 func (x *KeyValue) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[22]
+	mi := &file_btdemo_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2122,7 +2386,7 @@ func (x *KeyValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyValue.ProtoReflect.Descriptor instead.
 func (*KeyValue) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{22}
+	return file_btdemo_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *KeyValue) GetKey() string {
@@ -2147,13 +2411,14 @@ type AiTrace struct {
 	Ticks         []*AiTick              `protobuf:"bytes,3,rep,name=ticks" json:"ticks,omitempty"`
 	Blackboard    []*KeyValue            `protobuf:"bytes,4,rep,name=blackboard" json:"blackboard,omitempty"` // blackboard plus a few agent fields
 	Path          []float32              `protobuf:"fixed32,5,rep,name=path" json:"path,omitempty"`           // x, y pairs: the route the entity is walking, from its position
+	Def           *AiTreeDef             `protobuf:"bytes,6,opt,name=def" json:"def,omitempty"`               // the tree's structure, when the session has not had it yet
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AiTrace) Reset() {
 	*x = AiTrace{}
-	mi := &file_btdemo_proto_msgTypes[23]
+	mi := &file_btdemo_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2165,7 +2430,7 @@ func (x *AiTrace) String() string {
 func (*AiTrace) ProtoMessage() {}
 
 func (x *AiTrace) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[23]
+	mi := &file_btdemo_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2178,7 +2443,7 @@ func (x *AiTrace) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AiTrace.ProtoReflect.Descriptor instead.
 func (*AiTrace) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{23}
+	return file_btdemo_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *AiTrace) GetId() int32 {
@@ -2216,6 +2481,13 @@ func (x *AiTrace) GetPath() []float32 {
 	return nil
 }
 
+func (x *AiTrace) GetDef() *AiTreeDef {
+	if x != nil {
+		return x.Def
+	}
+	return nil
+}
+
 type Toast struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Text          *string                `protobuf:"bytes,1,req,name=text" json:"text,omitempty"`
@@ -2225,7 +2497,7 @@ type Toast struct {
 
 func (x *Toast) Reset() {
 	*x = Toast{}
-	mi := &file_btdemo_proto_msgTypes[24]
+	mi := &file_btdemo_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2237,7 +2509,7 @@ func (x *Toast) String() string {
 func (*Toast) ProtoMessage() {}
 
 func (x *Toast) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[24]
+	mi := &file_btdemo_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2250,7 +2522,7 @@ func (x *Toast) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Toast.ProtoReflect.Descriptor instead.
 func (*Toast) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{24}
+	return file_btdemo_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *Toast) GetText() string {
@@ -2396,20 +2668,46 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x04ents\x18\x02 \x03(\v2\x13.btdemo.EntityStateR\x04ents\x12\x1d\n" +
 	"\x02ev\x18\x03 \x03(\v2\r.btdemo.EventR\x02ev\x12$\n" +
 	"\x04self\x18\x04 \x01(\v2\x10.btdemo.SelfInfoR\x04self\x12\x1f\n" +
-	"\x02ai\x18\x05 \x01(\v2\x0f.btdemo.AiTraceR\x02ai\"\x9a\x01\n" +
+	"\x02ai\x18\x05 \x01(\v2\x0f.btdemo.AiTraceR\x02ai\"\xeb\x01\n" +
 	"\x06AiNode\x12\x12\n" +
 	"\x04node\x18\x01 \x02(\x05R\x04node\x12\x14\n" +
 	"\x05depth\x18\x02 \x02(\x05R\x05depth\x12\x12\n" +
 	"\x04kind\x18\x03 \x02(\tR\x04kind\x12\x12\n" +
 	"\x04name\x18\x04 \x02(\tR\x04name\x12(\n" +
 	"\x06status\x18\x05 \x02(\x0e2\x10.btdemo.AiStatusR\x06status\x12\x14\n" +
-	"\x05notes\x18\x06 \x03(\tR\x05notes\"B\n" +
+	"\x05notes\x18\x06 \x03(\tR\x05notes\x12'\n" +
+	"\x06checks\x18\a \x03(\v2\x0f.btdemo.AiCheckR\x06checks\x12\x14\n" +
+	"\x05fresh\x18\b \x01(\bR\x05fresh\x12\x10\n" +
+	"\x03why\x18\t \x03(\tR\x03why\"C\n" +
+	"\aAiCheck\x12\x12\n" +
+	"\x04node\x18\x01 \x02(\x05R\x04node\x12\x12\n" +
+	"\x04pass\x18\x02 \x02(\bR\x04pass\x12\x10\n" +
+	"\x03why\x18\x03 \x01(\tR\x03why\"I\n" +
+	"\tAiTreeDef\x12\x12\n" +
+	"\x04root\x18\x01 \x02(\x05R\x04root\x12(\n" +
+	"\x05nodes\x18\x02 \x03(\v2\x12.btdemo.AiTreeNodeR\x05nodes\"\xb3\x02\n" +
+	"\n" +
+	"AiTreeNode\x12\x0e\n" +
+	"\x02id\x18\x01 \x02(\x05R\x02id\x12\x12\n" +
+	"\x04kind\x18\x02 \x02(\tR\x04kind\x12\x19\n" +
+	"\bsub_type\x18\x03 \x02(\tR\asubType\x12&\n" +
+	"\x05props\x18\x04 \x03(\v2\x10.btdemo.KeyValueR\x05props\x12\x1a\n" +
+	"\bchildren\x18\x05 \x03(\x05R\bchildren\x12\x1e\n" +
+	"\n" +
+	"decorators\x18\x06 \x03(\x05R\n" +
+	"decorators\x12\x1a\n" +
+	"\bservices\x18\a \x03(\x05R\bservices\x12\x18\n" +
+	"\ainverse\x18\b \x01(\bR\ainverse\x12\x1a\n" +
+	"\bperiodic\x18\t \x01(\bR\bperiodic\x12\x1a\n" +
+	"\binterval\x18\n" +
+	" \x01(\x02R\binterval\x12\x14\n" +
+	"\x05label\x18\v \x01(\tR\x05label\"B\n" +
 	"\x06AiTick\x12\x12\n" +
 	"\x04time\x18\x01 \x02(\x02R\x04time\x12$\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x0e.btdemo.AiNodeR\x05nodes\"2\n" +
 	"\bKeyValue\x12\x10\n" +
 	"\x03key\x18\x01 \x02(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x02(\tR\x05value\"\x99\x01\n" +
+	"\x05value\x18\x02 \x02(\tR\x05value\"\xbe\x01\n" +
 	"\aAiTrace\x12\x0e\n" +
 	"\x02id\x18\x01 \x02(\x05R\x02id\x12\x12\n" +
 	"\x04tree\x18\x02 \x02(\tR\x04tree\x12$\n" +
@@ -2417,7 +2715,8 @@ const file_btdemo_proto_rawDesc = "" +
 	"\n" +
 	"blackboard\x18\x04 \x03(\v2\x10.btdemo.KeyValueR\n" +
 	"blackboard\x12\x12\n" +
-	"\x04path\x18\x05 \x03(\x02R\x04path\"\x1b\n" +
+	"\x04path\x18\x05 \x03(\x02R\x04path\x12#\n" +
+	"\x03def\x18\x06 \x01(\v2\x11.btdemo.AiTreeDefR\x03def\"\x1b\n" +
 	"\x05Toast\x12\x12\n" +
 	"\x04text\x18\x01 \x02(\tR\x04text*2\n" +
 	"\rObstacleShape\x12\n" +
@@ -2459,7 +2758,7 @@ func file_btdemo_proto_rawDescGZIP() []byte {
 }
 
 var file_btdemo_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_btdemo_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_btdemo_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_btdemo_proto_goTypes = []any{
 	(ObstacleShape)(0),    // 0: btdemo.ObstacleShape
 	(EntityKind)(0),       // 1: btdemo.EntityKind
@@ -2486,10 +2785,13 @@ var file_btdemo_proto_goTypes = []any{
 	(*SelfInfo)(nil),      // 22: btdemo.SelfInfo
 	(*Sync)(nil),          // 23: btdemo.Sync
 	(*AiNode)(nil),        // 24: btdemo.AiNode
-	(*AiTick)(nil),        // 25: btdemo.AiTick
-	(*KeyValue)(nil),      // 26: btdemo.KeyValue
-	(*AiTrace)(nil),       // 27: btdemo.AiTrace
-	(*Toast)(nil),         // 28: btdemo.Toast
+	(*AiCheck)(nil),       // 25: btdemo.AiCheck
+	(*AiTreeDef)(nil),     // 26: btdemo.AiTreeDef
+	(*AiTreeNode)(nil),    // 27: btdemo.AiTreeNode
+	(*AiTick)(nil),        // 28: btdemo.AiTick
+	(*KeyValue)(nil),      // 29: btdemo.KeyValue
+	(*AiTrace)(nil),       // 30: btdemo.AiTrace
+	(*Toast)(nil),         // 31: btdemo.Toast
 }
 var file_btdemo_proto_depIdxs = []int32{
 	5,  // 0: btdemo.ClientMsg.move:type_name -> btdemo.Move
@@ -2500,7 +2802,7 @@ var file_btdemo_proto_depIdxs = []int32{
 	14, // 5: btdemo.ServerMsg.enter:type_name -> btdemo.Enter
 	15, // 6: btdemo.ServerMsg.leave:type_name -> btdemo.Leave
 	23, // 7: btdemo.ServerMsg.sync:type_name -> btdemo.Sync
-	28, // 8: btdemo.ServerMsg.toast:type_name -> btdemo.Toast
+	31, // 8: btdemo.ServerMsg.toast:type_name -> btdemo.Toast
 	10, // 9: btdemo.Welcome.skills:type_name -> btdemo.SkillInfo
 	12, // 10: btdemo.Welcome.obstacles:type_name -> btdemo.Obstacle
 	0,  // 11: btdemo.Obstacle.shape:type_name -> btdemo.ObstacleShape
@@ -2514,16 +2816,20 @@ var file_btdemo_proto_depIdxs = []int32{
 	16, // 19: btdemo.Sync.ents:type_name -> btdemo.EntityState
 	17, // 20: btdemo.Sync.ev:type_name -> btdemo.Event
 	22, // 21: btdemo.Sync.self:type_name -> btdemo.SelfInfo
-	27, // 22: btdemo.Sync.ai:type_name -> btdemo.AiTrace
+	30, // 22: btdemo.Sync.ai:type_name -> btdemo.AiTrace
 	3,  // 23: btdemo.AiNode.status:type_name -> btdemo.AiStatus
-	24, // 24: btdemo.AiTick.nodes:type_name -> btdemo.AiNode
-	25, // 25: btdemo.AiTrace.ticks:type_name -> btdemo.AiTick
-	26, // 26: btdemo.AiTrace.blackboard:type_name -> btdemo.KeyValue
-	27, // [27:27] is the sub-list for method output_type
-	27, // [27:27] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	25, // 24: btdemo.AiNode.checks:type_name -> btdemo.AiCheck
+	27, // 25: btdemo.AiTreeDef.nodes:type_name -> btdemo.AiTreeNode
+	29, // 26: btdemo.AiTreeNode.props:type_name -> btdemo.KeyValue
+	24, // 27: btdemo.AiTick.nodes:type_name -> btdemo.AiNode
+	28, // 28: btdemo.AiTrace.ticks:type_name -> btdemo.AiTick
+	29, // 29: btdemo.AiTrace.blackboard:type_name -> btdemo.KeyValue
+	26, // 30: btdemo.AiTrace.def:type_name -> btdemo.AiTreeDef
+	31, // [31:31] is the sub-list for method output_type
+	31, // [31:31] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_btdemo_proto_init() }
@@ -2550,7 +2856,7 @@ func file_btdemo_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_btdemo_proto_rawDesc), len(file_btdemo_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   25,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

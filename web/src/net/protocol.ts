@@ -6,7 +6,7 @@
 
 import { btdemo } from './pb';
 import type {
-  AiTrace, ClientMessage, EntityInfo, GameEvent, Obstacle, SelfInfo, ServerMessage,
+  AiTrace, AiTreeDef, AiTreeNode, ClientMessage, EntityInfo, GameEvent, Obstacle, SelfInfo, ServerMessage,
 } from './types';
 
 const EVENT_KIND: Record<string, GameEvent['k']> = {
@@ -56,11 +56,26 @@ function aiTrace(a: any): AiTrace {
       time: t.time,
       nodes: (t.nodes || []).map((n: any) => ({
         ...n, status: String(n.status || 'FAILURE').toLowerCase(), notes: n.notes || [],
+        checks: (n.checks || []).map((c: any) => ({ node: c.node, pass: !!c.pass, why: c.why || '' })),
+        fresh: !!n.fresh, why: n.why || [],
       })),
     })),
     bb: a.blackboard || [],
     path: a.path || [],   // 从实体当前位置开始的路径点，x、y 交替
+    def: a.def ? treeDef(a.def) : null,
   };
+}
+
+function treeDef(d: any): AiTreeDef {
+  const nodes = new Map<number, AiTreeNode>();
+  for (const n of d.nodes || []) {
+    nodes.set(n.id, {
+      id: n.id, kind: n.kind, subType: n.subType, label: n.label || '', props: n.props || [],
+      children: n.children || [], decorators: n.decorators || [], services: n.services || [],
+      inverse: !!n.inverse, periodic: !!n.periodic, interval: n.interval || 0,
+    });
+  }
+  return { root: d.root, nodes };
 }
 
 function self(s: any): SelfInfo {

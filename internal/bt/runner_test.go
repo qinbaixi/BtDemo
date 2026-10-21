@@ -235,3 +235,35 @@ func TestTraceRecordsVisitedNodes(t *testing.T) {
 		}
 	}
 }
+
+func TestTraceRecordsChecksAndExplanations(t *testing.T) {
+	tr := load(t, map[int]map[string]any{
+		1: entry(1, "composite", "selector", "children", []int{3, 4}),
+		2: entry(2, "decorator", "flag", "inverse_check_condition", true),
+		3: entry(3, "task", "ok", "decorators", []int{2}, "properties", map[string]any{}),
+		4: entry(4, "task", "walk", "properties", map[string]any{}),
+	})
+	reg := newReg()
+	reg.Condition("flag", func(c *Ctx) bool { c.Explain("flag=%v", c.Agent.(*agent).cond); return c.Agent.(*agent).cond })
+	reg.Task("walk", func(c *Ctx) Status { c.Explain("walking"); return Running })
+	a := newAgent()
+	a.cond = true
+	in := NewInstance(tr, reg, a, rand.New(rand.NewSource(1)))
+	in.Tracing = true
+	in.Tick(0)
+	// 条件本身为真，取反后不通过；依据记在这次检查上
+	ck := in.Trace[1].Checks
+	if len(ck) != 1 || ck[0].Node.ID != 2 || ck[0].Pass || ck[0].Why != "flag=true" {
+		t.Fatalf("checks %+v", ck)
+	}
+	if w := in.Trace[2].Why; len(w) != 1 || w[0] != "walking" || !in.Trace[2].Fresh {
+		t.Fatalf("task step %+v", in.Trace[2])
+	}
+	in.Tick(1)
+	if in.Trace[2].Fresh {
+		t.Fatal("running task should not be fresh on the second tick")
+	}
+	// 不追踪时 Explain 什么都不做
+	in.Tracing = false
+	in.Tick(2)
+}

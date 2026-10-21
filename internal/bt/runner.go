@@ -1,6 +1,9 @@
 package bt
 
-import "math/rand"
+import (
+	"fmt"
+	"math/rand"
+)
 
 // Status 是节点执行一次 tick 的结果。
 type Status int
@@ -59,6 +62,37 @@ type Ctx struct {
 	Fresh bool
 	Mem   map[string]any
 	inst  *Instance
+	step  int // 追踪时本节点对应的追踪步骤下标，不追踪时为 -1
+	check int // 正在检查的条件装饰器在 Checks 里的下标，不是条件时为 -1
+}
+
+// Tracing 表示是否在记录调试追踪；为 false 时处理函数不必拼说明文字。
+func (c *Ctx) Tracing() bool { return c.step >= 0 }
+
+// Explain 为调试面板记下一句判断依据，例如“距离 85 > 60”。只在追踪时生效：
+// 条件里调用时写到这次条件检查上，任务和服务里调用时写到节点的说明里。
+func (c *Ctx) Explain(format string, args ...any) {
+	if c.step < 0 {
+		return
+	}
+	text := fmt.Sprintf(format, args...)
+	st := &c.inst.Trace[c.step]
+	switch {
+	case c.check >= 0:
+		ck := &st.Checks[c.check]
+		ck.Why = joinWhy(ck.Why, text)
+	case c.Node.Kind == KindService:
+		st.Notes = append(st.Notes, "service:"+c.Node.SubType+" "+text)
+	default:
+		st.Why = append(st.Why, text)
+	}
+}
+
+func joinWhy(a, b string) string {
+	if a == "" {
+		return b
+	}
+	return a + "；" + b
 }
 
 // Blackboard 返回该实例的黑板。
@@ -122,8 +156,22 @@ type TraceStep struct {
 	Depth  int
 	Status Status
 	// Note 说明结果的原因：节点被条件或冷却时间阻止时为 "blocked:<decorator>"，
-	// 结果装饰器改变结果时为 "<decorator>"，每个被触发的服务为 "service:<sub_type>"。
+	// 结果装饰器改变结果时为 "<decorator>"，每个被触发的服务为 "service:<sub_type>"
+	// （服务调用了 Explain 时后面跟一个空格和说明）。
 	Notes []string
+	// Fresh 表示节点本次是新进入的；为 false 时是接着上一帧继续运行，只复查 periodic 条件。
+	Fresh bool
+	// Checks 是本次检查过的条件装饰器（含冷却）及结果，按检查顺序。
+	Checks []Check
+	// Why 是任务通过 Explain 写下的说明。
+	Why []string
+}
+
+// Check 是一次条件装饰器检查。
+type Check struct {
+	Node *Node
+	Pass bool   // 已算上 inverse
+	Why  string // 条件或冷却给出的判断依据
 }
 
 // Tick 在时刻 now（秒）运行一次整棵树。
@@ -156,8 +204,8 @@ func (in *Instance) memOf(n *Node) (*nodeMem, bool) {
 	return m, fresh
 }
 
-func (in *Instance) ctx(n *Node, fresh bool, m *nodeMem) *Ctx {
-	return &Ctx{Agent: in.Agent, Now: in.now, Node: n, Fresh: fresh, Mem: m.data, inst: in}
+func (in *Instance) ctx(n *Node, fresh bool, m *nodeMem, step int) *Ctx {
+	return &Ctx{Agent: in.Agent, Now: in.now, Node: n, Fresh: fresh, Mem: m.data, inst: in, step: step, check: -1}
 }
 
 func (in *Instance) run(n *Node) Status {
@@ -166,7 +214,7 @@ func (in *Instance) run(n *Node) Status {
 	step := -1
 	if in.Tracing {
 		step = len(in.Trace)
-		in.Trace = append(in.Trace, TraceStep{Node: n, Depth: in.depth})
+		in.Trace = append(in.Trace, TraceStep{Node: n, Depth: in.depth, Fresh: fresh})
 		in.depth++
 		defer func() { in.depth-- }()
 	}
@@ -181,7 +229,7 @@ func (in *Instance) run(n *Node) Status {
 		if !fresh && !d.Periodic {
 			continue
 		}
-		if !in.checkDecorator(d) {
+		if !in.checkDecorator(d, step) {
 			m.lastRunning = -1
 			in.note(step, "blocked:"+d.SubType)
 			return done(in.applyResultDecorators(n, Failure, step))
@@ -199,8 +247,15 @@ func (in *Instance) run(n *Node) Status {
 			if in.serviceMem[s.ID] == nil {
 				in.serviceMem[s.ID] = map[string]any{}
 			}
-			in.Reg.services[s.SubType](&Ctx{Agent: in.Agent, Now: in.now, Node: s, Mem: in.serviceMem[s.ID], inst: in})
-			in.note(step, "service:"+s.SubType)
+			before := 0
+			if step >= 0 {
+				before = len(in.Trace[step].Notes)
+			}
+			in.Reg.services[s.SubType](&Ctx{Agent: in.Agent, Now: in.now, Node: s, Mem: in.serviceMem[s.ID], inst: in, step: step, check: -1})
+			// 服务没写说明时也记一笔“触发过”
+			if step >= 0 && len(in.Trace[step].Notes) == before {
+				in.note(step, "service:"+s.SubType)
+			}
 		}
 		in.serviceNext[s.ID] = next
 	}
@@ -209,7 +264,7 @@ func (in *Instance) run(n *Node) Status {
 	if n.Kind == KindComposite {
 		st = composites[n.SubType](in, n, m)
 	} else {
-		st = in.Reg.tasks[n.SubType](in.ctx(n, fresh, m))
+		st = in.Reg.tasks[n.SubType](in.ctx(n, fresh, m, step))
 		in.Active = n.SubType
 	}
 
@@ -239,15 +294,35 @@ func (in *Instance) applyResultDecorators(n *Node, st Status, step int) Status {
 	return st
 }
 
-func (in *Instance) checkDecorator(d *Node) bool {
+// checkDecorator 检查一个条件装饰器（或冷却）；追踪时把结果和依据记到 step 的 Checks 里。
+func (in *Instance) checkDecorator(d *Node, step int) bool {
 	switch d.SubType {
-	case "cooldown":
-		return in.now >= in.cooldowns[d.ID]
 	case "invert", "force_success":
 		return true
 	}
-	ok := in.Reg.conditions[d.SubType](&Ctx{Agent: in.Agent, Now: in.now, Node: d, inst: in})
-	return ok != d.Inverse
+	ck := -1
+	if step >= 0 {
+		ck = len(in.Trace[step].Checks)
+		in.Trace[step].Checks = append(in.Trace[step].Checks, Check{Node: d})
+	}
+	var ok bool
+	if d.SubType == "cooldown" {
+		ready := in.cooldowns[d.ID]
+		ok = in.now >= ready
+		if ck >= 0 {
+			if ok {
+				in.Trace[step].Checks[ck].Why = "冷却完毕"
+			} else {
+				in.Trace[step].Checks[ck].Why = fmt.Sprintf("冷却中，还剩 %.1fs", ready-in.now)
+			}
+		}
+	} else {
+		ok = in.Reg.conditions[d.SubType](&Ctx{Agent: in.Agent, Now: in.now, Node: d, inst: in, step: step, check: ck}) != d.Inverse
+	}
+	if ck >= 0 {
+		in.Trace[step].Checks[ck].Pass = ok
+	}
+	return ok
 }
 
 func applyDecorator(in *Instance, d *Node, st Status) Status {

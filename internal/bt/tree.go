@@ -26,6 +26,7 @@ type Node struct {
 	ID         int
 	Kind       Kind
 	SubType    string
+	Label      string // 编辑器里给节点起的名字，只用于调试显示，可以为空
 	Props      map[string]any
 	Children   []*Node
 	Decorators []*Node

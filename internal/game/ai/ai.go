@@ -11,6 +11,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/combat"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/game/move"
+	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
 // System 持有行为树和节点处理器。
@@ -20,7 +21,8 @@ type System struct {
 	move   *move.System
 	reg    *bt.Registry
 	trees  map[string]*bt.Tree
-	labels map[*bt.Node]string // 追踪标签，首次使用时构建
+	labels map[*bt.Node]string        // 追踪标签，首次使用时构建
+	defs   map[*bt.Tree]*pb.AiTreeDef // 发给调试面板的树结构，首次使用时构建
 }
 
 // New 加载所有导出的行为树，检查每棵树用到的节点类型都有对应的处理器，
@@ -31,6 +33,7 @@ func New(s *core.State, cb *combat.System, mv *move.System) (*System, error) {
 		reg:    bt.NewRegistry(),
 		trees:  map[string]*bt.Tree{},
 		labels: map[*bt.Node]string{},
+		defs:   map[*bt.Tree]*pb.AiTreeDef{},
 	}
 	a.register()
 	for name, exp := range trees.All {
@@ -40,6 +43,11 @@ func New(s *core.State, cb *combat.System, mv *move.System) (*System, error) {
 		}
 		if err := t.Validate(a.reg); err != nil {
 			return nil, err
+		}
+		for id, l := range exp.Labels {
+			if n := t.Nodes[id]; n != nil {
+				n.Label = l
+			}
 		}
 		a.trees[name] = t
 	}

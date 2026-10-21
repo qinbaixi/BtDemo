@@ -68,7 +68,8 @@ web/
       scenery.ts        地表、场景物件、环境光源（Canvas 2D 生成贴图）
     ui/
       hud.ts            自己 / 目标面板、技能栏、死亡遮罩、提示条、连接状态
-      debug.ts          调试抽屉：AI 决策追踪
+      debug.ts          调试抽屉：标签页、跟随选中目标、向服务端要追踪
+      debug-ai.ts       AI 决策页：整棵行为树（可折叠）叠加每帧结果和判断依据，暂停后逐帧回看，节点详情
       debug-proto.ts    调试抽屉：协议收发列表
     styles/             CSS，由 main.ts 引入
 ```

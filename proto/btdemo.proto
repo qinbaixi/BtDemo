@@ -225,7 +225,39 @@ message AiNode {
   required string kind = 3;     // composite | task
   required string name = 4;     // sub_type plus its properties, e.g. "cast_skill Slot=1"
   required AiStatus status = 5;
-  repeated string notes = 6;    // blocked:<decorator>, <decorator> (changed the result), service:<name>
+  repeated string notes = 6;    // blocked:<decorator>, <decorator> (changed the result), service:<name>[ <why>]
+  repeated AiCheck checks = 7;  // condition decorators (and cooldowns) checked this tick, in order
+  optional bool fresh = 8;      // entered this tick; false = still running from the last tick (only periodic conditions re-checked)
+  repeated string why = 9;      // what the task saw, e.g. "distance 85 > 60"
+}
+
+// AiCheck is one condition decorator check on a visited node.
+message AiCheck {
+  required int32 node = 1;      // decorator node id
+  required bool pass = 2;       // after inverse
+  optional string why = 3;
+}
+
+// AiTreeDef is the whole tree of the watched entity, sent with the first
+// trace after a watch starts (and when the tree changes) so the debug panel
+// can draw every node, visited or not.
+message AiTreeDef {
+  required int32 root = 1;
+  repeated AiTreeNode nodes = 2;
+}
+
+message AiTreeNode {
+  required int32 id = 1;
+  required string kind = 2;      // composite | task | decorator | service
+  required string sub_type = 3;
+  repeated KeyValue props = 4;
+  repeated int32 children = 5;
+  repeated int32 decorators = 6;
+  repeated int32 services = 7;
+  optional bool inverse = 8;     // decorator: inverse_check_condition
+  optional bool periodic = 9;    // decorator: re-checked while the node runs
+  optional float interval = 10;  // service: seconds between ticks
+  optional string label = 11;    // the name given in the editor, if any
 }
 
 enum AiStatus {
@@ -251,6 +283,7 @@ message AiTrace {
   repeated AiTick ticks = 3;
   repeated KeyValue blackboard = 4;  // blackboard plus a few agent fields
   repeated float path = 5;           // x, y pairs: the route the entity is walking, from its position
+  optional AiTreeDef def = 6;        // the tree's structure, when the session has not had it yet
 }
 
 message Toast {

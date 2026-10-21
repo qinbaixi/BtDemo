@@ -4,9 +4,9 @@ package trees
 
 // All 把每棵导出的树按文件名（不含 .json）映射到它的数据。
 var All = map[string]Exported{
-	"monster_boss":   {RootID: MonsterBossRootID, Nodes: MonsterBossNodes},
-	"monster_melee":  {RootID: MonsterMeleeRootID, Nodes: MonsterMeleeNodes},
-	"monster_ranged": {RootID: MonsterRangedRootID, Nodes: MonsterRangedNodes},
-	"npc_guard":      {RootID: NpcGuardRootID, Nodes: NpcGuardNodes},
-	"npc_villager":   {RootID: NpcVillagerRootID, Nodes: NpcVillagerNodes},
+	"monster_boss":   {RootID: MonsterBossRootID, Nodes: MonsterBossNodes, Labels: map[int]string{1: "首领", 2: "刷新仇恨", 4: "脱战回家", 9: "战斗", 12: "狂暴", 13: "狂暴", 16: "旋风斩", 18: "普攻", 19: "追击", 20: "待机"}},
+	"monster_melee":  {RootID: MonsterMeleeRootID, Nodes: MonsterMeleeNodes, Labels: map[int]string{1: "近战怪物", 2: "刷新仇恨", 4: "脱战回家", 9: "战斗", 11: "重击", 13: "普攻", 14: "追击", 15: "闲逛"}},
+	"monster_ranged": {RootID: MonsterRangedRootID, Nodes: MonsterRangedNodes, Labels: map[int]string{1: "远程怪物", 2: "刷新仇恨", 4: "脱战回家", 8: "战斗", 11: "拉开距离", 13: "射击", 14: "靠近", 15: "闲逛"}},
+	"npc_guard":      {RootID: NpcGuardRootID, Nodes: NpcGuardNodes, Labels: map[int]string{1: "守卫", 2: "警戒", 4: "自我治疗", 6: "回岗", 10: "战斗", 12: "攻击", 14: "巡逻", 17: "说话冷却中也继续执行后面的节点"}},
+	"npc_villager":   {RootID: NpcVillagerRootID, Nodes: NpcVillagerNodes, Labels: map[int]string{1: "村民", 3: "逃跑", 5: "说话冷却中也继续执行后面的节点", 9: "回家", 11: "日常", 12: "散步", 15: "闲聊", 18: "提醒"}},
 }

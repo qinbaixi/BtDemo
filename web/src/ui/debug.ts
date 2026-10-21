@@ -4,10 +4,8 @@
 
 import { createProtoPanel } from './debug-proto';
 import type { ClientEntity } from '../game/state';
-import type { AiNode, AiTrace, ClientMessage } from '../net/types';
-
-const LOG_CAP = 300;
-const STATUS_TEXT = { success: '成功', failure: '失败', running: '运行中' };
+import { createAiPanel } from './debug-ai';
+import type { AiTrace, ClientMessage } from '../net/types';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string | null, text?: string | null): HTMLElementTagNameMap[K] {
   const n = document.createElement(tag);
@@ -15,38 +13,6 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string | null, 
   if (text != null) n.textContent = text;
   return n;
 }
-
-// noteText turns a trace note from the server into a short label.
-function noteText(n: string) {
-  if (n.startsWith('blocked:')) return `条件未过 ${n.slice(8)}`;
-  if (n.startsWith('service:')) return `服务 ${n.slice(8)}`;
-  return `装饰 ${n}`;
-}
-
-// decision picks what a tick "decided": the last task visited that did not
-// fail, with the chain of composites above it.
-function decision(nodes: AiNode[]) {
-  let leaf = -1;
-  for (let i = nodes.length - 1; i >= 0; i--) {
-    if (nodes[i].kind === 'task' && nodes[i].status !== 'failure') { leaf = i; break; }
-  }
-  if (leaf < 0) return null;
-  const path = [nodes[leaf]];
-  let depth = nodes[leaf].depth;
-  for (let i = leaf - 1; i >= 0 && depth > 0; i--) {
-    if (nodes[i].depth === depth - 1) { path.unshift(nodes[i]); depth--; }
-  }
-  // branches that were tried first and turned down, with the reason
-  const skipped = [];
-  for (let i = 0; i < leaf; i++) {
-    const n = nodes[i];
-    const why = n.notes.find((x) => x.startsWith('blocked:'));
-    if (n.status === 'failure' && why) skipped.push(`${short(n.name)}（${noteText(why)}）`);
-  }
-  return { leaf: nodes[leaf], path, skipped };
-}
-
-const short = (name: string) => name.split(' ')[0];
 
 /**
  * createDebug builds the drawer.
@@ -68,11 +34,10 @@ export function createDebug({ send, entity }: {
   let tab = 'ai';
   let target = 0;        // the selected entity
   let watching = 0;      // what the server was last asked to trace
-  let traceId = 0;       // entity of the log below
-  let lastSig = '';
-  let paused = false;
+  let traceId = 0;       // entity the panel is showing
   let traceAt = 0;       // when the last trace arrived
   let stale = false;
+  let defAskedAt = 0;
 
   // ---- AI tab layout ----
   const ai = bodies.ai;
@@ -80,27 +45,15 @@ export function createDebug({ send, entity }: {
   const title = el('div', 'dbg-title', '未选择目标');
   const sub = el('div', 'dbg-sub', '点击一个怪物或 NPC 查看它的行为树决策');
   head.append(title, sub);
-  const nowBox = el('div', 'dbg-section');
-  const nowTitle = el('h5', null, '当前帧');
-  const tree = el('div', 'dbg-tree');
-  nowBox.append(nowTitle, tree);
-  const bbBox = el('div', 'dbg-section');
-  const bb = el('div', 'dbg-bb');
-  bbBox.append(el('h5', null, '黑板与状态'), bb);
-  const logBox = el('div', 'dbg-section dbg-logbox');
-  const logBar = el('div', 'dbg-logbar');
-  const pauseBtn = el('button', 'dbg-btn', '暂停');
-  const clearBtn = el('button', 'dbg-btn', '清空');
-  logBar.append(el('h5', null, '决策日志'), pauseBtn, clearBtn);
-  const log = el('div', 'dbg-log');
-  logBox.append(logBar, log);
-  ai.append(head, nowBox, bbBox, logBox);
-
-  pauseBtn.addEventListener('click', () => {
-    paused = !paused;
-    pauseBtn.textContent = paused ? '继续' : '暂停';
+  ai.append(head);
+  const panel = createAiPanel(ai, sub, () => {
+    // 缺树结构（比如断线重连）：重新发一次 watch，服务端会附上结构
+    const now = performance.now();
+    if (watching && now - defAskedAt > 2000) {
+      defAskedAt = now;
+      send({ t: 'watch', id: watching });
+    }
   });
-  clearBtn.addEventListener('click', () => { log.replaceChildren(); lastSig = ''; });
 
   tabs.addEventListener('click', (ev) => {
     const b = (ev.target as Element).closest('button');
@@ -148,35 +101,6 @@ export function createDebug({ send, entity }: {
     title.textContent = `${e.name} #${e.id} · Lv${e.lv}${e.dead ? ' · 已阵亡' : ''}`;
   }
 
-  function renderTick(trace, tick) {
-    sub.textContent = `行为树 ${trace.tree} · ${tick.time.toFixed(1)}s`;
-    nowTitle.textContent = `当前帧（访问 ${tick.nodes.length} 个节点）`;
-    tree.replaceChildren(...tick.nodes.map((n) => {
-      const row = el('div', `dbg-node st-${n.status}`);
-      row.style.paddingLeft = `${6 + n.depth * 14}px`;
-      row.append(el('span', 'dot'), el('span', `nm ${n.kind}`, n.name));
-      for (const x of n.notes) row.append(el('span', 'tag', noteText(x)));
-      row.title = `#${n.node} ${STATUS_TEXT[n.status] || n.status}`;
-      return row;
-    }));
-    bb.replaceChildren(...trace.bb.flatMap((kv) => [el('span', 'k', kv.key), el('span', 'v', kv.value)]));
-  }
-
-  function appendLog(tick, d) {
-    const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 30;
-    const row = el('div', `dbg-line st-${d.leaf.status}`);
-    row.append(
-      el('span', 't', tick.time.toFixed(1)),
-      el('span', 'p', d.path.map((n) => short(n.name)).join(' › ')),
-      el('span', 's', STATUS_TEXT[d.leaf.status] || d.leaf.status),
-    );
-    if (d.leaf.name.includes(' ')) row.append(el('div', 'args', d.leaf.name));
-    if (d.skipped.length) row.append(el('div', 'skip', '跳过：' + d.skipped.join('，')));
-    log.append(row);
-    while (log.childElementCount > LOG_CAP) log.firstElementChild.remove();
-    if (nearBottom) log.scrollTop = log.scrollHeight;
-  }
-
   return {
     toggle,
 
@@ -184,10 +108,7 @@ export function createDebug({ send, entity }: {
     // left the AOI or is dead (dead entities do not run their tree).
     update(now) {
       const quiet = watching !== 0 && now - traceAt > 1200;
-      if (quiet && !stale) {
-        sub.textContent = '不在视野内或已阵亡，暂无决策数据';
-        tree.replaceChildren();
-      }
+      if (quiet && !stale) panel.stale();
       stale = quiet;
     },
     get open() { return open; },
@@ -214,23 +135,10 @@ export function createDebug({ send, entity }: {
       if (t.ticks.length) traceAt = performance.now();   // dead entities send no ticks
       if (t.id !== traceId) {
         traceId = t.id;
-        lastSig = '';
-        log.replaceChildren();
+        panel.clear();
       }
       renderHead();
-      if (!t.ticks.length) return;
-      if (open && tab === 'ai') renderTick(t, t.ticks[t.ticks.length - 1]);
-      if (paused) return;
-      for (const tick of t.ticks) {
-        const d = decision(tick.nodes);
-        if (!d) continue;
-        // a task re-runs every tick (running, then success, then again);
-        // log it once until the tree picks a different branch
-        const sig = d.path.map((n) => n.node).join('/');
-        if (sig === lastSig) continue;
-        lastSig = sig;
-        appendLog(tick, d);
-      }
+      panel.trace(t);
     },
   };
 }

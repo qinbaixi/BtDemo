@@ -342,6 +342,7 @@ function gait(q, stride = 0.62) {
 // boots, body), proportions and part painters:
 //   back(ctx, q, B)            behind everything (capes, quivers)
 //   offhand(ctx, q, B, hand)   far arm's hand (shields, bows)
+//   offhandFront               draw offhand in front of the torso (a shield held up)
 //   torso(ctx, q, B)           over the torso
 //   head(ctx, q, B)            head and headgear, drawn at (B.hx, B.hy)
 //   arms(q, g)                 override [far, near] arm angles, e.g. for attacks
@@ -409,7 +410,7 @@ function humanoid(ctx, q, o) {
   cel(ctx, (c) => pTaper(c, -B.sw + 2.5, B.sy + 2, A0.kx, A0.ky, armW, armW * 0.85), sleeve0, { sd: 1.2, lw: 1.3 });
   cel(ctx, (c) => pTaper(c, A0.kx, A0.ky, A0.ex, A0.ey, armW * 0.85, armW * 0.8), shade(o.forearm || o.skin, -0.2), { sd: 1.2, lw: 1.3 });
   flat(ctx, (c) => pEll(c, A0.ex, A0.ey, 2.4, 2.4), shade(o.hand || o.skin, -0.2), 1.2);
-  if (o.offhand) o.offhand(ctx, q, B, { x: A0.ex, y: A0.ey });
+  if (o.offhand && !o.offhandFront) o.offhand(ctx, q, B, { x: A0.ex, y: A0.ey });
 
   ctx.restore();
   drawLeg(L1, 2.2, o.legs, o.boots);
@@ -449,6 +450,9 @@ function humanoid(ctx, q, o) {
   o.head(ctx, q, B);
   ctx.restore();
 
+  // 盾牌举在身前时，画在身体和头之后、近侧手臂之前
+  if (o.offhand && o.offhandFront) o.offhand(ctx, q, B, { x: A0.ex, y: A0.ey });
+
   // near arm and weapon
   const A1 = joint(B.sw - 2.5, B.sy + 2, arms[1][0], upper, arms[1][0] + arms[1][1], fore);
   cel(ctx, (c) => pTaper(c, B.sw - 2.5, B.sy + 2, A1.kx, A1.ky, armW + 0.3, armW * 0.9), o.sleeve || o.body, { sd: 1.4, lw: 1.3 });
@@ -478,7 +482,12 @@ const KNIGHT_STRUCK = 1.25;
 
 function knightArms(q, g) {
   const ph = q.ph;
-  if (!ph) return [g.arms[0], [g.arms[1][0] * 0.6 + 0.5, -0.9 + g.arms[1][1] * 0.3]];
+  if (!ph && q.dead >= 0) return [g.arms[0], [g.arms[1][0] * 0.6 + 0.5, -0.9 + g.arms[1][1] * 0.3]];
+  if (!ph) {
+    // 持盾在前、剑尖朝前下方：一眼就能看出朝哪边（盾和剑都在身后时容易看成背对）
+    const sw = q.moving ? Math.sin(q.walk || 0) * 0.12 : g.breathe * 0.03;
+    return [[0.6 + sw, 0.5], [0.3 - sw, 0.7]];
+  }
   // overhead wind-up, a wide downward cut, then settle
   const up = arc3(ph, 0.5, KNIGHT_WOUND, KNIGHT_STRUCK);
   const el = arc3(ph, -0.9, -0.6, -0.15);
@@ -513,9 +522,10 @@ function drawKnight(ctx, q) {
       ], 'rgba(10,6,24,0.45)', 0.9);
       line(ctx, [-B.sw - 5 - run - sway, B.hipY + 12, -B.sw - 1 - run * 0.6 - sway * 0.5, B.hipY + 9, -B.sw + 2 - run * 0.4, B.hipY + 13], gold, 0.9);
     },
+    offhandFront: true,
     offhand(ctx, q, B, hand) {
       // round shield with a gold sunburst boss
-      const x = hand.x - 2.5;
+      const x = hand.x + 0.5;
       const y = hand.y - 5;
       cel(ctx, (c) => pEll(c, x, y, 7.2, 9), shade(color, -0.3), { sd: 2.2 });
       ctx.strokeStyle = gold;

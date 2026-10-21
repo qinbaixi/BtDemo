@@ -56,6 +56,7 @@ export interface FloatOpts { rise?: number; pop?: boolean }
 
 export interface State {
   myId: number;
+  moveDx: number;     // 自己当前按住的左右方向（-1、0、1），朝向以它为准
   map: { w: number; h: number };
   cell: number;
   skills: SkillInfo[];
@@ -91,6 +92,7 @@ export interface State {
 
 export const state: State = {
   myId: 0,
+  moveDx: 0,
   map: { w: 2400, h: 1600 },
   cell: 320,
   skills: [],

@@ -13,4 +13,5 @@ package trees
 type Exported struct {
 	RootID int
 	Nodes  map[int]map[string]any
+	Labels map[int]string // 节点 id -> 编辑器里起的名字（取自导出文件的注释），调试面板显示用
 }
