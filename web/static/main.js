@@ -781,7 +781,17 @@ function drawEntity(e, p, now) {
     isSelf,
   };
   if (state.hq) drawInked(ctx, e.model, pose, state.dpr, RIM[e.kind], e.ink || (e.ink = {}), now);
-  else drawModelPlain(ctx, e.model, { ...pose, bare: true });
+  else {
+    drawModelPlain(ctx, e.model, { ...pose, bare: true });
+    if (pose.dead < 0 && pose.hit >= 0 && pose.hit < 0.35) {
+      // cheap hit flash for low quality: the model again, added on top
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.5 * (1 - pose.hit / 0.35);
+      drawModelPlain(ctx, e.model, { ...pose, bare: true });
+      ctx.restore();
+    }
+  }
 }
 
 // drawLabels draws name, level, HP bar, behaviour and aggro mark over a head.
