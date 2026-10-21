@@ -16,17 +16,6 @@ export interface SkillInfo {
   fx?: string;
 }
 
-export interface MapProp {
-  kind: string;
-  x: number;
-  y: number;
-  s?: number;
-  variant?: number;
-  flip?: boolean;
-  dx?: number;
-  dy?: number;
-}
-
 export interface Obstacle {
   shape: 'circle' | 'rect' | 'capsule';
   ax: number;
@@ -128,7 +117,6 @@ export interface WelcomeMsg {
   map: { w: number; h: number };
   aoi: { cell: number };
   skills: SkillInfo[];
-  props: MapProp[];
   obstacles: Obstacle[];
 }
 export interface EnterMsg { t: 'enter'; ents: EntityInfo[] }

@@ -69,7 +69,7 @@ export interface State {
   hoverSlot: number;
   showAOI: boolean;
   fx: FX | null;
-  scenery: Scenery | null;        // 地表和物件，收到 welcome 时按地图生成
+  scenery: Scenery | null;        // 地表和物件，收到 welcome 后按 /map.tmj 生成
   sceneKey: string;
   obstacles: Obstacle[];
   aiPath: { id: number; pts: number[]; at: number } | null;

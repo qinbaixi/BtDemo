@@ -1,7 +1,10 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -33,6 +36,18 @@ func TestWebSocketProtocol(t *testing.T) {
 
 	srv := httptest.NewServer(Handler(w, fstest.MapFS{"index.html": {Data: []byte("x")}}))
 	defer srv.Close()
+
+	// 浏览器读到的地图和服务端加载的是同一份
+	res, err := http.Get(srv.URL + "/map.tmj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK || !bytes.Equal(body, cfg.Layout.Source) || len(body) == 0 {
+		t.Fatalf("/map.tmj: status %d, %d bytes", res.StatusCode, len(body))
+	}
+
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/ws", nil)
 	if err != nil {
 		t.Fatal(err)

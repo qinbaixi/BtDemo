@@ -1,0 +1,493 @@
+{
+    "automappingRulesFile": "",
+    "commands": [],
+    "compatibilityVersion": 1100,
+    "extensionsPath": "extensions",
+    "folders": [
+        "."
+    ],
+    "properties": [],
+    "propertyTypes": [
+        {
+            "id": 1,
+            "name": "zone",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffffd060",
+            "drawFill": true,
+            "members": []
+        },
+        {
+            "id": 2,
+            "name": "road",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffc0a080",
+            "drawFill": true,
+            "members": []
+        },
+        {
+            "id": 3,
+            "name": "amphora",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 4,
+            "name": "bones",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 5,
+            "name": "brazier",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 6,
+            "name": "campfire",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 7,
+            "name": "column",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 8,
+            "name": "crypt",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 9,
+            "name": "cypress",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 10,
+            "name": "deadtree",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 11,
+            "name": "house",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 12,
+            "name": "rock",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 13,
+            "name": "stake",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 14,
+            "name": "tent",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 15,
+            "name": "tomb",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ff8080c0",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 16,
+            "name": "totem",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 17,
+            "name": "tree",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 18,
+            "name": "wall",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffd0a040",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 19,
+            "name": "well",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "flip",
+                    "type": "bool",
+                    "value": false
+                },
+                {
+                    "name": "s",
+                    "type": "float",
+                    "value": 1
+                },
+                {
+                    "name": "v",
+                    "type": "int",
+                    "value": 0
+                }
+            ]
+        }
+    ]
+}

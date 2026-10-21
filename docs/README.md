@@ -12,6 +12,7 @@
 | --- | --- | --- |
 | `internal/game/core` | [core：共享数据](modules/core.md) | 实体、组件、实体表、时钟、事件队列，只有数据没有规则 |
 | `internal/game/aoi` | [aoi：九宫格视野](modules/aoi.md) | 谁能看见谁、范围查询 |
+| `config/map.tmj` | [地图：Tiled 编辑与格式](modules/map.md) | 地图文件格式、怎么在 Tiled 里编辑、加新物件 |
 | `internal/game/nav` + `move` | [nav 和 move：碰撞、寻路、移动](modules/nav-move.md) | 地图阻挡、推出滑动、A* 寻路、沿路径走 |
 | `internal/game/attr` + `combat` | [attr 和 combat：属性与战斗](modules/attr-combat.md) | 属性公式、升级、技能、伤害、Buff、死亡 |
 | `internal/bt` + `internal/game/ai` | [bt 和 ai：行为树](modules/ai-bt.md) | 解释 BtTree 导出的树，把节点绑定到游戏代码 |

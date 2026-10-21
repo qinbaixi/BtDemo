@@ -39,14 +39,13 @@ type System struct {
 	nav      *nav.Map
 	sessions map[*Session]bool
 
-	props     []*pb.MapProp // 构建一次，并在每条欢迎消息中发送
-	obstacles []*pb.Obstacle
+	obstacles []*pb.Obstacle // 构建一次，并在每条欢迎消息中发送
 }
 
 // New 创建会话系统。
 func New(s *core.State, grid *aoi.Grid, m *nav.Map, cb *combat.System, a *ai.System, sp *spawn.System) *System {
 	n := &System{s: s, grid: grid, nav: m, combat: cb, ai: a, spawn: sp, sessions: map[*Session]bool{}}
-	n.props, n.obstacles = mapInfo(s.Cfg.Layout, m)
+	n.obstacles = obstacles(m)
 	return n
 }
 
@@ -60,7 +59,6 @@ func (n *System) Join() *Session {
 		MapW:      core.F32(cfg.Map.Width),
 		MapH:      core.F32(cfg.Map.Height),
 		AoiCell:   core.F32(n.grid.Cell),
-		Props:     n.props,
 		Obstacles: n.obstacles,
 	}
 	for i, sk := range s.Player.Skills {

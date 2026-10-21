@@ -7,19 +7,14 @@
 - **nav** 是纯几何，只回答问题：“这里放得下半径 r 的圆吗”“从 A 直线走到 B 会不会撞”“从 A 到 B 怎么绕”。它不知道实体，也不改任何状态。
 - **move** 真正移动实体：玩家按方向键走、怪物沿路径走，并在位置变化后通知 AOI。
 
-## 数据来源：map.yaml
+## 数据来源：map.tmj
 
-```yaml
-shapes:                          # 每种物件的碰撞形状，相对物件脚下的点
-  house:    { rect: [-62, -44, 62, 6] }
-  well:     { circle: [0, -8, 30] }
-  wall:     { capsule: 8 }       # 沿墙段的胶囊体
-props:                           # 每个物件放在哪
-  - { kind: house, x: 720, y: 610, v: 1, flip: true }
-  - { kind: wall, x: 850, y: 704, dx: 19, dy: 70 }
-```
+地图是 Tiled 编辑的 `config/map.tmj`（格式见 [地图](map.md)）。`config` 包解析出：
 
-启动时 `nav.ShapesFromLayout` 把每个物件的形状按位置、缩放、翻转换算成地图坐标下的 `Shape`。同一份数据通过 `Welcome` 消息发给前端，前端按它画场景，所以看到的物件和实际阻挡一致。
+- `Layout.Shapes`：每种物件的碰撞形状（来自地图属性 `shape.house` = `rect -62 -44 62 6` 这样的字符串），相对物件脚下的点；
+- `Layout.Props`：每个物件的种类、位置、缩放、翻转；墙是起点加 `DX/DY` 偏移。
+
+启动时 `nav.ShapesFromLayout` 把每个物件的形状按位置、缩放、翻转换算成地图坐标下的 `Shape`。前端从 `/map.tmj` 下载同一个文件画场景，所以看到的物件和实际阻挡一致。
 
 ## 形状（shape.go）
 
@@ -118,5 +113,5 @@ func (m *System) Tick()               // 每帧：玩家按输入方向走
 
 ## 想改什么去哪
 
-- 加一种物件：`map.yaml` 的 `shapes` 加形状，`props` 里摆放；前端 `web/src/render/scenery.ts` 的 `KINDS` 加画法。只是装饰、不挡路的，形状写 `{}`。
+- 加一种物件：见 [地图](map.md#加一种新物件)。只是装饰、不挡路的，形状写 `none`。
 - 调寻路手感：`move.go` 顶部的 `repathEvery`、`goalMoved`、`stuckSeconds`；网格精度是 `grid.go` 的 `CellSize`。

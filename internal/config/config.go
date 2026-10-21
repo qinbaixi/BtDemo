@@ -115,10 +115,10 @@ type Config struct {
 	Skills    map[string]*Skill
 	Templates map[string]*Template
 	Spawns    []Spawn
-	Layout    Layout // 对应 map.yaml
+	Layout    Layout // 对应 map.tmj
 }
 
-// Load 从 dir 读取 world.yaml、skills.yaml、monsters.yaml 和 map.yaml，并检查每个引用都能解析。
+// Load 从 dir 读取 world.yaml、skills.yaml、monsters.yaml 和 map.tmj，并检查每个引用都能解析。
 // knownTrees 列出编译进二进制文件的行为树。
 func Load(dir string, knownTrees map[string]bool) (*Config, error) {
 	c := &Config{}
@@ -231,9 +231,12 @@ func (c *Config) validate(knownTrees map[string]bool) error {
 			return err
 		}
 	}
-	for i, p := range c.Layout.Props {
+	if l := c.Layout; l.Width != 0 && (l.Width != w.Map.Width || l.Height != w.Map.Height) {
+		return fmt.Errorf("%s is %gx%g but world.yaml map is %gx%g; change one to match", MapFile, l.Width, l.Height, w.Map.Width, w.Map.Height)
+	}
+	for _, p := range c.Layout.Props {
 		if p.X < 0 || p.Y < 0 || p.X > w.Map.Width || p.Y > w.Map.Height {
-			return fmt.Errorf("map.yaml: prop %d (%s) at (%g, %g) is off the %gx%g map", i+1, p.Kind, p.X, p.Y, w.Map.Width, w.Map.Height)
+			return fmt.Errorf("%s: prop %s at (%g, %g) is off the %gx%g map", MapFile, p.Kind, p.X, p.Y, w.Map.Width, w.Map.Height)
 		}
 	}
 	for i, s := range c.Spawns {

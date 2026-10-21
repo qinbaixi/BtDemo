@@ -108,7 +108,7 @@ func (s Shape) bounds(pad float64) (Vec, Vec) {
 	}
 }
 
-// ShapesFromLayout 把 map.yaml 中的场景物件转换为障碍物。没有对应形状的场景物件
+// ShapesFromLayout 把 map.tmj 中的场景物件转换为障碍物。没有对应形状的场景物件
 // 不会阻挡移动。
 func ShapesFromLayout(l config.Layout) []Shape {
 	var out []Shape

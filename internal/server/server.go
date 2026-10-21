@@ -17,13 +17,24 @@ import (
 
 var upgrader = websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 4096}
 
-// Handler 从 static 目录提供静态文件，并在 /ws 提供游戏 socket。
+// Handler 从 static 目录提供静态文件，在 /map.tmj 提供地图，并在 /ws 提供游戏 socket。
 func Handler(w *game.World, static fs.FS) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.FS(static)))
 	mux.HandleFunc("/btdemo.proto", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		rw.Write(btproto.Source)
+	})
+	// 地图文件原样提供给浏览器：前端用它画场景，服务端用同一份做碰撞。
+	mapSrc := w.State.Cfg.Layout.Source
+	mux.HandleFunc("/map.tmj", func(rw http.ResponseWriter, r *http.Request) {
+		if mapSrc == nil {
+			http.NotFound(rw, r)
+			return
+		}
+		rw.Header().Set("Content-Type", "application/json")
+		rw.Header().Set("Cache-Control", "no-cache")
+		rw.Write(mapSrc)
 	})
 	mux.HandleFunc("/ws", func(rw http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(rw, r, nil)

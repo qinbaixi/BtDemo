@@ -51,7 +51,7 @@ internal/game/       World：创建各系统并按顺序驱动 Step（每个系�
   session/           连接会话、输入、AOI 同步与协议转换
 internal/config/     YAML 配置加载与校验
 internal/server/     HTTP 与 WebSocket
-config/              world.yaml（地图、AOI、阵营、玩家）、skills.yaml、monsters.yaml、map.yaml（场景物件与碰撞）
+config/              world.yaml（地图、AOI、阵营、玩家）、skills.yaml、monsters.yaml、map.tmj（Tiled 地图：场景物件与碰撞）
 proto/btdemo.proto   客户端与服务端协议（proto2）
 internal/pb/         protoc 生成的 Go 代码
 web/                 前端（TypeScript + Vite，构建到 web/dist 后由 go:embed 打进二进制），见 docs/modules/frontend.md
@@ -109,12 +109,13 @@ tools/btregistry/    扫描导出文件生成 registry.go
 
 ## 地图碰撞与寻路
 
-`config/map.yaml` 是地图的唯一数据源：
+`config/map.tmj` 是地图的唯一数据源，用 [Tiled](https://www.mapeditor.org) 编辑（打开 `config/btdemo.tiled-project`）：
 
-- `shapes` 按物件种类给出碰撞形状（相对物件脚下的圆 `circle: [x, y, r]`、矩形 `rect: [x0, y0, x1, y1]`，或墙用的胶囊 `capsule: 半径`，从 `(x, y)` 连到 `(x+dx, y+dy)`）；
-- `props` 列出每个物件的种类、位置和缩放 `s`、翻转 `flip`、外观变体 `v`。每个种类都必须在 `shapes` 里列出，写成 `{}` 的种类只是装饰、不挡路；墙段的 `dx`/`dy` 也随 `s` 缩放。启动时会校验种类、数值和物件是否在地图内。
+- `props` 图层摆物件（对象的类是物件种类，属性 `s` 缩放、`v` 外观变体、`flip` 翻转；两点折线是墙）；
+- 地图属性 `shape.<种类>` 给出每种物件的碰撞形状（`circle cx cy r`、`rect x0 y0 x1 y1`、墙用的 `capsule r`，`none` 表示只是装饰）；
+- `zones`、`roads` 图层决定前端怎么画地表（各区域的位置、石板路）。
 
-服务端启动时把它们转成 `internal/game/nav` 的碰撞体，并在 `welcome` 里把物件和碰撞体下发给客户端，客户端按服务端的物件画场景，两边看到的阻挡一致。
+服务端启动时读它、校验，转成 `internal/game/nav` 的碰撞体；浏览器从 `/map.tmj` 下载同一个文件来画场景，两边看到的阻挡一致。格式和编辑方法见 [docs/modules/map.md](docs/modules/map.md)。
 
 - 移动：玩家和怪物按自身半径与碰撞体做推出，贴着墙会沿墙滑动而不是卡住；出生、复活、游荡和逃跑的落点都会挪到最近的空地。
 - 寻路：怪物追击时先做视线检测，看得见就直走；被挡住时在 16px 网格上跑 A*（按单位半径分档膨胀障碍，八方向、不切墙角），再把路径拉直。目标移动超过 24px、每隔 0.75 秒、或卡住 0.4 秒都会重新规划；目标走不到时走到离它最近的可达点。

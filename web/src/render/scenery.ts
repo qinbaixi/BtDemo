@@ -3,16 +3,18 @@
 // depth-sorts together with the characters, plus the light sources that the
 // lighting pass carves out of the dark.
 //
-// Zones follow config/monsters.yaml spawns:
+// 地表按地图（config/map.tmj）里的区域画，区域位置和 config/monsters.yaml 的刷怪点对应：
 //   village   -> a Greek sanctuary: marble plaza with a meander border,
 //                columns, braziers, terracotta houses and amphorae
 //   meadow    -> Elysian fields: warm grass and glowing asphodels
 //   forest    -> a dark cypress grove
 //   graveyard -> Asphodel: slate ground, tombs and blue soul fire
 //   camp      -> Tartarus: scorched earth split by lava cracks
-// The layout comes from a fixed seed, so every client sees the same world.
+// 区域、道路和挡路的物件来自地图文件；草丛等小装饰用固定种子生成，所以每个客户端看到的都一样。
 // The ground is painted once into an offscreen canvas and static props are
 // cached as sprites; only fire, lava and souls animate.
+
+import type { MapData, Pt } from '../game/map';
 
 const TAU = Math.PI * 2;
 const INK = '#0b0710';
@@ -20,22 +22,15 @@ const SPRITE_SCALE = 2;      // sprite resolution relative to world units
 
 /* ------------------------------ layout ------------------------------ */
 
-const ZONES = {
-  village: { x: 540, y: 770 },
-  meadow: { x: 1000, y: 920 },
-  forest: { x: 900, y: 330 },
-  graveyard: { x: 1600, y: 800 },
-  camp: { x: 2050, y: 1300 },
-};
+// 当前地图的区域和道路（createScenery 时从地图数据设置；同一时间只有一个场景）。
+// ZONES 是区域种类 -> 区域中心列表，一种区域可以有多处。
+type Zone = { x: number; y: number };
+let ZONES: Record<'village' | 'meadow' | 'forest' | 'graveyard' | 'camp', Zone[]> = emptyZones();
+let ROADS: Pt[][] = [];
 
-// Flagstone roads linking the zones, as polylines.
-const ROADS = [
-  [[540, 790], [700, 820], [860, 880], [1000, 920]],
-  [[1000, 920], [1180, 880], [1360, 820], [1520, 800]],
-  [[1600, 860], [1700, 1000], [1840, 1140], [1960, 1260]],
-  [[600, 700], [680, 560], [790, 440], [880, 360]],
-  [[100, 760], [260, 780], [420, 790]],
-];
+function emptyZones() {
+  return { village: [], meadow: [], forest: [], graveyard: [], camp: [] };
+}
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -66,18 +61,19 @@ function roadDist(x, y) {
   return best;
 }
 
-const near = (x, y, z, r) => Math.hypot(x - z.x, y - z.y) < r;
+// near：点是否在某一处区域中心的 r 范围内。
+const near = (x, y, zones: Zone[], r) => zones.some((z) => Math.hypot(x - z.x, y - z.y) < r);
 
-// Lava cracks around the Tartarus camp, painted into the ground.
-const LAVA = [];             // [[x, y], ...] polyline points of lava cracks
-{
-  const c = ZONES.camp;
+// 塔尔塔罗斯营地周围的岩浆裂缝（折线），画进地表，也是光源。
+let LAVA: Pt[][] = [];
+function makeLava(): Pt[][] {
+  const out: Pt[][] = [];
   const lr = mulberry32(99);
-  for (let i = 0; i < 7; i++) {
+  for (const c of ZONES.camp) for (let i = 0; i < 7; i++) {
     let a = (i / 7) * TAU + lr() * 0.5;
     let x = c.x + Math.cos(a) * 40;
     let y = c.y + Math.sin(a) * 26;
-    const line = [[x, y]];
+    const line: Pt[] = [[x, y]];
     const steps = 5 + ((lr() * 4) | 0);
     for (let k = 0; k < steps; k++) {
       a += (lr() - 0.5) * 0.9;
@@ -86,20 +82,21 @@ const LAVA = [];             // [[x, y], ...] polyline points of lava cracks
       y += Math.sin(a) * len * 0.62;
       line.push([x, y]);
     }
-    LAVA.push(line);
+    out.push(line);
   }
+  return out;
 }
 
 /* ------------------------------ public ------------------------------ */
 
-// createScenery builds the scene for a mapW×mapH map. mapProps are the props
-// from the server's map.yaml (they block movement, so they must be drawn
-// exactly where the server has them); small decorations are added around them.
-export function createScenery(mapW, mapH, mapProps = [], seed = 20261020) {
-  const blocking = mapProps.map((p) => ({
-    kind: p.kind, x: p.x, y: p.y, s: p.s ?? 1, variant: p.variant || 0, flip: !!p.flip,
-    ...(p.dx || p.dy ? { dx: p.dx || 0, dy: p.dy || 0 } : {}),
-  })).filter((p) => KINDS[p.kind]);
+// createScenery 按地图建场景。地图里的物件服务端也用来挡路，所以必须画在完全相同的位置；
+// 小装饰（草丛、魂火）在它们周围生成。map 为 null 表示没有地图文件：一片空地。
+export function createScenery(mapW: number, mapH: number, map: MapData | null, seed = 20261020) {
+  ZONES = emptyZones();
+  for (const k of Object.keys(ZONES)) ZONES[k] = map?.zones[k] || [];
+  ROADS = map?.roads || [];
+  LAVA = makeLava();
+  const blocking = (map?.props || []).filter((p) => KINDS[p.kind]);
   const of = (kind) => blocking.filter((p) => p.kind === kind);
   const tombs = of('tomb');
   const braziers = of('brazier');
@@ -206,9 +203,10 @@ export function createScenery(mapW, mapH, mapProps = [], seed = 20261020) {
     // drawAmbient adds the animated atmosphere above everything else:
     // graveyard fog, Tartarus embers, Elysian motes and stray souls.
     drawAmbient(ctx, view, time) {
-      const g = ZONES.graveyard;
-      if (Math.abs(g.x - (view.x + view.w / 2)) < view.w / 2 + 400 &&
-          Math.abs(g.y - (view.y + view.h / 2)) < view.h / 2 + 400) {
+      const close = (z: Zone) => Math.abs(z.x - (view.x + view.w / 2)) < view.w / 2 + 400 &&
+        Math.abs(z.y - (view.y + view.h / 2)) < view.h / 2 + 400;
+      for (const g of ZONES.graveyard) {
+        if (!close(g)) continue;
         ctx.save();
         const fog = fogSprite();
         for (let i = 0; i < 9; i++) {
@@ -228,23 +226,23 @@ export function createScenery(mapW, mapH, mapProps = [], seed = 20261020) {
         ctx.globalAlpha = a;
         ctx.drawImage(dotSprite(color), x - size, y - size, size * 2, size * 2);
       };
-      // embers rising out of Tartarus
-      const c = ZONES.camp;
-      for (let i = 0; i < 36; i++) {
+      // 塔尔塔罗斯升起的火星
+      for (const c of ZONES.camp) for (let i = 0; i < 36; i++) {
         const k = ((time / 3200 + i * 0.137) % 1);
         const x = c.x + Math.sin(i * 12.9) * 260 + Math.sin(time / 700 + i) * 10;
         const y = c.y + Math.cos(i * 7.3) * 170 - k * 160;
         mote(x, y, 3 + (i % 3), i % 4 ? '#ff7a2a' : '#ffd27a', (1 - k) * 0.9);
       }
-      // golden motes over Elysium and the grove
-      for (let i = 0; i < 30; i++) {
-        const z = i % 2 ? ZONES.meadow : ZONES.forest;
+      // 极乐草地和柏树林上空的金色光点
+      const glade = [...ZONES.forest, ...ZONES.meadow];   // 各一处时：偶数号在林子，奇数号在草地
+      for (let i = 0; glade.length && i < 30; i++) {
+        const z = glade[i % glade.length];
         const x = z.x + Math.sin(time / 2300 + i * 1.7) * 220 + Math.sin(i * 12.9) * 120;
         const y = z.y + Math.cos(time / 2900 + i * 2.3) * 140 + Math.cos(i * 7.1) * 60;
         mote(x, y, 6, '#ffe08a', 0.35 + 0.35 * Math.sin(time / 300 + i * 3));
       }
-      // lost souls drifting over the graves
-      for (let i = 0; i < 10; i++) {
+      // 墓地上空飘荡的亡魂
+      for (const g of ZONES.graveyard) for (let i = 0; i < 10; i++) {
         const k = ((time / 5200 + i * 0.1) % 1);
         const x = g.x + Math.sin(i * 5.1) * 230 + Math.sin(time / 900 + i) * 14;
         const y = g.y + Math.cos(i * 3.7) * 150 - k * 70;
@@ -343,18 +341,18 @@ function paintGround(W, H, rnd, { tombs, campfires }) {
       t < 0.4 ? 'rgba(80,110,70,0.22)' : t < 0.75 ? 'rgba(14,24,22,0.32)' : 'rgba(90,70,40,0.18)');
   }
 
-  // zone grounds
-  for (let i = 0; i < 20; i++) {
-    blob(g, forest.x + (rnd() - 0.5) * 900, forest.y - 60 + (rnd() - 0.5) * 380, 150 + rnd() * 130, 'rgba(8,20,18,0.5)');
+  // 各区域的地面底色
+  for (const z of forest) for (let i = 0; i < 20; i++) {
+    blob(g, z.x + (rnd() - 0.5) * 900, z.y - 60 + (rnd() - 0.5) * 380, 150 + rnd() * 130, 'rgba(8,20,18,0.5)');
   }
-  for (let i = 0; i < 14; i++) {
-    blob(g, meadow.x + (rnd() - 0.5) * 420, meadow.y + (rnd() - 0.5) * 280, 130 + rnd() * 90, 'rgba(150,150,60,0.22)');
+  for (const z of meadow) for (let i = 0; i < 14; i++) {
+    blob(g, z.x + (rnd() - 0.5) * 420, z.y + (rnd() - 0.5) * 280, 130 + rnd() * 90, 'rgba(150,150,60,0.22)');
   }
-  for (let i = 0; i < 14; i++) {
-    blob(g, graveyard.x + (rnd() - 0.5) * 440, graveyard.y + (rnd() - 0.5) * 360, 150 + rnd() * 90, 'rgba(46,42,74,0.6)');
+  for (const z of graveyard) for (let i = 0; i < 14; i++) {
+    blob(g, z.x + (rnd() - 0.5) * 440, z.y + (rnd() - 0.5) * 360, 150 + rnd() * 90, 'rgba(46,42,74,0.6)');
   }
-  for (let i = 0; i < 16; i++) {
-    blob(g, camp.x + (rnd() - 0.5) * 420, camp.y + (rnd() - 0.5) * 300, 130 + rnd() * 110, 'rgba(70,24,14,0.6)');
+  for (const z of camp) for (let i = 0; i < 16; i++) {
+    blob(g, z.x + (rnd() - 0.5) * 420, z.y + (rnd() - 0.5) * 300, 130 + rnd() * 110, 'rgba(70,24,14,0.6)');
   }
   for (const c of campfires) blob(g, c.x, c.y, 120, 'rgba(10,4,4,0.7)');
 
@@ -397,9 +395,87 @@ function paintGround(W, H, rnd, { tombs, campfires }) {
     }
   }
 
-  // sanctuary plaza: marble disc, meander border, bronze emblem
-  const px = village.x;
-  const py = village.y + 20;
+  // 圣所广场：大理石圆盘、回纹边、青铜徽记
+  for (const v of village) paintPlaza(g, v.x, v.y + 20, rnd);
+
+  // 极乐草地的日光兰：淡淡发光的六瓣小花
+  for (const z of meadow) for (let i = 0; i < 360; i++) {
+    const a = rnd() * TAU;
+    const d = Math.sqrt(rnd()) * 320;
+    const x = z.x + Math.cos(a) * d * 1.2;
+    const y = z.y + Math.sin(a) * d * 0.8;
+    if (roadDist(x, y) < 26) continue;
+    const s = 1.8 + rnd() * 1.4;
+    blob(g, x, y, s * 5, 'rgba(255,236,170,0.18)');
+    g.fillStyle = rnd() < 0.8 ? '#f4ead0' : '#ffb7c8';
+    for (let k = 0; k < 6; k++) {
+      const pa = (k / 6) * TAU;
+      ellipseFill(g, x + Math.cos(pa) * s * 1.2, y + Math.sin(pa) * s * 0.8, s * 0.9, s * 0.6);
+    }
+    g.fillStyle = '#e09a2a';
+    ellipseFill(g, x, y, s * 0.55, s * 0.45);
+  }
+
+  // Asphodel graves: mounds and a few cracked slabs
+  for (const t of tombs) {
+    g.fillStyle = 'rgba(20,16,30,0.55)';
+    ellipseFill(g, t.x + 2, t.y + 13, 17, 9);
+  }
+  for (const z of graveyard) for (let i = 0; i < 40; i++) {
+    const x = z.x + (rnd() - 0.5) * 520;
+    const y = z.y + (rnd() - 0.5) * 400;
+    g.fillStyle = 'rgba(70,66,92,0.55)';
+    g.save(); g.translate(x, y); g.rotate((rnd() - 0.5) * 0.4);
+    g.fillRect(-12, -6, 24, 12);
+    g.strokeStyle = 'rgba(8,6,12,0.6)'; g.lineWidth = 1.2; g.strokeRect(-12, -6, 24, 12);
+    g.restore();
+  }
+
+  // Tartarus lava: ink rim, molten body, white-hot core and heat haze
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  for (const pass of [[13, 'rgba(255,90,20,0.18)'], [7, INK], [4.5, '#d8360c'], [2.4, '#ff8a2a'], [1, '#ffe39a']] as [number, string][]) {
+    g.lineWidth = pass[0];
+    g.strokeStyle = pass[1];
+    for (const line of LAVA) {
+      g.beginPath();
+      line.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.stroke();
+    }
+  }
+
+  // stones scattered everywhere
+  for (let i = 0; i < 420; i++) {
+    const x = rnd() * W;
+    const y = rnd() * H;
+    if (near(x, y, village, 180)) continue;
+    const v = 60 + (rnd() * 40) | 0;
+    g.fillStyle = INK;
+    ellipseFill(g, x, y + 0.6, 2.6 + rnd() * 2, 1.8 + rnd());
+    g.fillStyle = `rgb(${v},${v},${v + 8})`;
+    ellipseFill(g, x, y, 1.8 + rnd() * 2, 1.2 + rnd());
+  }
+
+  // darken the map edge
+  const edge = 90;
+  const sides = [
+    [0, 0, W, edge, 0, 0, 0, edge],
+    [0, H - edge, W, edge, 0, H, 0, H - edge],
+    [0, 0, edge, H, 0, 0, edge, 0],
+    [W - edge, 0, edge, H, W, 0, W - edge, 0],
+  ];
+  for (const [x, y, w, h, gx0, gy0, gx1, gy1] of sides) {
+    const grad = g.createLinearGradient(gx0, gy0, gx1, gy1);
+    grad.addColorStop(0, 'rgba(4,2,8,0.7)');
+    grad.addColorStop(1, 'rgba(4,2,8,0)');
+    g.fillStyle = grad;
+    g.fillRect(x, y, w, h);
+  }
+  return c;
+}
+
+// paintPlaza 在 (px, py) 画一个圣所广场。
+function paintPlaza(g, px, py, rnd) {
   g.fillStyle = INK;
   ellipseFill(g, px, py, 178, 126);
   g.fillStyle = '#6f2a1c';
@@ -456,87 +532,11 @@ function paintGround(W, H, rnd, { tombs, campfires }) {
     g.beginPath(); g.moveTo(Math.cos(a) * 8, Math.sin(a) * 8); g.lineTo(Math.cos(a) * 22, Math.sin(a) * 22); g.stroke();
   }
   g.restore();
-
-  // Elysian asphodels: pale six-petal flowers that glow faintly
-  for (let i = 0; i < 360; i++) {
-    const a = rnd() * TAU;
-    const d = Math.sqrt(rnd()) * 320;
-    const x = meadow.x + Math.cos(a) * d * 1.2;
-    const y = meadow.y + Math.sin(a) * d * 0.8;
-    if (roadDist(x, y) < 26) continue;
-    const s = 1.8 + rnd() * 1.4;
-    blob(g, x, y, s * 5, 'rgba(255,236,170,0.18)');
-    g.fillStyle = rnd() < 0.8 ? '#f4ead0' : '#ffb7c8';
-    for (let k = 0; k < 6; k++) {
-      const pa = (k / 6) * TAU;
-      ellipseFill(g, x + Math.cos(pa) * s * 1.2, y + Math.sin(pa) * s * 0.8, s * 0.9, s * 0.6);
-    }
-    g.fillStyle = '#e09a2a';
-    ellipseFill(g, x, y, s * 0.55, s * 0.45);
-  }
-
-  // Asphodel graves: mounds and a few cracked slabs
-  for (const t of tombs) {
-    g.fillStyle = 'rgba(20,16,30,0.55)';
-    ellipseFill(g, t.x + 2, t.y + 13, 17, 9);
-  }
-  for (let i = 0; i < 40; i++) {
-    const x = graveyard.x + (rnd() - 0.5) * 520;
-    const y = graveyard.y + (rnd() - 0.5) * 400;
-    g.fillStyle = 'rgba(70,66,92,0.55)';
-    g.save(); g.translate(x, y); g.rotate((rnd() - 0.5) * 0.4);
-    g.fillRect(-12, -6, 24, 12);
-    g.strokeStyle = 'rgba(8,6,12,0.6)'; g.lineWidth = 1.2; g.strokeRect(-12, -6, 24, 12);
-    g.restore();
-  }
-
-  // Tartarus lava: ink rim, molten body, white-hot core and heat haze
-  g.lineCap = 'round';
-  g.lineJoin = 'round';
-  for (const pass of [[13, 'rgba(255,90,20,0.18)'], [7, INK], [4.5, '#d8360c'], [2.4, '#ff8a2a'], [1, '#ffe39a']] as [number, string][]) {
-    g.lineWidth = pass[0];
-    g.strokeStyle = pass[1];
-    for (const line of LAVA) {
-      g.beginPath();
-      line.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-      g.stroke();
-    }
-  }
-
-  // stones scattered everywhere
-  for (let i = 0; i < 420; i++) {
-    const x = rnd() * W;
-    const y = rnd() * H;
-    if (near(x, y, village, 180)) continue;
-    const v = 60 + (rnd() * 40) | 0;
-    g.fillStyle = INK;
-    ellipseFill(g, x, y + 0.6, 2.6 + rnd() * 2, 1.8 + rnd());
-    g.fillStyle = `rgb(${v},${v},${v + 8})`;
-    ellipseFill(g, x, y, 1.8 + rnd() * 2, 1.2 + rnd());
-  }
-
-  // darken the map edge
-  const edge = 90;
-  const sides = [
-    [0, 0, W, edge, 0, 0, 0, edge],
-    [0, H - edge, W, edge, 0, H, 0, H - edge],
-    [0, 0, edge, H, 0, 0, edge, 0],
-    [W - edge, 0, edge, H, W, 0, W - edge, 0],
-  ];
-  for (const [x, y, w, h, gx0, gy0, gx1, gy1] of sides) {
-    const grad = g.createLinearGradient(gx0, gy0, gx1, gy1);
-    grad.addColorStop(0, 'rgba(4,2,8,0.7)');
-    grad.addColorStop(1, 'rgba(4,2,8,0)');
-    g.fillStyle = grad;
-    g.fillRect(x, y, w, h);
-  }
-  return c;
 }
 
 /* ------------------------------ props ------------------------------ */
 
-// placeDecor scatters the props that do not block movement (bushes, pots,
-// bones, soul fires), keeping them off the roads and clear of blocking props.
+// placeDecor 撒地图里没有的小装饰（草丛、魂火），避开道路和地图里的物件。
 function placeDecor(W, H, rnd, blocking, soulfires) {
   const props = [];
   const add = (kind, x, y, s = 1, variant = 0, flip = false) =>
@@ -548,13 +548,7 @@ function placeDecor(W, H, rnd, blocking, soulfires) {
   });
   const { village, graveyard, camp } = ZONES;
 
-  // painted amphorae around the sanctuary houses
-  for (const [x, y, s, v] of [[405, 662, 1, 0], [425, 672, 0.85, 1], [760, 640, 1, 1], [744, 652, 0.85, 0], [285, 760, 0.9, 0], [840, 900, 0.9, 1]]) {
-    add('amphora', x, y, s, v);
-  }
   for (const s of soulfires) add('soulfire', s.x, s.y);
-  add('bones', camp.x - 80, camp.y + 90); add('bones', camp.x + 70, camp.y + 140, 0.9, 1, true);
-  add('bones', camp.x - 220, camp.y + 40, 0.8, 2);
   for (let i = 0; i < 130; i++) {
     const x = 30 + rnd() * (W - 60);
     const y = 30 + rnd() * (H - 40);

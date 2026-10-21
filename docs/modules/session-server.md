@@ -23,7 +23,7 @@
 
 ## 协议（proto/btdemo.proto）
 
-用 protobuf（proto2）二进制编码。服务端用 `protoc` 生成的 `internal/pb`；前端用 protobufjs 从同一份 `.proto` 生成 JS 代码和 TypeScript 类型（`web` 下 `npm run proto`），字段对不上时编译期就报错。服务端仍在 `/btdemo.proto` 提供原文，方便查看。
+用 protobuf（proto2）二进制编码。服务端用 `protoc` 生成的 `internal/pb`；前端用 protobufjs 从同一份 `.proto` 生成 JS 代码和 TypeScript 类型（`web` 下 `npm run proto`），字段对不上时编译期就报错。服务端仍在 `/btdemo.proto` 提供原文，方便查看；地图文件在 `/map.tmj` 原样提供（见 [地图](map.md)）。
 
 客户端 → 服务端 `ClientMsg`（oneof 四选一）：
 
@@ -38,7 +38,7 @@
 
 | 消息 | 何时发 | 内容 |
 | --- | --- | --- |
-| `Welcome` | 连接时一次 | 自己的 id、地图尺寸、AOI 格子、技能栏、场景物件 `props`、碰撞体 `obstacles` |
+| `Welcome` | 连接时一次 | 自己的 id、地图尺寸、AOI 格子、技能栏、碰撞体 `obstacles`（调试显示用；场景物件前端从 `/map.tmj` 读） |
 | `Enter` | 实体进入视野 | 静态信息：名字、种类、模型、半径、颜色、等级、血量 |
 | `Leave` | 实体离开视野 | id 列表 |
 | `Sync` | 每次同步（10Hz） | 视野内实体的位置血量动作、视野内的事件、自己的属性冷却 Buff、被观察实体的 AI 追踪 |
@@ -52,7 +52,7 @@
 
 ### Join / Leave
 
-`Join` 调 `spawn.Player()` 创建角色，组装 `Welcome`。地图物件和碰撞体在 `session.New` 时用 `mapInfo` 转换一次，之后每个 Welcome 直接复用。
+`Join` 调 `spawn.Player()` 创建角色，组装 `Welcome`。碰撞体在 `session.New` 时用 `obstacles` 转换一次，之后每个 Welcome 直接复用。
 
 ### Input
 
@@ -74,7 +74,7 @@
 
 ### proto.go
 
-把 `core.Entity` 转成协议消息的几个函数：`entityInfo`（进入视野的静态信息）、`entityState`（每次同步的动态信息）、`selfInfo`（自己的详细属性）、`mapInfo`（地图）。坐标保留一位小数，血量向上取整，减少数据量。
+把 `core.Entity` 转成协议消息的几个函数：`entityInfo`（进入视野的静态信息）、`entityState`（每次同步的动态信息）、`selfInfo`（自己的详细属性）、`obstacles`（碰撞体）。坐标保留一位小数，血量向上取整，减少数据量。
 
 ## 前端在哪里接这些消息
 

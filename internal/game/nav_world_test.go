@@ -28,7 +28,7 @@ func TestShippedMapKeepsEntitiesOutOfProps(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(cfg.Layout.Props) == 0 || len(cfg.Layout.Shapes) == 0 {
-		t.Fatal("map.yaml has no props or shapes")
+		t.Fatal("map.tmj has no props or shapes")
 	}
 	w, err := NewWorld(cfg, 7)
 	if err != nil {

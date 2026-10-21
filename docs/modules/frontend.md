@@ -20,7 +20,7 @@
 | 构建 | Vite（开发热更新，`npm run build` 输出到 `web/dist`） | |
 | 协议 | protobufjs：`npm run proto` 从 `proto/btdemo.proto` 生成 `src/net/pb.js` 和类型 | |
 | 渲染 | PixiJS 8（WebGL）：地表、物件、角色、光照；描边和轮廓光是着色器。技能特效和头顶文字暂时画在叠加的 2D 画布上 | 特效改成 Pixi 粒子；模型换成美术贴图 / Spine |
-| 地图 | 服务端 `config/map.yaml` 下发物件 | Tiled 编辑器（.tmj），前后端读同一份 |
+| 地图 | 服务端 `config/map.yaml` 下发物件 | Tiled 编辑器（`config/map.tmj`），前后端读同一份（已完成，见 [地图](map.md)） |
 | 界面 | DOM（HUD、调试面板） | 保持 DOM |
 
 选型理由：Pixi 只管渲染、不带游戏逻辑，适合“服务端权威、客户端只做表现”的结构；2D 性能好，描边光照可以写成着色器；Spine 骨骼动画有官方运行时。
@@ -47,7 +47,8 @@ web/
       config.ts         插值时长、动画时长、配色、属性表等常量
       math.ts           clamp、lerp、hypot、fmt
       state.ts          State 和 ClientEntity 类型、全局 state、插值 posOf、头顶位置 headY
-      sync.ts           处理 welcome / enter / leave / sync / toast
+      sync.ts           处理 welcome / enter / leave / sync / toast；welcome 后下载地图建场景
+      map.ts            下载并解析 /map.tmj（Tiled 地图，和服务端读同一份）
       events.ts         事件 → 动画、特效、飘字
     render/
       world.ts          Pixi 舞台和一帧的绘制：镜头、地面标记、角色、光照
@@ -126,6 +127,6 @@ npm run build         # 生成协议代码 + 类型检查 + 输出 web/dist
 
 - 新怪物模型：`render/models.ts` 加画法，`game/config.ts` 的 `MODEL_H` 加头顶高度。
 - 新技能特效：`render/fx.ts` 的 `cast()` 按 `fx` 字段分支。
-- 新场景物件：`render/scenery.ts` 的 `KINDS`，同时在 `config/map.yaml` 写碰撞形状。
+- 新场景物件：`render/scenery.ts` 的 `KINDS`，同时在 `config/map.tmj` 加碰撞形状并摆放（见 [地图](map.md#加一种新物件)）。
 - 新 HUD 元素：`index.html` 加元素，`ui/hud.ts` 取元素并刷新。
 - 新事件：`net/types.ts` 的 `EventKind`、`protocol.ts` 的 `EVENT_KIND`，再在 `game/events.ts` 处理。

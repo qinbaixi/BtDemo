@@ -5,7 +5,6 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/game/attr"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
@@ -60,22 +59,8 @@ func selfInfo(e *core.Entity, now float64) *pb.SelfInfo {
 	return si
 }
 
-// mapInfo 是欢迎消息中包含的地图场景物件和障碍物形状。
-func mapInfo(l config.Layout, m *nav.Map) ([]*pb.MapProp, []*pb.Obstacle) {
-	props := make([]*pb.MapProp, 0, len(l.Props))
-	for _, p := range l.Props {
-		mp := &pb.MapProp{Kind: proto.String(p.Kind), X: core.F32(p.X), Y: core.F32(p.Y), S: core.F32(p.S)}
-		if p.Variant != 0 {
-			mp.Variant = core.I32(p.Variant)
-		}
-		if p.Flip {
-			mp.Flip = proto.Bool(true)
-		}
-		if p.DX != 0 || p.DY != 0 {
-			mp.Dx, mp.Dy = core.F32(p.DX), core.F32(p.DY)
-		}
-		props = append(props, mp)
-	}
+// obstacles 是欢迎消息中包含的障碍物形状（调试显示用；物件本身前端从 /map.tmj 读）。
+func obstacles(m *nav.Map) []*pb.Obstacle {
 	shapes := m.Shapes()
 	obs := make([]*pb.Obstacle, 0, len(shapes))
 	for _, sh := range shapes {
@@ -90,5 +75,5 @@ func mapInfo(l config.Layout, m *nav.Map) ([]*pb.MapProp, []*pb.Obstacle) {
 		}
 		obs = append(obs, o)
 	}
-	return props, obs
+	return obs
 }

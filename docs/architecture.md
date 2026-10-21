@@ -106,7 +106,7 @@ bt      ──► 无（纯行为树运行时，不认识游戏）
 | `config/world.yaml` | 端口、地图尺寸、AOI 格子、帧率、阵营敌对表、玩家模板 | config → 各系统 |
 | `config/skills.yaml` | 技能 | combat |
 | `config/monsters.yaml` | 怪物 / NPC 模板和刷怪点 | spawn、ai |
-| `config/map.yaml` | 场景物件和碰撞形状 | nav、session（下发给前端） |
+| `config/map.tmj` | Tiled 地图：场景物件、碰撞形状、地表区域和道路 | nav；server 原样提供给前端（`/map.tmj`） |
 | `bt/trees/*.json` → `internal/ai/trees/*.go` | 行为树（BtTree 编辑、导出） | bt、ai |
 | `proto/btdemo.proto` → `internal/pb` | 协议 | session、server、前端 |
 

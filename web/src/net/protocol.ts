@@ -83,7 +83,6 @@ export function createProtocol(): Protocol {
           t: 'welcome', id: w.id,
           map: { w: w.mapW, h: w.mapH }, aoi: { cell: w.aoiCell },
           skills: w.skills || [],
-          props: w.props || [],
           obstacles: (w.obstacles || []).map((o: any): Obstacle => ({ ...o, shape: String(o.shape).toLowerCase() })),
         };
       }

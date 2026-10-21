@@ -74,20 +74,8 @@ message Welcome {
   required float map_h = 3;
   required float aoi_cell = 4;
   repeated SkillInfo skills = 5;
-  repeated MapProp props = 6;         // props from map.yaml, drawn by the client
-  repeated Obstacle obstacles = 7;    // their collision shapes, for the debug overlay
-}
-
-// MapProp is one prop placed in map.yaml.
-message MapProp {
-  required string kind = 1;
-  required float x = 2;
-  required float y = 3;
-  optional float s = 4 [default = 1];
-  optional int32 variant = 5;
-  optional bool flip = 6;
-  optional float dx = 7;   // wall segments: end point relative to (x, y)
-  optional float dy = 8;
+  reserved 6;                         // was props; the client now reads the scene from /map.tmj
+  repeated Obstacle obstacles = 7;    // collision shapes of the map props, for the debug overlay
 }
 
 enum ObstacleShape {

@@ -3,6 +3,7 @@
 import type { Debug } from '../ui/debug';
 import { buildSkillBar, renderSelf, setConn, showToast } from '../ui/hud';
 import { createScenery } from '../render/scenery';
+import { loadMap } from './map';
 import type { ClientMessage, ServerMessage, SyncMsg, WelcomeMsg } from '../net/types';
 import { ATTACK_MS, DEATH_MS, LERP_MS, SNAP_DIST } from './config';
 import { onEvent } from './events';
@@ -67,12 +68,7 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   state.target = 0;
   state.hoverSlot = 0;
 
-  // 每张不同的地图只画一次场景（重连通常拿到的是同一张）
-  const sceneKey = `${state.map.w}x${state.map.h}:${JSON.stringify(m.props || [])}`;
-  if (!state.scenery || state.sceneKey !== sceneKey) {
-    state.scenery = createScenery(state.map.w, state.map.h, m.props || []);
-    state.sceneKey = sceneKey;
-  }
+  loadScene();
   state.obstacles = m.obstacles || [];
   state.aiPath = null;
 
@@ -126,4 +122,24 @@ function onSync(m: SyncMsg, now: number, deps: SyncDeps): void {
     deps.debug.trace(m.ai);
     state.aiPath = m.ai.path.length >= 4 ? { id: m.ai.id, pts: m.ai.path, at: now } : null;
   }
+}
+
+// loadScene 下载地图并建场景。每次 welcome 都重新下载（服务端可能换了地图），
+// 内容没变就不重画。下载完成前画面只有角色，没有地表。
+let sceneLoad = 0;
+async function loadScene(): Promise<void> {
+  const seq = ++sceneLoad;
+  const { w, h } = state.map;
+  let map = null;
+  try {
+    map = await loadMap();
+  } catch (err) {
+    console.error('地图加载失败', err);
+    showToast('地图加载失败，场景为空地');
+  }
+  if (seq !== sceneLoad) return;   // 期间又收到了新的 welcome
+  const key = `${w}x${h}:${map?.key ?? ''}`;
+  if (state.scenery && state.sceneKey === key) return;
+  state.scenery = createScenery(w, h, map);
+  state.sceneKey = key;
 }
