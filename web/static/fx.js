@@ -151,6 +151,11 @@ export class FX {
     }
     this.effects.push({ kind: 'flare', x: p.x, y, color: crit ? '#ffe14d' : c, rgb: rgbOf(crit ? '#ffe14d' : c),
       size: crit ? 46 : 28, crit, born: now, life: crit ? 300 : 200 });
+    // a sharp gash across the target, two of them on a crit
+    for (let i = 0; i < (crit ? 2 : 1); i++) {
+      this.effects.push({ kind: 'gash', x: p.x, y, color: c, rgb: rgbOf(c), ang: rand(-0.9, -0.3) + i * 1.2,
+        len: (p.r || 14) * (crit ? 2.6 : 1.9), born: now + i * 40, life: 170 });
+    }
     if (crit) this.shake = Math.max(this.shake, 5);
   }
 
@@ -208,6 +213,43 @@ export class FX {
     return { x: rand(-s, s), y: rand(-s, s) };
   }
 
+  // lights reports the light that active effects cast on their surroundings.
+  lights(add, now) {
+    for (const f of this.effects) {
+      const t = (now - f.born) / f.life;
+      if (t < 0 || t >= 1) continue;
+      const fade = 1 - t;
+      switch (f.kind) {
+        case 'orb':
+        case 'arrow': {
+          const sp = this.pos(f.src, { x: f.sx, y: f.sy });
+          const dp = this.pos(f.dst, { x: f.dx, y: f.dy });
+          add(sp.x + (dp.x - sp.x) * t, sp.y + (dp.y - sp.y) * t - 20, f.kind === 'orb' ? 170 : 70, f.color, 0.9, 0.5);
+          break;
+        }
+        case 'slash': {
+          const sp = this.pos(f.src, { x: f.sx, y: f.sy });
+          add(sp.x, sp.y - 14, 120, f.color, fade, 0.35);
+          break;
+        }
+        case 'flare': add(f.x, f.y, f.size * 3.5, f.color, fade, 0.5); break;
+        case 'whirl': add(f.cx, f.cy, f.radius * 1.8, f.color, fade, 0.45); break;
+        case 'heal':
+        case 'buff': {
+          const p = this.pos(f.src, { x: f.sx, y: f.sy });
+          add(p.x, p.y - 10, 160, f.color, Math.sin(t * Math.PI), 0.45);
+          break;
+        }
+        case 'pillar': {
+          const p = this.pos(f.anchor, f);
+          add(p.x, p.y - 30, 220, f.color, Math.sin(t * Math.PI), 0.55);
+          break;
+        }
+        case 'ring': add(f.x, f.y, f.radius * 1.5, f.color, fade * 0.6, 0.3); break;
+      }
+    }
+  }
+
   /* ----------------------------- passes ----------------------------- */
 
   drawUnder(ctx, now) {
@@ -249,6 +291,7 @@ export class FX {
         case 'arrow': this.arrow(ctx, f, t, now); break;
         case 'whirl': this.whirlTop(ctx, f, t); break;
         case 'flare': this.flare(ctx, f, t); break;
+        case 'gash': this.gash(ctx, f, t); break;
         case 'pillar': this.pillar(ctx, f, t); break;
         case 'buff': this.buffTop(ctx, f, t); break;
       }
@@ -300,6 +343,11 @@ export class FX {
       ctx.fillStyle = color;
       ctx.fill();
     };
+    // ink backing first, so the slash reads like a brush stroke on any ground
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    crescent(width * 2.4, 'rgba(8,3,12,0.55)', fade * 0.85);
+    ctx.restore();
     crescent(width * 1.9, rgba(f.rgb, 0.35), fade);
     crescent(width, rgba(whiten(f.rgb, 0.3), 0.9), fade);
     crescent(width * 0.35, '#ffffff', fade);
@@ -510,6 +558,30 @@ export class FX {
     ctx.quadraticCurveTo(p.x + w * 0.7, p.y - h * 0.6, p.x + w, p.y);
     ctx.closePath();
     ctx.fill();
+  }
+
+  gash(ctx, f, t) {
+    const grow = easeOutCubic(clamp01(t / 0.35));
+    const fade = 1 - clamp01((t - 0.35) / 0.65);
+    const L = f.len * grow;
+    const W = 4.5 * fade + 0.5;
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.rotate(f.ang);
+    const blade = (w, color, alpha) => {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(-L, 0); ctx.lineTo(0, -w); ctx.lineTo(L, 0); ctx.lineTo(0, w);
+      ctx.closePath();
+      ctx.fill();
+    };
+    ctx.globalCompositeOperation = 'source-over';
+    blade(W * 2.2, '#08030c', 0.7 * fade);
+    ctx.globalCompositeOperation = 'lighter';
+    blade(W * 1.6, rgba(f.rgb, 0.9), fade);
+    blade(W * 0.6, '#ffffff', fade);
+    ctx.restore();
   }
 
   flare(ctx, f, t) {

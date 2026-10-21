@@ -13,9 +13,10 @@
 //   p.dead    -1, or 0..1 progress of the death animation (stays at 1)
 //   p.time    ms clock for idle motion
 //   p.isSelf  draw the own-player ground ring
+//   p.bare    skip the ground ring and shadow (ink.js draws the model alone)
 
 const TAU = Math.PI * 2;
-const OUTLINE = 'rgba(20,16,28,0.85)';
+const OUTLINE = '#0b0710';
 
 export const MODELS = ['knight', 'slime', 'wolf', 'skeleton_archer', 'ogre_chief', 'guard', 'villager'];
 
@@ -68,7 +69,7 @@ function rrect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function fillStroke(ctx, fill, lw = 1.4) {
+function fillStroke(ctx, fill, lw = 1.7) {
   ctx.fillStyle = fill;
   ctx.fill();
   ctx.lineWidth = lw;
@@ -116,7 +117,7 @@ export function drawModel(ctx, model, p) {
   ctx.save();
   ctx.translate(p.x, p.y);
 
-  if (p.isSelf && dead < 0) {
+  if (p.isSelf && dead < 0 && !p.bare) {
     const pulse = 0.5 + 0.5 * Math.sin(p.time / 300);
     ctx.strokeStyle = `rgba(255,214,90,${0.45 + 0.3 * pulse})`;
     ctx.lineWidth = 2;
@@ -125,9 +126,11 @@ export function drawModel(ctx, model, p) {
   }
 
   // ground shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ellipse(ctx, 0, 0, p.r * 1.05, p.r * 0.42);
-  ctx.fill();
+  if (!p.bare) {
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ellipse(ctx, 0, 0, p.r * 1.05, p.r * 0.42);
+    ctx.fill();
+  }
 
   // hit reaction: knock back away from facing and shake
   if (hit >= 0) {

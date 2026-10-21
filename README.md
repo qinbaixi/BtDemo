@@ -11,7 +11,7 @@ go run ./cmd/server            # 打开 http://localhost:8080
 go run ./cmd/server -addr :9000 -config ./config
 ```
 
-操作：`WASD` / 方向键移动，鼠标点击选择目标，`1`~`5` 释放技能，`G` 切换 AOI 网格显示。可以开多个浏览器标签页，每个标签页是一个新玩家，互相在视野内可见。
+操作：`WASD` / 方向键移动，鼠标点击选择目标，`1`~`5` 释放技能，`G` 切换 AOI 网格显示，`Q` 切换画质。可以开多个浏览器标签页，每个标签页是一个新玩家，互相在视野内可见。
 
 ## 目录
 
@@ -65,11 +65,15 @@ tools/btregistry/    扫描导出文件生成 registry.go
 
 ## 美术与特效
 
-全部用 Canvas 程序化绘制，没有图片资源。`monsters.yaml` 模板的 `model` 字段（默认等于模板名）和 `world.yaml` 玩家的 `model`（默认 `knight`）决定客户端画哪个模型：`knight`、`slime`、`wolf`、`skeleton_archer`、`ogre_chief`、`guard`、`villager`。角色有朝向、行走、攻击、受击和死亡动画；技能、受击、治疗、增益、升级、死亡、复活都有粒子特效。
+全部用 Canvas 程序化绘制，没有图片资源，整体参考《哈迪斯》的冥界风格：角色有粗墨线描边和按阵营着色的轮廓光（玩家金色、怪物血红、NPC 青色），场景压暗后由火盆、营火、魂火、熔岩和技能特效动态照亮。`monsters.yaml` 模板的 `model` 字段（默认等于模板名）和 `world.yaml` 玩家的 `model`（默认 `knight`）决定客户端画哪个模型：`knight`、`slime`、`wolf`、`skeleton_archer`、`ogre_chief`、`guard`、`villager`。角色有朝向、行走、攻击、受击和死亡动画；技能、受击、治疗、增益、升级、死亡、复活都有粒子特效。
 
 - `web/static/models.js`：角色模型和动作
 - `web/static/fx.js`：技能与战斗特效（刀光、火球、骨箭、旋风斩、治疗法阵、增益光柱、暴击闪光、屏幕震动）
-- `web/static/scenery.js`：按区域生成的地表和场景物件（村庄、史莱姆草地、狼林、墓地、食人魔营地），与角色一起按纵深排序
+- `web/static/scenery.js`：按区域生成的地表、场景物件和光源（大理石广场村庄、极乐草地、狼林、墓地、熔岩营地），与角色一起按纵深排序
+- `web/static/ink.js`：角色描边与轮廓光（每个角色缓存一张精灵图，约 24 帧每秒重绘）
+- `web/static/lighting.js`：低分辨率光照图与彩色光晕
+
+画质：按 `Q` 在高画质和简化画质（不描边、不打光）之间切换，地址加 `?low` 默认用简化画质；帧率持续偏低时会自动切到简化画质。
 
 ## AOI
 

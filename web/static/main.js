@@ -6,7 +6,9 @@
 /* ============================== config ============================== */
 
 import { loadProtocol } from './protocol.js';
-import { drawModel } from './models.js';
+import { drawInked } from './ink.js';
+import { drawModel as drawModelPlain } from './models.js';
+import { createLighting } from './lighting.js';
 import { FX } from './fx.js';
 import { createScenery } from './scenery.js';
 import { createDebug } from './debug.js';
@@ -17,6 +19,8 @@ const ATTACK_MS = 380;       // attack swing animation
 const HIT_MS = 260;          // hit reaction animation
 const DEATH_MS = 650;        // fall-over animation
 // Drawn height of each model at radius 16, used to place labels above heads.
+// rim light colour per kind: gold heroes, blood-red monsters, spectral NPCs
+const RIM = { player: '#ffcf6a', monster: '#ff3b2e', npc: '#6fe3ff' };
 const MODEL_SCALE = 1.25;    // models are drawn a bit larger than their collision radius
 const MODEL_H = { knight: 46, guard: 50, villager: 42, slime: 26, wolf: 30, skeleton_archer: 46, ogre_chief: 54 };
 const ACT_NAMES = {
@@ -32,7 +36,7 @@ const ACT_NAMES = {
   move: '移动',
 };
 const KIND_COLOR = { player: '#4fc3f7', monster: '#e53935', npc: '#42a5f5' };
-const NAME_COLOR = { player: '#f5f5f5', monster: '#ff8a80', npc: '#9fd3ff' };
+const NAME_COLOR = { player: '#f3e9d2', monster: '#ff7a6a', npc: '#8fe6ff' };
 const MOVE_DIR = {
   KeyW: [0, -1], ArrowUp: [0, -1],
   KeyS: [0, 1], ArrowDown: [0, 1],
@@ -40,6 +44,7 @@ const MOVE_DIR = {
   KeyD: [1, 0], ArrowRight: [1, 0],
 };
 const FONT = '"PingFang SC","Microsoft YaHei","Noto Sans CJK SC","Segoe UI",sans-serif';
+const DISPLAY = '"Cinzel","Songti SC","Noto Serif CJK SC","Source Han Serif SC","STSong",serif';
 const BASE_ATTRS = [['str', '力量'], ['agi', '敏捷'], ['int', '智力'], ['vit', '体质']];
 const DERIVED_ATTRS = [
   ['maxHp', '生命上限'], ['atk', '攻击'], ['matk', '法强'], ['def', '防御'],
@@ -67,6 +72,11 @@ const state = {
   lands: new Map(),       // caster id -> { at, color } when its latest cast lands
   pending: [],            // [{ at, fn }] hit reactions waiting for a projectile
   lastFrame: 0,
+  // full quality: ink outlines, rim light and dynamic lighting. ?low in the
+  // URL starts without them, Q toggles, and a slow machine drops them itself.
+  hq: !new URLSearchParams(location.search).has('low'),
+  slowFrames: 0,
+  slowGraceUntil: 0,   // after a manual Q toggle, don't judge the frame rate until then
   floats: [],
   bubbles: new Map(),     // id -> { text, until }
   cam: { x: 0, y: 0, w: 0, h: 0 },
@@ -435,6 +445,7 @@ function frame() {
   const now = performance.now();
   const dt = state.lastFrame ? now - state.lastFrame : 16;
   state.lastFrame = now;
+  watchFrameRate(dt);
   runPending(now);
   debug.setTarget(state.target);
   debug.update(now);
@@ -443,6 +454,16 @@ function frame() {
   renderTarget();
   renderSkillBar(now);
   renderDeath(now);
+}
+
+// watchFrameRate switches to simple rendering after ~3 s below ~30 fps.
+function watchFrameRate(dt) {
+  if (!state.hq || document.hidden || performance.now() < state.slowGraceUntil) return;
+  state.slowFrames = dt > 34 && dt < 500 ? state.slowFrames + 1 : Math.max(0, state.slowFrames - 2);
+  if (state.slowFrames > 90) {
+    state.hq = false;
+    showToast('帧率偏低，已切换为简化画质（按 Q 切回）');
+  }
 }
 
 function runPending(now) {
@@ -470,7 +491,7 @@ function draw(now, dt) {
   const shake = state.fx.shakeOffset(dt);
   // World units are CSS pixels; the camera offset is applied in the transform.
   ctx.setTransform(dpr, 0, 0, dpr, (-cx + shake.x) * dpr, (-cy + shake.y) * dpr);
-  ctx.fillStyle = '#0d1a12';
+  ctx.fillStyle = '#07050c';
   ctx.fillRect(cx - 20, cy - 20, vw + 40, vh + 40);
 
   const me = state.ents.get(state.myId);
@@ -500,13 +521,33 @@ function draw(now, dt) {
     else drawEntity(it.e, it.p, now);
   }
 
+  if (state.hq) drawLights(now, mp, shake);
   state.fx.drawOver(ctx, now, dt);
   if (state.scenery) state.scenery.drawAmbient(ctx, view, now);
+  ctx.setTransform(dpr, 0, 0, dpr, (-cx + shake.x) * dpr, (-cy + shake.y) * dpr);
   if (tgt && mp && tgt.id !== state.myId) drawTargetLink(tgt, mp, now);
   for (const it of list) if (it.e) drawLabels(it.e, it.p, now);
   drawBubbles(now);
   drawFloats(now);
   drawVignette();
+}
+
+// drawLights darkens the world and lets the light sources burn through.
+function drawLights(now, mp, shake) {
+  const L = state.lighting;
+  L.begin();
+  const add = (x, y, r, c, s, g) => L.add(x, y, r, c, s, g);
+  if (mp) add(mp.x, mp.y - 10, 300, '#ffd9a0', 1, 0.18);
+  for (const e of state.ents.values()) {
+    if (e.id === state.myId || e.dead || e.kind !== 'player') continue;
+    const p = posOf(e, now);
+    add(p.x, p.y - 10, 170, '#ffd9a0', 0.8, 0.1);
+  }
+  if (state.scenery) state.scenery.lights(add, state.cam, now);
+  state.fx.lights(add, now);
+  // the lightmap follows the world, screen shake included
+  const c = state.cam;
+  L.render(ctx, { x: c.x - shake.x, y: c.y - shake.y, w: c.w, h: c.h }, state.dpr);
 }
 
 function drawVignette() {
@@ -516,7 +557,7 @@ function drawVignette() {
   if (!state.vignette || state.vignette.w !== w || state.vignette.h !== h) {
     const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.hypot(w, h) * 0.6);
     g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(1, 'rgba(4,10,8,0.5)');
+    g.addColorStop(1, 'rgba(6,2,12,0.7)');
     state.vignette = { w, h, g };
   }
   ctx.fillStyle = state.vignette.g;
@@ -630,10 +671,40 @@ function drawEntity(e, p, now) {
 
   const atk = (now - e.attackAt) / ATTACK_MS;
   const hit = (now - e.hitAt) / HIT_MS;
-  drawModel(ctx, e.model, {
+  const r = (e.r || 14) * MODEL_SCALE;
+  const isSelf = e.id === state.myId;
+  // hard ink shadow on the ground, and a gold sigil under the hero
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.beginPath();
+  ctx.ellipse(p.x, p.y, r * 1.05, r * 0.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  if (isSelf && !e.dead) {
+    ctx.translate(p.x, p.y);
+    ctx.scale(1, 0.42);
+    ctx.rotate(now / 2400);
+    ctx.strokeStyle = 'rgba(255,207,106,0.75)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 12, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,207,106,0.9)';
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      ctx.save();
+      ctx.rotate(a);
+      ctx.beginPath();
+      ctx.moveTo(r + 12, -4); ctx.lineTo(r + 18, 0); ctx.lineTo(r + 12, 4); ctx.lineTo(r + 6, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  ctx.restore();
+  const pose = {
     x: p.x,
     y: p.y,
-    r: (e.r || 14) * MODEL_SCALE,
+    r,
     color: e.color,
     facing: e.facing,
     walk: e.walk,
@@ -642,8 +713,10 @@ function drawEntity(e, p, now) {
     hit: hit >= 0 && hit < 1 ? hit : -1,
     dead: e.dead ? clamp((now - (e.deadAt < 0 ? now - DEATH_MS : e.deadAt)) / DEATH_MS, 0, 1) : -1,
     time: now + e.id * 397,
-    isSelf: e.id === state.myId,
-  });
+    isSelf,
+  };
+  if (state.hq) drawInked(ctx, e.model, pose, state.dpr, RIM[e.kind], e.ink || (e.ink = {}), now);
+  else drawModelPlain(ctx, e.model, { ...pose, bare: true });
 }
 
 // drawLabels draws name, level, HP bar, behaviour and aggro mark over a head.
@@ -664,21 +737,30 @@ function drawLabels(e, p, now) {
     const bx = p.x - bw / 2;
     const by = y - bh;
     const frac = e.maxHp > 0 ? clamp(e.hp / e.maxHp, 0, 1) : 0;
-    ctx.fillStyle = 'rgba(10,12,14,0.75)';
-    roundRect(bx - 1.5, by - 1.5, bw + 3, bh + 3, 3);
+    // slanted ink frame with a hairline of gold, like the HUD
+    const slant = (x, w, yy, h) => {
+      ctx.beginPath();
+      ctx.moveTo(x + 3, yy); ctx.lineTo(x + w + 3, yy); ctx.lineTo(x + w, yy + h); ctx.lineTo(x, yy + h);
+      ctx.closePath();
+    };
+    slant(bx - 2, bw + 4, by - 2, bh + 4);
+    ctx.fillStyle = '#07040a';
     ctx.fill();
-    const c = isSelf ? '#5fd17a' : e.kind === 'monster' ? '#ef5350' : e.kind === 'npc' ? '#4fa8ff' : hpColor(frac);
+    ctx.strokeStyle = 'rgba(224,178,90,0.55)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    const c = isSelf ? '#e8b65a' : e.kind === 'monster' ? '#e0291f' : e.kind === 'npc' ? '#3fc6e8' : '#7bd88f';
     if (frac > 0) {
-      roundRect(bx, by, bw * frac, bh, 2);
+      slant(bx, bw * frac, by, bh);
       ctx.fillStyle = c;
       ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.fillRect(bx + 1, by + 0.5, Math.max(0, bw * frac - 2), 1.5);
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.fillRect(bx + 2, by + 0.5, Math.max(0, bw * frac - 3), 1.3);
     }
     y = by - 4;
   }
 
-  ctx.font = `bold 12px ${FONT}`;
+  ctx.font = `bold 12px ${DISPLAY}`;
   ctx.lineWidth = 3;
   ctx.strokeStyle = 'rgba(0,0,0,0.7)';
   let nameColor = NAME_COLOR[e.kind] || '#ffffff';
@@ -686,7 +768,7 @@ function drawLabels(e, p, now) {
   if (dead) nameColor = '#9aa39e';
   const name = e.name;
   const lv = `Lv${fmt(e.lv)}`;
-  ctx.font = `bold 12px ${FONT}`;
+  ctx.font = `bold 12px ${DISPLAY}`;
   const nw = ctx.measureText(name).width;
   ctx.font = `bold 10px ${FONT}`;
   const lw = ctx.measureText(lv).width;
@@ -695,7 +777,7 @@ function drawLabels(e, p, now) {
   ctx.strokeText(lv, x0, y);
   ctx.fillStyle = dead ? '#7d857f' : '#c9d2cc';
   ctx.fillText(lv, x0, y);
-  ctx.font = `bold 12px ${FONT}`;
+  ctx.font = `bold 12px ${DISPLAY}`;
   ctx.strokeText(name, x0 + lw + 4, y);
   ctx.fillStyle = nameColor;
   ctx.fillText(name, x0 + lw + 4, y);
@@ -965,6 +1047,13 @@ function onKeyDown(e) {
     state.showAOI = !state.showAOI;
     return;
   }
+  if (e.code === 'KeyQ') {
+    state.hq = !state.hq;
+    state.slowFrames = 0;
+    state.slowGraceUntil = performance.now() + 10000;   // give the full look 10 s before judging again
+    showToast(state.hq ? '画质：完整（描边 + 光照）' : '画质：简化');
+    return;
+  }
   if (e.code === 'Backquote') {
     debug.toggle();
     return;
@@ -1017,6 +1106,7 @@ function init() {
   ui.deathText = $('death-text');
 
   state.fx = new FX(fxResolve);
+  state.lighting = createLighting();
   debug = createDebug({ send, entity: (id) => state.ents.get(id) });
   window.btdemo = { state };   // for poking around in the browser console
   buildAttrRows();
