@@ -160,6 +160,15 @@ const ACTIONS: [string, () => void][] = [
   ['箭矢', () => { emit({ k: 'cast', src: 4, dst: ME, fx: 'projectile', skill: 'arrow_shot', color: '#cfe8ff' }); emit({ k: 'dmg', src: 4, dst: ME, v: 22 }); damage(state.ents.get(ME)!, 22); }],
   ['治疗', () => { const me = state.ents.get(ME)!; emit({ k: 'cast', src: ME, fx: 'heal', skill: 'heal', name: '治疗', color: '#7cff9b' }); emit({ k: 'heal', dst: ME, v: 120 }); me.hp = Math.min(me.maxHp, me.hp + 120); }],
   ['护盾', () => emit({ k: 'cast', src: ME, fx: 'shield', skill: 'shield', name: '圣盾', color: '#7fd8ff' })],
+  ['火球术', () => {
+    const t = target();
+    if (!t) return;
+    emit({ k: 'cast', src: ME, dst: t.id, fx: 'projectile', skill: 'fireball', name: '火球术', color: '#ff7b39' });
+    emit({ k: 'dmg', src: ME, dst: t.id, v: 52 });
+    damage(t, 52);
+    if (t.hp <= 0) kill(t);
+  }],
+  ['战吼', () => emit({ k: 'cast', src: ME, fx: 'buff', skill: 'warcry', name: '战吼', color: '#ff4d6d' })],
   ['升级', () => emit({ k: 'lvl', id: ME, lv: 11 })],
   ['疾风步', () => { emit({ k: 'cast', src: ME, fx: 'haste', skill: 'haste', name: '疾风步', color: '#9effd8' }); addLook(ME, LOOK_HASTE, 4); }],
   ['圣光庇护', () => { emit({ k: 'cast', src: ME, fx: 'holy', skill: 'holy_guard', name: '圣光庇护', color: '#ffe9a0' }); addLook(ME, LOOK_HOLY, 2); }],

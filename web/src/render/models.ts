@@ -19,6 +19,10 @@
 // Models are drawn in local units facing +x with the feet at y = 0; a
 // standard humanoid is about 46 units tall before scaling by r / 16.
 
+import { actionPose, legIK } from './knightActions';
+
+const LOOK_FIRE = 4;   // 武器着火的外观位，和 game/config.ts 的 LOOK_FIRE 一致（这个文件不引用游戏状态）
+
 const TAU = Math.PI * 2;
 const PI = Math.PI;
 const OUTLINE = '#0b0710';
@@ -309,7 +313,7 @@ export function drawModel(ctx, model, p) {
 // and knee angles, arm swing, body bob and lean.
 function gait(q, stride = 0.62) {
   const t = q.time / 1000;
-  const g = { bob: 0, lean: 0, legs: [], arms: [], breathe: Math.sin(t * 2.4) };
+  const g = { bob: 0, lean: 0, drop: 0, legs: [], arms: [], breathe: Math.sin(t * 2.4) };
   if (q.moving && q.dead < 0) {
     const ph = q.walk || 0;
     for (let i = 0; i < 2; i++) {
@@ -350,9 +354,11 @@ function gait(q, stride = 0.62) {
 //   arms(q, g)                 override [far, near] arm angles, e.g. for attacks
 //   weapon(ctx, q, B, hand)    near arm's hand
 //   lean(q, g)                 extra body lean (attacks)
+//   adjust(q, g)               改写这一帧的步态（技能动作的站姿：腿的角度 g.legs、胯下沉 g.drop）
 function humanoid(ctx, q, o) {
   const g = gait(q, o.stride);
-  const hipY = -(o.hip ?? 17) - g.bob * 0.5;
+  if (o.adjust) o.adjust(q, g);
+  const hipY = -(o.hip ?? 17) - g.bob * 0.5 + (g.drop ?? 0);
   const lean = g.lean + (o.lean ? o.lean(q, g) : 0);
   const thigh = o.thigh ?? 8.5;
   const shin = o.shin ?? 8.5;
@@ -415,7 +421,7 @@ function humanoid(ctx, q, o) {
   cel(ctx, (c) => pTaper(c, A0.kx, A0.ky, A0.ex, A0.ey, armW * 0.85, armW * 0.8), shade(o.forearm || o.skin, -0.2), { sd: 1.2, lw: 1.3 });
   flat(ctx, (c) => pEll(c, A0.ex, A0.ey, 2.4, 2.4), shade(o.hand || o.skin, -0.2), 1.2);
   if (swap && o.weapon && !o.weaponBehindHand) o.weapon(ctx, q, B, { x: A0.ex, y: A0.ey, a: arms[0][0] + arms[0][1], far: true });
-  if (!swap && o.offhand) o.offhand(ctx, q, B, { x: A0.ex, y: A0.ey });
+  if (!swap && o.offhand) o.offhand(ctx, q, B, { x: A0.ex, y: A0.ey, a: arms[0][0] + arms[0][1] });
 
   ctx.restore();
   drawLeg(L1, 2.2, o.legs, o.boots);
@@ -463,7 +469,7 @@ function humanoid(ctx, q, o) {
   cel(ctx, (c) => pEll(c, A1.ex, A1.ey, 2.6, 2.6), o.hand || o.skin, { sd: 1, lw: 1.2 });
   if (!swap && !o.weaponBehindHand && o.weapon) o.weapon(ctx, q, B, { x: A1.ex, y: A1.ey, a: arms[1][0] + arms[1][1] });
   // 换手时盾在近侧手上，绑在小臂上、挡住手
-  if (swap && o.offhand) o.offhand(ctx, q, B, { x: A1.ex, y: A1.ey, near: true });
+  if (swap && o.offhand) o.offhand(ctx, q, B, { x: A1.ex, y: A1.ey, a: arms[1][0] + arms[1][1], near: true });
   ctx.restore();
 }
 
@@ -485,6 +491,7 @@ const KNIGHT_WOUND = 3.55;
 const KNIGHT_STRUCK = 1.25;
 
 function knightArms(q, g) {
+  if (q.act) return [q.act.far, q.act.near];
   const ph = q.ph;
   if (!ph && q.dead >= 0) return [g.arms[0], [g.arms[1][0] * 0.6 + 0.5, -0.9 + g.arms[1][1] * 0.3]];
   if (!ph && q.blocking) {
@@ -505,19 +512,341 @@ function knightArms(q, g) {
   return [[arc3(ph, 0.2, 0.7, -0.4), -0.5], [up, el]];
 }
 
+// envelope 是一段淡入、保持、淡出的强度：riseFrom..riseTo 从 0 升到 1，保持到 fallFrom，到 fallTo 降回 0。
+function envelope(k, riseFrom, riseTo, fallFrom, fallTo) {
+  if (k <= riseFrom || k >= fallTo) return 0;
+  if (k < riseTo) return smooth((k - riseFrom) / (riseTo - riseFrom));
+  if (k <= fallFrom) return 1;
+  return 1 - smooth((k - fallFrom) / (fallTo - fallFrom));
+}
+
+// sparkle 画一颗四角星（圣光、护盾上的闪光）。
+function sparkle(ctx, x, y, r, color) {
+  if (r <= 0.2) return;
+  ctx.beginPath();
+  ctx.moveTo(x, y - r);
+  ctx.quadraticCurveTo(x + r * 0.18, y - r * 0.18, x + r, y);
+  ctx.quadraticCurveTo(x + r * 0.18, y + r * 0.18, x, y + r);
+  ctx.quadraticCurveTo(x - r * 0.18, y + r * 0.18, x - r, y);
+  ctx.quadraticCurveTo(x - r * 0.18, y - r * 0.18, x, y - r);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+// flame 画一簇往上窜的火苗：外层橙红，里层金黄，高度随时间跳动。
+function flame(ctx, x, y, size, time, seed) {
+  const height = size * (2 + 0.6 * Math.sin(time * 0.021 + seed * 2.3) + 0.3 * Math.sin(time * 0.047 + seed));
+  const sway = Math.sin(time * 0.017 + seed * 1.7) * size * 0.5;
+  const tongue = (halfWidth, tall, color) => {
+    ctx.beginPath();
+    ctx.moveTo(x - halfWidth, y);
+    ctx.quadraticCurveTo(x - halfWidth * 1.1, y - tall * 0.55, x + sway, y - tall);
+    ctx.quadraticCurveTo(x + halfWidth * 1.1, y - tall * 0.55, x + halfWidth, y);
+    ctx.quadraticCurveTo(x, y + halfWidth * 0.9, x - halfWidth, y);
+    ctx.fillStyle = color;
+    ctx.fill();
+  };
+  tongue(size, height, '#ff6a24');
+  tongue(size * 0.55, height * 0.62, '#ffd27a');
+}
+
+// 技能动作里武器 / 手划过的光痕：from..to 是动作进度里画痕的那一段，hand 为 true 跟着空着的近侧手，否则跟着剑尖
+const TRAILS = {
+  projectile: { from: 0.18, to: 0.34, hand: false, color: '255,170,90' },
+  buff: { from: 0.14, to: 0.28, hand: false, color: '255,140,150' },
+  holy: { from: 0.08, to: 0.22, hand: false, color: '255,226,140' },
+  axe: { from: 0.17, to: 0.36, hand: true, color: '235,240,255' },
+  frost: { from: 0.14, to: 0.27, hand: false, color: '190,235,255' },
+};
+
+// knightTrail 按动作关键帧往回采样几帧，连成一条由细到粗的光痕（画在当前躯干坐标里）。
+function knightTrail(ctx, act, B, what) {
+  const trail = TRAILS[act.name];
+  if (!trail || trail.hand !== (what === 'hand')) return;
+  const k = act.k;
+  const tail = 0.12;
+  if (k < trail.from || k > trail.to + tail) return;
+  const fade = k > trail.to ? 1 - (k - trail.to) / tail : 1;
+  const k0 = Math.max(trail.from, k - tail);
+  const k1 = Math.min(k, trail.to);
+  if (k1 - k0 < 0.01) return;
+  const N = 12;
+  const pts = [];
+  for (let i = 0; i <= N; i++) {
+    const pose = actionPose(act.name, lerp(k0, k1, i / N));
+    if (!pose) continue;
+    const useFar = !trail.hand && pose.swap;
+    const arm = useFar ? pose.far : pose.near;
+    const sx = useFar ? -B.sw + 2.5 : B.sw - 2.5;
+    const elbowX = sx + Math.sin(arm[0]) * 7.2;
+    const elbowY = B.sy + 2 + Math.cos(arm[0]) * 7.2;
+    let x = elbowX + Math.sin(arm[0] + arm[1]) * 6.8;
+    let y = elbowY + Math.cos(arm[0] + arm[1]) * 6.8;
+    if (!trail.hand) { x += Math.sin(pose.blade) * 19; y += Math.cos(pose.blade) * 19; }
+    pts.push([x, y]);
+  }
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (let i = 1; i < pts.length; i++) {
+    const w = i / (pts.length - 1);
+    ctx.strokeStyle = `rgba(${trail.color},${0.75 * w * fade})`;
+    ctx.lineWidth = 0.5 + 3.2 * w * fade;
+    ctx.beginPath();
+    ctx.moveTo(pts[i - 1][0], pts[i - 1][1]);
+    ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// knightHandProp 画空着的近侧手上的东西：飞斧出手前攥着的手斧、附魔时掌心的火。
+function knightHandProp(ctx, act, B, hand) {
+  if (act.name === 'axe') {
+    knightTrail(ctx, act, B, 'hand');
+    if (act.k >= 0.28) return;
+    // 斧柄顺着小臂往外伸，斧刃朝前（举到脑后时刃口朝上）
+    const dx = Math.sin(hand.a);
+    const dy = Math.cos(hand.a);
+    const ex = hand.x + dx * 12;
+    const ey = hand.y + dy * 12;
+    inkLine(ctx, [hand.x - dx * 2, hand.y - dy * 2, ex, ey], '#8a5a2c', 1.6);
+    const nx = -dy;
+    const ny = dx;
+    cel(ctx, (c) => {
+      c.moveTo(ex - dx * 1.5, ey - dy * 1.5);
+      c.quadraticCurveTo(ex + nx * 3 - dx * 3, ey + ny * 3 - dy * 3, ex + nx * 6 - dx * 3.5, ey + ny * 6 - dy * 3.5);
+      c.quadraticCurveTo(ex + nx * 4.5 + dx * 1, ey + ny * 4.5 + dy * 1, ex + nx * 6 + dx * 4, ey + ny * 6 + dy * 4);
+      c.quadraticCurveTo(ex + nx * 3 + dx * 2.5, ey + ny * 3 + dy * 2.5, ex + dx * 1.5, ey + dy * 1.5);
+      c.closePath();
+    }, '#e9eef6', { dark: '#8e9bb0', lit: '#ffffff', sd: 0.8, hl: 0.7, lw: 1.2 });
+  }
+  if (act.name === 'enchant') {
+    const burn = envelope(act.k, 0.1, 0.18, 0.56, 0.68);
+    if (burn > 0) flame(ctx, hand.x, hand.y - 1, 1.6 * burn, act.k * 720, 7);
+  }
+}
+
+// knightBladeFx 画技能动作和外观在剑身上的效果：火苗、霜刺、染色、剑尖的火球。
+// 都画成实心的小形状（不画柔和的光晕：模型外面一圈半透明会被描边描出黑边），亮的地方交给后期泛光。
+// geo 是剑的几何：剑格位置、剑身方向 (dx, dy)、法线 (nx, ny)、长度 L。
+function knightBladeFx(ctx, q, act, geo) {
+  const { x, y, dx, dy, nx, ny, L } = geo;
+  const at = (s) => [x + dx * s, y + dy * s];
+  const time = q.time;
+  // tint 把剑身的 s0..s1 一段染色，只染在剑身形状里，不改变剪影
+  const tint = (s0, s1, color, core = '') => {
+    if (s1 <= s0) return;
+    ctx.save();
+    ctx.beginPath();
+    pPoly(ctx, [x + nx * 1.9, y + ny * 1.9, x + dx * (L - 2.6) + nx * 1.4, y + dy * (L - 2.6) + ny * 1.4,
+      x + dx * L, y + dy * L, x + dx * (L - 2.6) - nx * 1.4, y + dy * (L - 2.6) - ny * 1.4, x - nx * 1.9, y - ny * 1.9]);
+    ctx.clip();
+    const [ax, ay] = at(s0);
+    const [bx, by] = at(s1);
+    line(ctx, [ax, ay, bx, by], color, 5);
+    if (core) line(ctx, [ax, ay, bx, by], core, 0.9);
+    ctx.restore();
+  };
+  const name = act?.name;
+  const k = act ? act.k : 0;
+
+  // 烈焰附魔的外观（looks 里的 LOOK_FIRE）：剑身一路小火苗；附魔动作里火跟着手从剑格烧到剑尖
+  let burnTo = q.looks & LOOK_FIRE ? 1 : 0;
+  if (name === 'enchant') burnTo = Math.max(burnTo, k < 0.16 ? 0 : clamp01((k - 0.16) / 0.4));
+  if (burnTo > 0) {
+    tint(2, L * burnTo, 'rgba(255,150,60,0.55)', 'rgba(255,240,200,0.9)');
+    const n = 5;
+    for (let i = 0; i < n; i++) {
+      const s = 3 + ((i + 0.5) / n) * (L - 5);
+      if (s > L * burnTo) break;
+      const [fx, fy] = at(s);
+      flame(ctx, fx, fy, 1.5 - i * 0.12, time, i);
+    }
+  }
+  if (!act) return;
+  switch (name) {
+    case 'projectile': {
+      // 剑尖蓄起一团火，出手时一闪
+      const grow = clamp01((k - 0.03) / 0.23);
+      if (k > 0.03 && k < 0.3) {
+        const r = 1.2 + 2.6 * grow;
+        const [tx, ty] = at(L + r * 0.4);
+        flame(ctx, tx, ty - r * 0.5, r * 0.7, time, 3);
+        flat(ctx, (c) => pEll(c, tx, ty, r, r), '#ff6a24');
+        flat(ctx, (c) => pEll(c, tx - r * 0.15, ty - r * 0.15, r * 0.6, r * 0.6), '#ffd27a');
+        flat(ctx, (c) => pEll(c, tx - r * 0.2, ty - r * 0.25, r * 0.28, r * 0.28), '#fff6dc');
+      }
+      const flash = envelope(k, 0.26, 0.3, 0.32, 0.42);
+      if (flash > 0) {
+        const [tx, ty] = at(L + 2);
+        sparkle(ctx, tx, ty, 6 * flash, '#fff0c0');
+      }
+      tint(L * 0.4, L, `rgba(255,140,60,${0.5 * envelope(k, 0.05, 0.25, 0.34, 0.5)})`);
+      break;
+    }
+    case 'heal': {
+      // 绿光从剑格顺着剑身爬到剑尖，然后整把剑亮着，最后熄掉
+      const glow = envelope(k, 0.16, 0.22, 0.82, 0.98);
+      const climb = clamp01((k - 0.16) / 0.26);
+      if (glow > 0) {
+        tint(1, L * climb, `rgba(120,255,160,${0.6 * glow})`, `rgba(230,255,235,${glow})`);
+        if (climb >= 1) {
+          const [tx, ty] = at(L + 1.5);
+          sparkle(ctx, tx, ty, (2.6 + Math.sin(time / 90) * 0.8) * glow, '#e8ffe8');
+        }
+      }
+      break;
+    }
+    case 'holy': {
+      // 剑插进地里那一下剑尖迸出金光，跪着的时候整把剑泛金，剑身上闪几颗星
+      const glow = envelope(k, 0.16, 0.22, 0.8, 0.96);
+      if (glow > 0) {
+        tint(1, L, `rgba(255,220,120,${0.6 * glow})`, `rgba(255,250,225,${glow})`);
+        for (let i = 0; i < 3; i++) {
+          const blink = Math.max(0, Math.sin(time / 110 + i * 2.1));
+          const [sx, sy] = at(5 + i * 5.5);
+          sparkle(ctx, sx + nx * (i % 2 ? 2.4 : -2.4), sy + ny * (i % 2 ? 2.4 : -2.4), 2.2 * blink * glow, '#fff6c9');
+        }
+      }
+      const burst = envelope(k, 0.18, 0.21, 0.24, 0.36);
+      if (burst > 0) {
+        const [tx, ty] = at(L - 1);
+        sparkle(ctx, tx, ty, 8 * burst, '#fff3c0');
+      }
+      break;
+    }
+    case 'buff': {
+      // 剑举到天上时剑尖一闪红光
+      const flash = envelope(k, 0.22, 0.27, 0.32, 0.5);
+      if (flash > 0) {
+        const [tx, ty] = at(L + 1);
+        sparkle(ctx, tx, ty, 6 * flash, '#ffd0d6');
+        tint(L * 0.3, L, `rgba(255,90,110,${0.5 * flash})`);
+      }
+      break;
+    }
+    case 'frost': {
+      // 跺脚那一下剑身结霜：泛冰蓝，两边长出一排冰刺
+      const glow = envelope(k, 0.2, 0.26, 0.7, 0.92);
+      if (glow > 0) {
+        tint(1, L, `rgba(150,220,255,${0.6 * glow})`, `rgba(240,250,255,${glow})`);
+        for (let i = 0; i < 4; i++) {
+          const s = 5 + i * 4;
+          const side = i % 2 ? 1 : -1;
+          const [bx, by] = at(s);
+          const spike = (2.2 + (i % 2) * 0.8) * glow;
+          ctx.beginPath();
+          ctx.moveTo(bx + nx * side * 1.4 - dx * 1.2, by + ny * side * 1.4 - dy * 1.2);
+          ctx.lineTo(bx + nx * side * (1.4 + spike) + dx * 0.8, by + ny * side * (1.4 + spike) + dy * 0.8);
+          ctx.lineTo(bx + nx * side * 1.4 + dx * 1.2, by + ny * side * 1.4 + dy * 1.2);
+          ctx.closePath();
+          ctx.fillStyle = '#e4f6ff';
+          ctx.fill();
+        }
+      }
+      break;
+    }
+    case 'blink': {
+      tint(1, L, `rgba(190,140,255,${0.6 * (1 - clamp01(k / 0.4))})`, `rgba(245,235,255,${1 - clamp01(k / 0.4)})`);
+      break;
+    }
+  }
+}
+
+// knightStance 是技能动作的站姿：按关键帧里的落脚点用 IK 算腿，和平常的步态按权重混合。
+function knightStance(q, g) {
+  const act = q.act;
+  if (!act) return;
+  g.drop = act.drop;
+  if (!act.feet) return;
+  const weight = act.feetWeight;
+  g.bob *= 1 - weight;
+  const hipY = -17 + act.drop;
+  for (let i = 0; i < 2; i++) {
+    // 落脚点相对这条腿站直时的位置；脚踝离地 0.6（靴底在脚踝下面）
+    const [footX, footY] = act.feet[i];
+    const [thigh, shin] = legIK(footX, -0.6 + footY - hipY, 8.5, 8.5);
+    const base = g.legs[i] || [0, 0];
+    g.legs[i] = [lerp(base[0], thigh, weight), lerp(base[1], shin, weight)];
+  }
+}
+
+// knightSweep 画旋风斩时剑尖扫出的一圈光：front 为 true 画身前那半圈（在身体之后画），否则画身后那半圈。
+function knightSweep(ctx, act, front) {
+  const turn = act.spin;
+  if (turn <= 0.05 || turn >= TAU - 0.05) return;
+  const fade = Math.min(1, turn / 0.8, (TAU - turn) / 0.8);
+  const cy = -21 + act.drop;
+  const rx = 36;
+  const ry = 9;
+  const span = 2.2;
+  const N = 18;
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (let i = 0; i < N; i++) {
+    const a0 = turn - span * (1 - i / N);
+    const a1 = turn - span * (1 - (i + 1) / N);
+    const mid = (a0 + a1) / 2;
+    if (Math.sin(mid) > 0 !== front) continue;
+    const k = (i + 1) / N;
+    ctx.globalAlpha = 0.75 * k * fade;
+    ctx.strokeStyle = k > 0.8 ? '#ffffff' : 'rgba(235,240,255,1)';
+    ctx.lineWidth = 0.6 + 2.6 * k;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a0) * rx, cy + Math.sin(a0) * ry);
+    ctx.lineTo(Math.cos(a1) * rx, cy + Math.sin(a1) * ry);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawKnight(ctx, q) {
+  // 技能的专属动作（见 knightActions.ts）；没有时是普通斩击（q.ph）或站立、走路
+  const act = q.dead >= 0 ? null : actionPose(q.action, q.attack);
+  if (act) q = { ...q, ph: null, act };
+  ctx.save();
+  if (act) {
+    // 跳起、发力颤动、闪现到达时的拉伸、旋风斩的转身
+    const shake = act.jitter ? Math.sin(q.time * 0.09) * act.jitter * 0.7 : 0;
+    ctx.translate(shake, -act.lift);
+    if (act.stretch > 0) ctx.scale(1 + 0.22 * act.stretch, 1 - 0.12 * act.stretch);
+    if (act.spin > 0) {
+      knightSweep(ctx, act, false);
+      let sx = Math.cos(act.spin);
+      if (Math.abs(sx) < 0.3) sx = sx < 0 ? -0.3 : 0.3;
+      ctx.scale(sx, 1);
+      // 转到背对时光照方向也跟着翻过来，亮面始终在左上
+      if (sx < 0) LX = -q.dir;
+    }
+  }
+  drawKnightBody(ctx, q);
+  LX = q.dir;
+  if (act && act.spin > 0) {
+    ctx.restore();
+    ctx.save();
+    ctx.translate(0, -act.lift);
+    knightSweep(ctx, act, true);
+  }
+  ctx.restore();
+}
+
+function drawKnightBody(ctx, q) {
   const color = safeColor(q.color, '#4da3ff');
   const steel = '#c3cbd6';
   const gold = '#e2b04a';
+  const act = q.act;
   humanoid(ctx, q, {
     legs: '#4a5160', boots: '#2b2f3a', body: steel, sleeve: color, forearm: steel, hand: '#8a6a4c',
     skin: '#f0c8a0', shoulder: 9, waist: 6, headR: 7.4,
-    lean: (q) => (q.ph ? arc3(q.ph, 0, -0.22, 0.28) : q.blocking && !(q.dead >= 0) ? 0.14 : 0),
+    lean: (q) => (act ? act.lean + (act.jitter ? Math.sin(q.time * 0.07) * act.jitter * 0.03 : 0)
+      : q.ph ? arc3(q.ph, 0, -0.22, 0.28) : q.blocking && !(q.dead >= 0) ? 0.14 : 0),
     arms: knightArms,
+    adjust: knightStance,
     back(ctx, q, B) {
-      // cape: flows back with speed and ripples
+      // cape: flows back with speed and ripples（转圈、冲刺、闪现到达时也扬起来）
       const sway = Math.sin(q.time / 230 + (q.walk || 0)) * 2;
-      const run = q.moving ? 7 : 0;
+      const flare = act && (act.spin > 0 || act.stretch > 0 || act.name === 'haste');
+      const run = q.moving || flare ? 7 : 0;
       cel(ctx, (c) => {
         c.moveTo(-B.sw + 1, B.sy);
         c.quadraticCurveTo(-B.sw - 6 - run, B.sy + 10, -B.sw - 5 - run - sway, B.hipY + 12);
@@ -532,11 +861,23 @@ function drawKnight(ctx, q) {
         [-B.sw + 2, B.sy + 6, -B.sw - 0.5 - run * 0.3, B.hipY + 2, -B.sw - run * 0.4 - sway * 0.5, B.hipY + 9],
       ], 'rgba(10,6,24,0.45)', 0.9);
       line(ctx, [-B.sw - 5 - run - sway, B.hipY + 12, -B.sw - 1 - run * 0.6 - sway * 0.5, B.hipY + 9, -B.sw + 2 - run * 0.4, B.hipY + 13], gold, 0.9);
+      if (act?.slung) {
+        // 盾背在背上：从侧面看是窄窄的一条，露出身后的边
+        const x = -B.sw - 1.5;
+        const y = B.sy + 8;
+        cel(ctx, (c) => pEll(c, x, y, 3.4, 9, -0.12), shade(color, -0.3), { sd: 1.4 });
+        line(ctx, [x - 1.2, y - 7.6, x - 2.4, y, x - 1.4, y + 7.6], gold, 1.1);
+      }
     },
     // 站立和走路时：盾在朝向我们的近侧手上挡在身前，剑在远侧手上从身后指向前方
     // （右手持剑的人从左侧看过去就是这样）；攻击时换回近侧手挥剑，劈砍才看得清
-    swapHands: (q) => !q.ph && !(q.dead >= 0),
+    swapHands: (q) => (act ? act.swap : !q.ph && !(q.dead >= 0)),
     offhand(ctx, q, B, hand) {
+      if (act?.slung) {
+        // 盾背到背上了，这只手空着：飞斧出手前手里攥着斧头，附魔时手心冒火
+        if (hand.near) knightHandProp(ctx, act, B, hand);
+        return;
+      }
       // round shield with a gold sunburst boss
       const x = hand.near ? hand.x + 0.5 : hand.x - 2.5;
       const y = hand.near ? hand.y - 2 : hand.y - 5;
@@ -561,13 +902,24 @@ function drawKnight(ctx, q) {
       rivets(ctx, rv, 0.55);
       cel(ctx, (c) => pEll(c, x + 0.5, y, 2.4, 3), gold, { sd: 1, lw: 1 });
       glint(ctx, x - 0.3, y - 1.2, 2.2, 'rgba(255,240,200,0.8)');
-      if (q.blocking && hand.near) {
-        // 格挡时盾沿亮一圈冷光
-        ctx.strokeStyle = 'rgba(160,220,255,0.85)';
-        ctx.lineWidth = 1.2;
+      // 格挡、举盾放护盾时盾沿亮一圈冷光（举盾那下更亮，盾面也泛白）
+      const raise = act?.name === 'shield' ? envelope(act.k, 0.12, 0.26, 0.7, 0.95) : 0;
+      if ((q.blocking || raise > 0) && hand.near) {
+        ctx.strokeStyle = `rgba(160,220,255,${0.85 * Math.max(q.blocking ? 1 : 0, raise)})`;
+        ctx.lineWidth = 1.2 + raise * 0.8;
         ctx.beginPath();
         ctx.ellipse(x, y, 7.9, 9.7, 0, 0, TAU);
         ctx.stroke();
+      }
+      if (raise > 0 && hand.near) {
+        ctx.save();
+        ctx.beginPath();
+        pEll(ctx, x, y, 7.2, 9);
+        ctx.clip();
+        ctx.fillStyle = `rgba(200,240,255,${0.45 * raise})`;
+        ctx.fillRect(x - 8, y - 10, 16, 20);
+        ctx.restore();
+        sparkle(ctx, x - 2.5, y - 5, 2.6 * raise, '#ffffff');
       }
     },
     torsoDetail(ctx, q, B) {
@@ -608,6 +960,11 @@ function drawKnight(ctx, q) {
       const { hx, hy, hr } = B;
       // eye and cheek under the open-faced helm
       eyes(ctx, hx + 2.6, hy + 1, '#16101c', 1.7);
+      if (act?.name === 'buff') {
+        // 战吼：张大嘴吼出来
+        const open = envelope(act.k, 0.18, 0.28, 0.72, 0.9);
+        if (open > 0) flat(ctx, (c) => pEll(c, hx + 5, hy + 4.6, 1.3, 0.4 + 1.6 * open), '#3a1018', 0.8);
+      }
       // helm: dome, cheek guard, nasal
       cel(ctx, (c) => {
         c.moveTo(hx - hr - 0.8, hy + 2.5);
@@ -639,8 +996,9 @@ function drawKnight(ctx, q) {
     },
     weaponBehindHand: true,
     weapon(ctx, q, B, h) {
-      // broad sword along the forearm
-      const a = h.a;
+      // broad sword along the forearm（技能动作里剑的角度单独给）
+      if (act) knightTrail(ctx, act, B, 'tip');
+      const a = act ? act.blade : h.a;
       const dx = Math.sin(a);
       const dy = Math.cos(a);
       const L = 20;
@@ -660,6 +1018,7 @@ function drawKnight(ctx, q) {
       flat(ctx, (c) => pEll(c, h.x + dx * 0.6, h.y + dy * 0.6, 0.9, 0.9), '#ff4a3a');
       glint(ctx, h.x + dx * 0.6, h.y + dy * 0.6, 1.8, 'rgba(255,90,60,0.7)');
       line(ctx, [h.x + dx * 5 + nx * 0.6, h.y + dy * 5 + ny * 0.6, h.x + dx * 11 + nx * 0.6, h.y + dy * 11 + ny * 0.6], 'rgba(255,255,255,0.85)', 0.6);
+      knightBladeFx(ctx, q, act, { x: h.x, y: h.y, dx, dy, nx, ny, L });
       if (q.ph && q.ph.strike > 0 && q.ph.back < 0.4) {
         // a crisp crescent trailing the blade: thick at the edge, tapering
         // to nothing behind it, shrinking into the blade on the follow-through

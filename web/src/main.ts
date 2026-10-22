@@ -10,7 +10,6 @@ import './styles/style.css';
 import './styles/debug.css';
 import './styles/debug-proto.css';
 
-import { ATTACK_MS } from './game/config';
 import { faceToward, fxAuras, fxResolve, posOf, QUALITY_NAMES, setQuality, state } from './game/state';
 import { handleMessage, resetOnClose } from './game/sync';
 import { castSlot, initInput, resendMove } from './input';
@@ -50,7 +49,7 @@ function faceInput(now: number): void {
     if (t && !t.dead && t.kind === 'monster') faceToward(me, posOf(t, now).x, posOf(t, now).y, now);
     return;
   }
-  if (me && state.moveDx !== 0 && now - me.attackAt > ATTACK_MS) me.facing = state.moveDx < 0 ? Math.PI : 0;
+  if (me && state.moveDx !== 0 && now - me.attackAt > me.attackMs) me.facing = state.moveDx < 0 ? Math.PI : 0;
 }
 
 function frame(): void {

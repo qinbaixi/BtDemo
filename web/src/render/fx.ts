@@ -87,6 +87,8 @@ const LOOK_FROST = 8;
 export class FX {
   resolve: Resolve;
   effects: any[];   // 正在播放的技能特效
+  scheduled: any[] = [];   // 还没到出手时间的特效（cast 的 lead），step 到点再放进 effects
+  scheduledShake: { at: number; shake: number }[] = [];
   parts: any[];     // 粒子
   shake: number;
   density: number;   // 粒子密度 0..1
@@ -107,6 +109,8 @@ export class FX {
 
   clear() {
     this.effects.length = 0;
+    this.scheduled.length = 0;
+    this.scheduledShake.length = 0;
     this.parts.length = 0;
     this.shake = 0;
   }
@@ -118,7 +122,23 @@ export class FX {
 
   // cast starts the visual for a CAST event. It returns how many ms until the
   // effect "lands", so the caller can delay hit numbers to match.
-  cast(ev, now) {
+  // lead 是角色动作出手前的那段时间（毫秒）：特效晚这么久才开始，正好从挥出去的手上飞出去。
+  // origin 是飞行道具的出发点（相对施法者脚底的偏移，像素），不给就从身体中间飞出。
+  cast(ev, now, lead = 0, origin: { x: number; y: number } | null = null) {
+    if (lead <= 0) return this.launch(ev, now, origin);
+    const before = this.effects.length;
+    const shake = this.shake;
+    const delay = this.launch(ev, now + lead, origin);
+    this.scheduled.push(...this.effects.splice(before));
+    if (this.shake !== shake) {
+      this.scheduledShake.push({ at: now + lead, shake: this.shake });
+      this.shake = shake;
+    }
+    return lead + delay;
+  }
+
+  // launch 按事件的 fx 放特效，特效从 now 开始（粒子的出生时间也从 now 算）。
+  launch(ev, now, origin: { x: number; y: number } | null = null) {
     const color = ev.color || '#ffffff';
     const src = this.pos(ev.src, { x: ev.x || 0, y: ev.y || 0, r: 14 });
     const dst = ev.dst ? this.pos(ev.dst, src) : src;
@@ -129,7 +149,7 @@ export class FX {
         const dist = Math.hypot(dst.x - src.x, dst.y - src.y);
         const life = Math.max(140, Math.min(420, dist / 0.9));
         const arrow = /arrow/.test(ev.skill || '');
-        this.effects.push({ ...base, kind: arrow ? 'arrow' : 'orb', life, trailAt: now });
+        this.effects.push({ ...base, kind: arrow ? 'arrow' : 'orb', life, trailAt: now, origin });
         return life;
       }
       case 'circle': {
@@ -232,7 +252,9 @@ export class FX {
         const x1 = ev.tx ?? dst.x;
         const y1 = ev.ty ?? dst.y;
         const life = Math.max(120, Math.hypot(x1 - x0, y1 - y0) / 0.85);
-        this.effects.push({ ...base, kind: 'axe', x0, y0, x1, y1, life, hit: !!ev.dst });
+        // 从手里飞出：起点相对平常飞行高度（离地 22）的偏移，飞行中逐渐收回到直线上
+        const lift = origin ? { x: origin.x, y: origin.y + 22 } : null;
+        this.effects.push({ ...base, kind: 'axe', x0, y0, x1, y1, life, hit: !!ev.dst, lift });
         return life;
       }
       case 'frost': {
@@ -468,7 +490,8 @@ export class FX {
         }
         case 'pillar': {
           const p = this.pos(f.anchor, f);
-          add(p.x, p.y - 30, 220, f.color, Math.sin(t * Math.PI), 0.55);
+          // 光从头顶上照下来、不太强：圣光庇护时跪着的角色不会被照成一团白
+          add(p.x, p.y - 60, 220, f.color, Math.sin(t * Math.PI), 0.24);
           break;
         }
         case 'ring': add(f.x, f.y, f.radius * 1.5, f.color, fade * 0.6, 0.3); break;
@@ -533,6 +556,18 @@ export class FX {
 
   // step 每帧先调一次：弹道到达时爆一下，清掉播完的特效。
   step(now) {
+    // 到了出手时间的特效开始播放
+    if (this.scheduled.length) {
+      const due = this.scheduled.filter((f) => f.born <= now);
+      if (due.length) {
+        this.effects.push(...due);
+        this.scheduled = this.scheduled.filter((f) => f.born > now);
+      }
+    }
+    if (this.scheduledShake.length) {
+      for (const s of this.scheduledShake) if (s.at <= now) this.shake = Math.max(this.shake, s.shake);
+      this.scheduledShake = this.scheduledShake.filter((s) => s.at > now);
+    }
     // Projectiles burst once on arrival, even if no frame fell near their end.
     for (const f of this.effects) {
       if ((f.kind === 'orb' || f.kind === 'arrow') && !f.landed && now - f.born >= f.life * 0.95) {
@@ -665,7 +700,11 @@ export class FX {
 
   // axePoint 是飞斧在进度 k（0..1）时的位置（离地 22 像素飞）。
   axePoint(f, k) {
-    return { x: f.x0 + (f.x1 - f.x0) * k, y: f.y0 + (f.y1 - f.y0) * k - 22 };
+    const off = f.lift ? 1 - k : 0;
+    return {
+      x: f.x0 + (f.x1 - f.x0) * k + (f.lift ? f.lift.x * off : 0),
+      y: f.y0 + (f.y1 - f.y0) * k - 22 + (f.lift ? f.lift.y * off : 0),
+    };
   }
 
   axeTrail(ribbons, f, t) {
@@ -794,7 +833,7 @@ export class FX {
     for (const ent of this.lookEnts) {
       const pulse = 0.85 + 0.15 * Math.sin(now / 140 + ent.id);
       // 光晕要淡：叠上泛光以后太亮会把角色本身盖住
-      if (ent.looks & LOOK_HOLY) blit(sprites, glow('#ffd88a'), ent.x, ent.y - ent.h * 0.5, ent.h * 0.85 * pulse, 0.16);
+      if (ent.looks & LOOK_HOLY) blit(sprites, glow('#ffd88a'), ent.x, ent.y - ent.h * 0.5, ent.h * 0.85 * pulse, 0.09);
       if (ent.looks & LOOK_FIRE) blit(sprites, glow('#ff7a2a'), ent.x + ent.dir * ent.r * 0.9, ent.y - ent.h * 0.58, ent.r * 0.9 * pulse, 0.3);
     }
   }
@@ -865,8 +904,15 @@ export class FX {
   projectilePath(f, k, lift) {
     const sp = this.pos(f.src, { x: f.sx, y: f.sy, r: f.sr });
     const dp = this.pos(f.dst, { x: f.dx, y: f.dy, r: f.dr });
-    const x0 = sp.x, y0 = sp.y - (sp.r || 14) * (f.kind === 'orb' ? 1.3 : 1.2);
     const x1 = dp.x, y1 = dp.y - (dp.r || 14) * 1.0;
+    let x0 = sp.x, y0 = sp.y - (sp.r || 14) * (f.kind === 'orb' ? 1.3 : 1.2);
+    if (f.origin) {
+      // 从剑尖飞出；目标贴得太近时出发点不越过目标
+      const ahead = x1 - sp.x;
+      const out = Math.sign(f.origin.x) === Math.sign(ahead) ? Math.min(Math.abs(f.origin.x), Math.abs(ahead) * 0.6) : 0;
+      x0 = sp.x + out * Math.sign(f.origin.x);
+      y0 = sp.y + f.origin.y;
+    }
     const arc = Math.sin(k * Math.PI) * Math.min(lift, Math.hypot(x1 - x0, y1 - y0) * (f.kind === 'orb' ? 0.12 : 0.08));
     return { x: x0 + (x1 - x0) * k, y: y0 + (y1 - y0) * k - arc };
   }
@@ -1260,9 +1306,14 @@ export class FX {
     g.addColorStop(0, rgba(f.rgb, 0));
     g.addColorStop(0.5, rgba(whiten(f.rgb, 0.5), 0.55 * fade));
     g.addColorStop(1, rgba(f.rgb, 0));
-    ctx.globalAlpha = 1;
     ctx.fillStyle = g;
-    ctx.fillRect(p.x - w, p.y - h, w * 2, h);
+    // 光柱从天上照下来，越往下越淡：到人身上只剩一层薄光，不把角色（圣光庇护时跪地的动作）照成一团白
+    const strips = 8;
+    for (let i = 0; i < strips; i++) {
+      ctx.globalAlpha = 1 - 0.8 * ((i + 0.5) / strips);
+      ctx.fillRect(p.x - w, p.y - h + (h * i) / strips, w * 2, h / strips + 0.5);
+    }
+    ctx.globalAlpha = 1;
     // soft top
     blit(ctx, glow(f.color), p.x, p.y - h, w * 1.4, 0.6 * fade);
   }

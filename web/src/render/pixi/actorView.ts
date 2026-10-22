@@ -21,6 +21,7 @@ export interface Pose {
   x: number; y: number; r: number; color: string; facing: number; walk: number;
   moving: boolean; attack: number; hit: number; dead: number; time: number; isSelf: boolean;
   blocking?: boolean;   // 正在格挡（举盾）
+  action?: string;      // 攻击时做的是哪个动作（玩家技能的 fx 名，空表示普通攻击）
   knockX?: number;      // 受击被推开的显示偏移（像素，服务端位置不变）
   knockY?: number;
   squash?: number;      // 受击形变：正数横向变宽、纵向变扁
@@ -32,6 +33,7 @@ export interface Pose {
   xray?: boolean;       // 被高物件挡住：在物件上面再画一层剪影
   onScreen?: boolean;   // 在镜头里（不在时程序模型不重画，省 CPU 和上传）
   tint?: number;        // 身体染色（冰冻发蓝、圣光发金），0xffffff 不染
+  looks?: number;       // Buff 外观位（game/config.ts 的 LOOK_*），模型上画附魔的火等
   ghost?: { dx: number; dy: number; k: number };   // 闪现残影：起点相对脚底的偏移，k 是淡出进度 0..1
 }
 

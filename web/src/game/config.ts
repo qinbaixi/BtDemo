@@ -14,6 +14,7 @@ export const MODEL_SCALE = 1.25;     // 模型画得比碰撞半径略大
 // 画角色时的范围（左右、向上、向下各是绘制半径的几倍），要容得下挥舞的武器和倒地的姿势
 export const MODEL_BOX: Record<string, [number, number, number]> = {
   default: [3, 3.5, 1.8],
+  knight: [3.2, 4.2, 1.8],   // 技能动作里剑会举过头顶、伸得更远
   guard: [3.6, 3.5, 1.8],
   ogre_chief: [3.6, 4.6, 3.6],
 };

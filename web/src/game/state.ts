@@ -6,7 +6,7 @@ import type { createScenery } from '../render/scenery';
 import type {
   EntityInfo, EntityKind, Obstacle, SelfInfo, SkillInfo,
 } from '../net/types';
-import { KIND_COLOR, LERP_MS, MODEL_H, MODEL_SCALE } from './config';
+import { ATTACK_MS, KIND_COLOR, LERP_MS, MODEL_H, MODEL_SCALE } from './config';
 import { clamp, lerp } from './math';
 
 export type Scenery = ReturnType<typeof createScenery>;
@@ -44,6 +44,8 @@ export interface ClientEntity {
   rx: number;         // 上一帧画出来的位置，用来推进走路循环
   ry: number;
   attackAt: number;
+  action: string;      // 正在做的动作（玩家技能的 fx 名），空串是普通攻击
+  attackMs: number;    // 这个动作的时长
   hitAt: number;
   deadAt: number;
   // 打击感
@@ -199,6 +201,8 @@ export function makeEntity(d: Partial<EntityInfo> & { id: number }, now: number)
     rx: d.x || 0,
     ry: d.y || 0,
     attackAt: -1e9,
+    action: '',
+    attackMs: ATTACK_MS,
     hitAt: -1e9,
     deadAt: -1,
     freezeUntil: 0,

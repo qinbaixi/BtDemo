@@ -2,7 +2,8 @@
 
 import type { GameEvent } from '../net/types';
 import { cameraKick, cameraPunch } from '../render/camera';
-import { FEEL, LOOK_FIRE } from './config';
+import { ACTIONS, muzzleOffset } from '../render/knightActions';
+import { ATTACK_MS, FEEL, LOOK_FIRE, MODEL_SCALE } from './config';
 import { hypot } from './math';
 import { faceToward, headY, posOf, state, type ClientEntity, type FloatOpts } from './state';
 
@@ -11,18 +12,33 @@ export function onEvent(ev: GameEvent, now: number): void {
   switch (ev.k) {
     case 'cast': {
       const src = state.ents.get(ev.src);
+      let lead = 0;
+      let origin: { x: number; y: number } | null = null;
       if (src) {
         src.attackAt = now;
+        // 玩家的每个技能有自己的动作（见 render/knightActions.ts），怪物都是普通攻击动作
+        const action = src.kind === 'player' && ev.fx ? ACTIONS[ev.fx] : undefined;
+        src.action = action ? ev.fx! : '';
+        src.attackMs = action ? action.ms : ATTACK_MS;
+        lead = action ? action.lead : 0;
         const dst = ev.dst && ev.dst !== ev.src ? state.ents.get(ev.dst) : null;
         if (dst) { const dp = posOf(dst, now); faceToward(src, dp.x, dp.y, now); }
         else if (typeof ev.tx === 'number' && typeof ev.x === 'number' && Math.abs(ev.tx - ev.x) > 1) {
           faceToward(src, ev.tx, ev.ty ?? src.y, now);   // 闪现、没打中的飞斧：朝飞出去的方向
         }
         if (ev.fx === 'blink' && typeof ev.tx === 'number') blinkTo(src, ev, now);
+        // 火球从剑尖、飞斧从手里飞出去：动作出手那一刻的位置（相对脚底的世界坐标偏移）
+        const muzzle = action ? muzzleOffset(src.action) : null;
+        if (muzzle) {
+          const scale = ((src.r || 14) * MODEL_SCALE) / 16;
+          const dir = Math.cos(src.facing) < -0.1 ? -1 : 1;
+          origin = { x: muzzle.x * scale * dir, y: muzzle.y * scale };
+        }
         // 武器着火时，物理技能的刀光和命中火花都换成火焰色
         if (src.looks & LOOK_FIRE && (ev.fx === 'melee' || ev.fx === 'circle' || ev.fx === 'axe')) ev = { ...ev, color: '#ff7a2a' };
       }
-      const delay = fx.cast(ev, now);
+      // 特效等动作出手时才放（火球从推出去的手心飞出、冰霜新星在剑插地时炸开）
+      const delay = fx.cast(ev, now, lead, origin);
       state.lands.set(ev.src, { at: now + delay, color: ev.color });
       // 玩家的技能，以及怪物的大招，头顶报技能名
       const big = ev.fx === 'circle' || ev.fx === 'buff';
@@ -76,9 +92,14 @@ export function onEvent(ev: GameEvent, now: number): void {
       else hit();
       break;
     }
-    case 'heal':
-      addFloat(now, ev.dst, `+${ev.v}`, '#7cff9b', 18, 1000);
+    case 'heal': {
+      // 自己放的治疗：等动作出手、绿光亮起来再飘数字
+      const land = state.lands.get(ev.dst);
+      const show = () => addFloat(performance.now(), ev.dst, `+${ev.v}`, '#7cff9b', 18, 1000);
+      if (land && land.at > now) state.pending.push({ at: land.at, fn: show });
+      else show();
       break;
+    }
     case 'buff':
       addFloat(now, ev.dst, String(ev.name || ''), '#9ad7ff', 15, 1200, { rise: 50 });
       break;

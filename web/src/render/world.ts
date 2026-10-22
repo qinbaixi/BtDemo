@@ -10,7 +10,7 @@
 //   overlay      另一块 2D 画布：头顶文字、调试线条、暗角（不参与泛光和调色，保持清晰）
 
 import { Application, Container, Graphics, RenderLayer, type TextureSource } from 'pixi.js';
-import { ATTACK_MS, DEATH_MS, FEEL, HIT_MS, LOOK_FROST, LOOK_HOLY, MODEL_SCALE, RIM } from '../game/config';
+import { DEATH_MS, FEEL, HIT_MS, LOOK_FROST, LOOK_HOLY, MODEL_SCALE, RIM } from '../game/config';
 import { clamp, hypot } from '../game/math';
 import { headY, posOf, state, type ClientEntity, type Point, type Quality, type Scenery } from '../game/state';
 import { art } from './art';
@@ -225,7 +225,7 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
   // 顿帧：动作进度停住（把动作开始的时间往后推），走路也不迈步；位置照常插值
   const frozen = now < e.freezeUntil;
   if (frozen) {
-    if (now - e.attackAt < ATTACK_MS) e.attackAt += dt;
+    if (now - e.attackAt < e.attackMs) e.attackAt += dt;
     if (now - e.hitAt < HIT_MS) e.hitAt += dt;
     if (e.deadAt >= 0 && now - e.deadAt < DEATH_MS) e.deadAt += dt;
   }
@@ -248,7 +248,7 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
   e.shownFacing = e.facing;
   const turnT = (now - e.turnAt) / 140;
   const turn = turnT >= 0 && turnT < 1 ? Math.sin(turnT * Math.PI) : 0;
-  const atk = (now - e.attackAt) / ATTACK_MS;
+  const atk = (now - e.attackAt) / e.attackMs;
   const hit = (now - e.hitAt) / HIT_MS;
   const hitting = hit >= 0 && hit < 1;
   const dead = e.dead ? clamp((now - (e.deadAt < 0 ? now - DEATH_MS : e.deadAt)) / DEATH_MS, 0, 1) : -1;
@@ -276,11 +276,13 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
     walk: e.walk,
     moving: now < e.moveUntil && !e.dead,
     attack: atk >= 0 && atk < 1 && !e.dead ? atk : -1,
+    action: e.action,
     hit: hitting ? hit : -1,
     dead,
     time: now + e.id * 397,
     isSelf: e.id === state.myId,
     blocking: e.blocking && !e.dead,
+    looks: e.dead ? 0 : e.looks,
     tint: e.dead ? 0xffffff : e.looks & LOOK_FROST ? 0xa8dcff : e.looks & LOOK_HOLY ? 0xfff0c4 : 0xffffff,
     ghost: blinkGhost(e, p, now),
     knockX: e.knockX * knock,

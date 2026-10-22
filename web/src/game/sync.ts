@@ -6,7 +6,7 @@ import { closePicker, openPicker } from '../ui/picker';
 import { createScenery } from '../render/scenery';
 import { loadMap } from './map';
 import type { ClientMessage, ServerMessage, SkillInfo, SyncMsg, WelcomeMsg } from '../net/types';
-import { ATTACK_MS, DEATH_MS, LERP_MS, SNAP_DIST } from './config';
+import { DEATH_MS, LERP_MS, SNAP_DIST } from './config';
 import { onEvent } from './events';
 import { hypot } from './math';
 import { makeEntity, posOf, state } from './state';
@@ -111,7 +111,7 @@ function onSync(m: SyncMsg, now: number, deps: SyncDeps): void {
       // 自己按着左右键时朝向由按键决定（main.ts 的 faceInput），这里只管别人和被推动的情况
       // 格挡中的人举着盾倒退，朝向不跟着移动方向转
       const steered = (s.id === state.myId && (state.moveDx !== 0 || state.blockHeld)) || e.blocking;
-      if (!steered && Math.abs(mdx) > 0.3 && now - e.attackAt > ATTACK_MS) e.facing = mdx < 0 ? Math.PI : 0;
+      if (!steered && Math.abs(mdx) > 0.3 && now - e.attackAt > e.attackMs) e.facing = mdx < 0 ? Math.PI : 0;
     }
     if (jump) { e.rx = s.x; e.ry = s.y; }
     if (s.dead && !e.dead) e.deadAt = e.fresh ? now - DEATH_MS : now;
