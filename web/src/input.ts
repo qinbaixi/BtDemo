@@ -1,6 +1,6 @@
 // 键盘和鼠标输入：移动、选目标、放技能、切换显示。
 
-import { MOVE_DIR } from './game/config';
+import { MOVE_DIR, SKILL_KEYS } from './game/config';
 import { clamp, hypot } from './game/math';
 import {
   cdRemaining, headY, posOf, QUALITY_NAMES, setQuality, state, type ClientEntity, type Quality,
@@ -15,6 +15,7 @@ const QUALITY_DETAIL: Record<Quality, string> = {
 import type { ClientMessage } from './net/types';
 import type { Debug } from './ui/debug';
 import { showToast } from './ui/hud';
+
 
 export interface InputDeps {
   canvas: HTMLCanvasElement;
@@ -177,8 +178,14 @@ function onKeyDown(e: KeyboardEvent): void {
     deps.debug.toggle();
     return;
   }
-  const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
-  if (m) castSlot(Number(m[1]));
+  const slot = SKILL_KEYS.indexOf(e.code);
+  if (slot >= 0) {
+    castSlot(slot + 1);
+    return;
+  }
+  // 数字键 1～9 也还能用
+  const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+  if (digit) castSlot(Number(digit[1]));
 }
 
 function onKeyUp(e: KeyboardEvent): void {

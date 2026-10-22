@@ -5,6 +5,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/game/attr"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
@@ -48,7 +49,33 @@ func entityState(entity *core.Entity) *pb.EntityState {
 		Dead:     proto.Bool(entity.Dead),
 		Shield:   core.F32(math.Ceil(entity.Shield())),
 		Blocking: proto.Bool(entity.Blocking),
+		Looks:    core.I32(int(entity.Looks())),
 	}
+}
+
+// skillInfo 是一个技能在技能栏（slot 从 1 起）或技能池（slot 为 0）里的样子。
+func skillInfo(slot int, skill *config.Skill) *pb.SkillInfo {
+	return &pb.SkillInfo{
+		Slot:     core.I32(slot),
+		Id:       proto.String(skill.ID),
+		Name:     proto.String(skill.Name),
+		Kind:     proto.String(skill.Kind),
+		Range:    core.F32(skill.Range),
+		Radius:   core.F32(skill.Radius),
+		Cooldown: core.F32(skill.Cooldown),
+		Color:    proto.String(skill.Color),
+		Fx:       proto.String(skill.FX),
+		Desc:     proto.String(skill.Desc),
+	}
+}
+
+// skillBar 是按格子排好的技能栏。
+func skillBar(skills []*config.Skill) []*pb.SkillInfo {
+	bar := make([]*pb.SkillInfo, 0, len(skills))
+	for i, skill := range skills {
+		bar = append(bar, skillInfo(i+1, skill))
+	}
+	return bar
 }
 
 // selfInfo 是玩家自身的属性、冷却和增益效果。

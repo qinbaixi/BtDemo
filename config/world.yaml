@@ -29,5 +29,7 @@ player:
   radius: 16
   color: "#4da3ff"
   respawn: 3
+  # 技能：第 1 个是固定的普攻（J / 左键），后面是默认选择；进游戏和死亡时可以从 skill_pool 里重新挑同样多个
   skills: [slash, fireball, whirlwind, heal, warcry, shield]
+  skill_pool: [fireball, whirlwind, heal, warcry, shield, haste, holy_guard, blink, enchant, axe, frost_nova]
   block: { reduce: 0.8, speed: 0.5 }   # 按住右键格挡：受到的伤害减少 80%，移动速度减半，不能放技能

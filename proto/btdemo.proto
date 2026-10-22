@@ -18,7 +18,15 @@ message ClientMsg {
     Cast cast = 3;
     Watch watch = 4;
     Block block = 5;
+    Loadout loadout = 6;
   }
+}
+
+// Loadout picks the player's skills for slots 2.. (slot 1, the basic attack,
+// is fixed). Only allowed right after joining (before the first cast) and
+// while dead; the server answers with SkillBar, or a Toast when refused.
+message Loadout {
+  repeated string skills = 1;
 }
 
 // Block starts (on = true) or stops raising the guard: while blocking the
@@ -39,9 +47,13 @@ message SetTarget {
 }
 
 // Cast uses the skill in a 1-based slot on target (0 = the selected target).
+// dx, dy aim dash and line skills (the blink direction, where the axe flies);
+// the server normalizes them.
 message Cast {
   required int32 slot = 1;
   optional int32 target = 2;
+  optional float dx = 3;
+  optional float dy = 4;
 }
 
 // Watch asks for the behavior tree trace of one monster or NPC (the debug
@@ -59,19 +71,26 @@ message ServerMsg {
     Leave leave = 3;
     Sync sync = 4;
     Toast toast = 5;
+    SkillBar skill_bar = 6;
   }
+}
+
+// SkillBar is the player's new skill bar after a Loadout was accepted.
+message SkillBar {
+  repeated SkillInfo skills = 1;
 }
 
 message SkillInfo {
   required int32 slot = 1;
   required string id = 2;
   required string name = 3;
-  required string kind = 4;  // target | aoe | self
+  required string kind = 4;  // target | aoe | self | dash | line
   optional float range = 5;
   optional float radius = 6;
   optional float cooldown = 7;
   optional string color = 8;
-  optional string fx = 9;    // melee | projectile | circle | heal | buff | shield
+  optional string fx = 9;    // melee | projectile | circle | heal | buff | shield | blink | axe | frost | ...
+  optional string desc = 10; // one-line description for the skill picker
 }
 
 // Welcome is the first message after connecting: a new character was created.
@@ -83,6 +102,8 @@ message Welcome {
   repeated SkillInfo skills = 5;
   reserved 6;                         // was props; the client now reads the scene from /map.tmj
   repeated Obstacle obstacles = 7;    // collision shapes of the map props, for the debug overlay
+  repeated SkillInfo pool = 8;        // skills the player may pick from (slot is 0)
+  optional int32 pick = 9;            // how many to pick (slots 2..pick+1)
 }
 
 enum ObstacleShape {
@@ -143,6 +164,7 @@ message EntityState {
   optional bool dead = 9;
   optional float shield = 10;  // damage the active shield can still absorb
   optional bool blocking = 11; // guard raised
+  optional int32 looks = 12;   // buff looks, bit set: 1 haste, 2 holy (invulnerable), 4 fire (enchanted weapon), 8 frost (slowed)
 }
 
 enum EventKind {
@@ -177,6 +199,9 @@ message Event {
   optional float dur = 16;    // BUFF
   optional float absorbed = 17; // DAMAGE: taken by a shield (not included in value)
   optional float blocked = 18;  // DAMAGE: stopped by blocking (not included in value)
+  optional bool immune = 19;    // DAMAGE: the target was invulnerable (value is 0)
+  optional float tx = 20;       // CAST of a dash or line skill: where it ended (x, y is where it started)
+  optional float ty = 21;
 }
 
 message Attrs {

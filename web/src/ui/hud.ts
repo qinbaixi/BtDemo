@@ -1,6 +1,6 @@
 // HUD：自己的面板、目标面板、技能栏、死亡遮罩、提示条、连接状态。都是 DOM，不画在画布上。
 
-import { BASE_ATTRS, DERIVED_ATTRS } from '../game/config';
+import { BASE_ATTRS, DERIVED_ATTRS, SKILL_KEY_LABELS } from '../game/config';
 import { clamp, fmt } from '../game/math';
 import { cdRemaining, state } from '../game/state';
 import type { SkillInfo } from '../net/types';
@@ -107,7 +107,8 @@ export function buildSkillBar(): void {
 
     const key = document.createElement('span');
     key.className = 'key';
-    key.textContent = slot === 1 ? '1 / 左键' : String(slot);   // 1 号技能就是普攻
+    const label = SKILL_KEY_LABELS[slot - 1] ?? String(slot);
+    key.textContent = slot === 1 ? `${label} / 左键` : label;   // 1 号技能就是普攻
     const name = document.createElement('span');
     name.className = 'sname';
     name.textContent = sk ? sk.name : '—';

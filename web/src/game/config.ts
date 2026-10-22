@@ -68,3 +68,8 @@ export const FEEL = {
   dissolveMs: 1000,       // 溶解持续时间
   distort: 1.5,           // 冲击波和热浪扭曲强度倍数，0 关闭
 };
+
+
+// 技能键：右手放在 J K L / U I O 上，左手 WASD 走路。第 1 格是普攻（也可以点左键）。
+export const SKILL_KEYS = ['KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI', 'KeyO'];
+export const SKILL_KEY_LABELS = ['J', 'K', 'L', 'U', 'I', 'O'];

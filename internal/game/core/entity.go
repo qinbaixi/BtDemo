@@ -83,6 +83,9 @@ type Combat struct {
 	Target       int     // 实体 ID，0 表示无
 	LastAttacker int     // 最近一次攻击者的实体 ID
 	LastHitAt    float64 // 最近一次受击的时间
+
+	// CanPick 为 true 时玩家可以重新挑技能：刚进游戏（还没放过技能）和死亡期间（由 session、combat 管理）
+	CanPick bool
 }
 
 // Buff 是一个生效中的限时修饰效果。
@@ -144,6 +147,25 @@ func (entity *Entity) HPRatio() float64 {
 		return 0
 	}
 	return entity.HP / entity.Attr.MaxHP
+}
+
+// Invulnerable 报告 entity 身上有没有无敌的 Buff。
+func (entity *Entity) Invulnerable() bool {
+	for _, buff := range entity.Buffs {
+		if buff.Cfg.Invulnerable {
+			return true
+		}
+	}
+	return false
+}
+
+// Looks 是 entity 身上 Buff 外观的位集合（见 config.Looks），同步给客户端画特效。
+func (entity *Entity) Looks() int32 {
+	var looks int32
+	for _, buff := range entity.Buffs {
+		looks |= config.Looks[buff.Cfg.Look]
+	}
+	return looks
 }
 
 // Shield 是 entity 身上所有护盾还能吸收的伤害之和。

@@ -61,7 +61,7 @@ func newWorld(cfg *config.Config, seed int64, obstacles []nav.Shape) (*World, er
 	world.Attr = attr.New(world.State)
 	world.Nav = nav.New(cfg.World.Map.Width, cfg.World.Map.Height, obstacles)
 	world.Move = move.New(world.State, world.Grid, world.Nav)
-	world.Combat = combat.New(world.State, world.Grid, world.Attr)
+	world.Combat = combat.New(world.State, world.Grid, world.Attr, world.Nav)
 	var err error
 	if world.AI, err = ai.New(world.State, world.Combat, world.Move); err != nil {
 		return nil, err

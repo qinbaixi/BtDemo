@@ -96,3 +96,21 @@ func TestCapsuleAndCircle(t *testing.T) {
 		t.Fatalf("circle push %v %v", point, ok)
 	}
 }
+
+func TestReachStopsBeforeWall(t *testing.T) {
+	navMap := wallMap()
+	from := Vec{X: 100, Y: 300}
+	// 朝右走，前面有墙：停在墙前面，并且离起点有一段距离
+	end := navMap.Reach(from, Vec{X: 1, Y: 0}, 1000, 10)
+	if !navMap.Free(end, 10) || end.X <= from.X || end.Y != from.Y {
+		t.Fatalf("reach ended at %+v", end)
+	}
+	if navMap.Clear(end, end.Add(Vec{X: 16, Y: 0}), 10) {
+		t.Fatalf("reach stopped at %+v but the way ahead is still clear", end)
+	}
+	// 朝空地走：走满距离
+	open := navMap.Reach(from, Vec{X: -1, Y: 0}, 50, 10)
+	if open.Dist(Vec{X: 50, Y: 300}) > 1e-9 {
+		t.Fatalf("open reach ended at %+v, want (50, 300)", open)
+	}
+}

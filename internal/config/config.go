@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -37,9 +38,14 @@ type Player struct {
 	Color      string   `yaml:"color"`
 	Model      string   `yaml:"model"`
 	Respawn    float64  `yaml:"respawn"`
-	Skills     []string `yaml:"skills"`
-	Block      Block    `yaml:"block"`
+	Skills     []string `yaml:"skills"` // 默认技能：第 1 个是固定的普攻，其余是没选技能时的默认选择
+	// SkillPool 是玩家可以挑选的技能（进游戏和死亡时挑），挑 len(Skills)-1 个放到第 2 格起。
+	SkillPool []string `yaml:"skill_pool"`
+	Block     Block    `yaml:"block"`
 }
+
+// Pick 是玩家要挑几个技能（第 1 格普攻固定，不用挑）。
+func (player *Player) Pick() int { return len(player.Skills) - 1 }
 
 // Block 是玩家按住右键格挡时的效果。
 type Block struct {
@@ -72,13 +78,23 @@ type Buff struct {
 	SpeedPct float64 `yaml:"speed_pct"`
 	// ShieldPct 让 Buff 带一个护盾：吸收最大生命 × ShieldPct 的伤害，吸收完或到时间就消失。
 	ShieldPct float64 `yaml:"shield_pct"`
+	// Invulnerable 让 Buff 期间不受任何伤害。
+	Invulnerable bool `yaml:"invulnerable"`
+	// BonusMagic 让物理技能每次命中额外造成 法强 × BonusMagic 的法术伤害（武器附魔）。
+	BonusMagic float64 `yaml:"bonus_magic"`
+	// Look 是客户端给带这个 Buff 的实体加的外观：haste 疾风、holy 金光、fire 火焰武器、frost 冰冻。
+	Look string `yaml:"look"`
 }
+
+// Looks 是 Buff.Look 可以取的值，以及同步给客户端时对应的位（EntityState.looks）。
+var Looks = map[string]int32{"haste": 1, "holy": 2, "fire": 4, "frost": 8}
 
 // Skill 对应 config/skills.yaml 中的一个条目。
 type Skill struct {
 	ID       string  `yaml:"-"`
 	Name     string  `yaml:"name"`
-	Kind     string  `yaml:"kind"` // target | aoe | self
+	Desc     string  `yaml:"desc"` // 选技能面板上的一句话说明
+	Kind     string  `yaml:"kind"` // target | aoe | self | dash 位移 | line 直线投掷
 	Range    float64 `yaml:"range"`
 	Radius   float64 `yaml:"radius"`
 	Cooldown float64 `yaml:"cooldown"`
@@ -86,7 +102,9 @@ type Skill struct {
 	Ratio    float64 `yaml:"ratio"`
 	Base     float64 `yaml:"base"`
 	Heal     float64 `yaml:"heal"`
+	Distance float64 `yaml:"distance"` // dash：位移距离
 	Buff     *Buff   `yaml:"buff"`
+	Debuff   *Buff   `yaml:"debuff"` // 命中时加在目标身上的效果（比如减速）
 	FX       string  `yaml:"fx"`
 	Color    string  `yaml:"color"`
 }
@@ -209,7 +227,7 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 	for id, skill := range cfg.Skills {
 		skill.ID = id
 		switch skill.Kind {
-		case "target", "aoe", "self":
+		case "target", "aoe", "self", "dash", "line":
 		default:
 			return fmt.Errorf("skills.yaml: skill %s has unknown kind %q", id, skill.Kind)
 		}
@@ -217,6 +235,14 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		case "", "physical", "magic":
 		default:
 			return fmt.Errorf("skills.yaml: skill %s has unknown damage %q", id, skill.Damage)
+		}
+		for _, buff := range []*Buff{skill.Buff, skill.Debuff} {
+			if buff == nil || buff.Look == "" {
+				continue
+			}
+			if _, ok := Looks[buff.Look]; !ok {
+				return fmt.Errorf("skills.yaml: skill %s has unknown buff look %q", id, buff.Look)
+			}
 		}
 	}
 	checkSkills := func(owner string, ids []string) error {
@@ -229,6 +255,17 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 	}
 	if err := checkSkills("world.yaml player", world.Player.Skills); err != nil {
 		return err
+	}
+	if err := checkSkills("world.yaml player skill_pool", world.Player.SkillPool); err != nil {
+		return err
+	}
+	if len(world.Player.Skills) == 0 {
+		return fmt.Errorf("world.yaml: player needs at least one skill")
+	}
+	for _, id := range world.Player.Skills[1:] {
+		if !slices.Contains(world.Player.SkillPool, id) {
+			return fmt.Errorf("world.yaml: player default skill %q is not in skill_pool", id)
+		}
 	}
 	for id, template := range cfg.Templates {
 		template.ID = id

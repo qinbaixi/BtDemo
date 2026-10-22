@@ -115,6 +115,24 @@ func (navMap *Map) Clear(from, to Vec, radius float64) bool {
 	return true
 }
 
+// Reach 返回半径为 radius 的圆从 from 沿方向 dir（单位向量）直线前进、最远 maxDist 时
+// 能到达的最远位置：碰到障碍物或地图边缘就停在前面。用于闪现和投掷物。
+func (navMap *Map) Reach(from, dir Vec, maxDist, radius float64) Vec {
+	step := math.Max(2, math.Min(radius, 8))
+	reached := from
+	for travelled := step; ; travelled += step {
+		travelled = math.Min(travelled, maxDist)
+		point := from.Add(dir.Scale(travelled))
+		if !navMap.Free(point, radius) {
+			return reached
+		}
+		reached = point
+		if travelled >= maxDist {
+			return reached
+		}
+	}
+}
+
 // NearestFree 返回半径为 radius 的圆在离 point 最近的空闲位置
 // （若 point 本身空闲则返回 point），在路径网格上向外搜索。
 func (navMap *Map) NearestFree(point Vec, radius float64) Vec {

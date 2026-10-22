@@ -6,9 +6,11 @@ package session
 import (
 	"log"
 	"math"
+	"slices"
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/game/ai"
 	"github.com/qinbaixi/BtDemo/internal/game/aoi"
 	"github.com/qinbaixi/BtDemo/internal/game/combat"
@@ -81,21 +83,43 @@ func (sys *System) Join() *Session {
 		AoiCell:   core.F32(sys.grid.Cell),
 		Obstacles: sys.obstacles,
 	}
-	for i, skill := range session.Player.Skills {
-		welcome.Skills = append(welcome.Skills, &pb.SkillInfo{
-			Slot:     core.I32(i + 1),
-			Id:       proto.String(skill.ID),
-			Name:     proto.String(skill.Name),
-			Kind:     proto.String(skill.Kind),
-			Range:    core.F32(skill.Range),
-			Radius:   core.F32(skill.Radius),
-			Cooldown: core.F32(skill.Cooldown),
-			Color:    proto.String(skill.Color),
-			Fx:       proto.String(skill.FX),
-		})
+	welcome.Skills = skillBar(session.Player.Skills)
+	for _, id := range cfg.Player.SkillPool {
+		welcome.Pool = append(welcome.Pool, skillInfo(0, sys.state.Cfg.Skills[id]))
 	}
+	welcome.Pick = core.I32(cfg.Player.Pick())
+	session.Player.CanPick = true // 刚进游戏，放第一个技能之前可以挑技能
 	sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Welcome{Welcome: welcome}})
 	return session
+}
+
+// 挑技能被拒绝的原因（以提示消息发给玩家）。
+const (
+	reasonCannotPick = "只能在刚进游戏或死亡时更换技能"
+	reasonBadPick    = "技能选择无效"
+)
+
+// loadout 换上玩家挑的技能：第 1 格普攻不变，ids 依次放到第 2 格起。
+// 只能从技能池里挑、不能重复、数量要正好；不满足时返回给玩家看的原因。
+func (sys *System) loadout(entity *core.Entity, ids []string) string {
+	player := sys.state.Cfg.World.Player
+	if !entity.CanPick {
+		return reasonCannotPick
+	}
+	if len(ids) != player.Pick() {
+		return reasonBadPick
+	}
+	skills := []*config.Skill{entity.Skills[0]}
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if seen[id] || !slices.Contains(player.SkillPool, id) {
+			return reasonBadPick
+		}
+		seen[id] = true
+		skills = append(skills, sys.state.Cfg.Skills[id])
+	}
+	entity.Skills = skills
+	return ""
 }
 
 // Leave 移除会话的角色并关闭其输出。
@@ -127,6 +151,14 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 	case *pb.ClientMsg_Watch:
 		session.Watch = int(body.Watch.GetId())
 		session.defSent = ""
+	case *pb.ClientMsg_Loadout:
+		if reason := sys.loadout(entity, body.Loadout.GetSkills()); reason != "" {
+			toast := &pb.Toast{Text: proto.String(reason)}
+			sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Toast{Toast: toast}})
+			return
+		}
+		bar := &pb.SkillBar{Skills: skillBar(entity.Skills)}
+		sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_SkillBar{SkillBar: bar}})
 	case *pb.ClientMsg_Cast:
 		slot := int(body.Cast.GetSlot())
 		if slot < 1 || slot > len(entity.Skills) {
@@ -148,7 +180,8 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 				target, entity.Target = targetEnt.ID, targetEnt.ID
 			}
 		}
-		if err := sys.combat.Cast(entity, skill, target); err != nil {
+		aimX, aimY := float64(body.Cast.GetDx()), float64(body.Cast.GetDy())
+		if err := sys.combat.CastAimed(entity, skill, target, aimX, aimY); err != nil {
 			toast := &pb.Toast{Text: proto.String(err.Error())}
 			sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Toast{Toast: toast}})
 		}

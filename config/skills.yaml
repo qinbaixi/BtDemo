@@ -1,19 +1,49 @@
 # 技能配置
+#   desc:   选技能面板上的一句话说明
 #   kind:   target 单体（需要目标）| aoe 以自身为中心的范围伤害 | self 作用于自己（治疗 / 增益）
+#           | dash 朝瞄准方向位移 distance 像素（遇到障碍物停下）
+#           | line 朝瞄准方向扔出投掷物，命中直线上 range 内第一个敌人（被障碍物挡住就停）
 #   damage: physical 物理（攻击 vs 防御）| magic 法术（法强 vs 法抗）
 #   伤害 = (攻击 × ratio + base) × 防御减免 × 暴击 × 随机浮动
 #   heal:   治疗量 = 最大生命 × heal
 #   fx:     前端表现 melee | projectile | circle | heal | buff | shield
 #   buff.shield_pct: 护盾，吸收 最大生命 × shield_pct 的伤害，吸收完或到时间消失
+#   buff.invulnerable: 持续期间不受任何伤害
+#   buff.bonus_magic: 武器附魔，物理技能每次命中额外造成 法强 × bonus_magic 的法术伤害
+#   buff.speed_pct 为负数时是减速
+#   buff.look: 客户端外观 haste 疾风 | holy 金光 | fire 火焰武器 | frost 冰冻
+#   debuff: 命中时加在目标身上的效果，格式同 buff
 skills:
-  slash:      { name: 斩击,   kind: target, range: 70,  cooldown: 0.7, damage: physical, ratio: 1.0, base: 4,  fx: melee,      color: "#ffd166" }
-  fireball:   { name: 火球术, kind: target, range: 280, cooldown: 2.0, damage: magic,    ratio: 1.5, base: 10, fx: projectile, color: "#ff7b39" }
-  whirlwind:  { name: 旋风斩, kind: aoe,    radius: 110, cooldown: 5,  damage: physical, ratio: 1.2, base: 6,  fx: circle,     color: "#e0e0e0" }
-  heal:       { name: 治疗术, kind: self,   cooldown: 8,  heal: 0.35, fx: heal, color: "#7dff9b" }
+  slash:      { name: 斩击,   kind: target, range: 70,  cooldown: 0.7, damage: physical, ratio: 1.0, base: 4,  fx: melee,      color: "#ffd166",
+                desc: 普攻，砍面前的敌人 }
+  fireball:   { name: 火球术, kind: target, range: 280, cooldown: 2.0, damage: magic,    ratio: 1.5, base: 10, fx: projectile, color: "#ff7b39",
+                desc: 远程法术，打一个敌人 }
+  whirlwind:  { name: 旋风斩, kind: aoe,    radius: 110, cooldown: 5,  damage: physical, ratio: 1.2, base: 6,  fx: circle,     color: "#e0e0e0",
+                desc: 原地转一圈，砍身边所有敌人 }
+  heal:       { name: 治疗术, kind: self,   cooldown: 8,  heal: 0.35, fx: heal, color: "#7dff9b",
+                desc: 回复 35% 生命 }
   warcry:     { name: 战吼,   kind: self,   cooldown: 15, fx: buff, color: "#ff4d6d",
+                desc: 6 秒内攻击 +40%，移速 +25%,
                 buff: { name: 战吼, duration: 6, atk_pct: 0.4, speed_pct: 0.25 } }
   shield:     { name: 护盾,   kind: self,   cooldown: 14, fx: shield, color: "#7fd8ff",
+                desc: 8 秒内吸收 30% 生命的伤害,
                 buff: { name: 护盾, duration: 8, shield_pct: 0.3 } }
+  haste:      { name: 疾风步, kind: self,   cooldown: 10, fx: haste, color: "#9effd8",
+                desc: 4 秒内移速 +70%,
+                buff: { name: 疾风步, duration: 4, speed_pct: 0.7, look: haste } }
+  holy_guard: { name: 圣光庇护, kind: self, cooldown: 25, fx: holy, color: "#ffe9a0",
+                desc: 2 秒内不受任何伤害,
+                buff: { name: 圣光庇护, duration: 2, invulnerable: true, look: holy } }
+  blink:      { name: 闪现,   kind: dash,   distance: 170, cooldown: 8, fx: blink, color: "#b98cff",
+                desc: 朝移动方向瞬移一段距离，撞墙就停 }
+  enchant:    { name: 烈焰附魔, kind: self, cooldown: 16, fx: enchant, color: "#ff8a3a",
+                desc: 8 秒内武器着火，物理技能额外造成法术伤害,
+                buff: { name: 烈焰附魔, duration: 8, bonus_magic: 0.6, look: fire } }
+  axe:        { name: 飞斧,   kind: line,   range: 320, cooldown: 3, damage: physical, ratio: 1.3, base: 6, fx: axe, color: "#d8dde6",
+                desc: 朝面向扔出飞斧，打中直线上第一个敌人 }
+  frost_nova: { name: 冰霜新星, kind: aoe,  radius: 120, cooldown: 12, damage: magic, ratio: 0.8, base: 6, fx: frost, color: "#8fd8ff",
+                desc: 冻伤身边的敌人，3 秒内减速 50%,
+                debuff: { name: 冰冻, duration: 3, speed_pct: -0.5, look: frost } }
 
   bite:       { name: 撕咬,   kind: target, range: 60,  cooldown: 1.2, damage: physical, ratio: 1.0, base: 2,  fx: melee, color: "#b8f28b" }
   heavy_bite: { name: 猛扑,   kind: target, range: 60,  cooldown: 5,   damage: physical, ratio: 1.5, base: 3,  fx: melee, color: "#ffef5c" }
