@@ -45,6 +45,7 @@ export function resendMove(): void {
 
 export function castSlot(slot: number): void {
   if (!state.skillBySlot[slot]) return;
+  if (blocking) { showToast('格挡中不能出招'); return; }   // 服务端也会拒绝，这里省一次来回
   deps.send({ t: 'cast', slot, target: state.target || 0 });
 }
 
@@ -68,13 +69,15 @@ function attackTarget(now: number): ClientEntity | null {
   const reach = (e: ClientEntity) => hypot(mp.x, mp.y, posOf(e, now).x, posOf(e, now).y) - (me.r || 14) - (e.r || 14);
   const range = sk.range || 0;
   const cur = state.ents.get(state.target);
-  if (hostile(cur) && reach(cur) <= range + 8) return cur;
+  // 和服务端一样按边缘距离判断；客户端位置是插值过的，稍微收紧一点，免得发过去被判“目标太远”
+  const limit = range - 2;
+  if (hostile(cur) && reach(cur) <= limit) return cur;
   let best: ClientEntity | null = null;
   let bestD = Infinity;
   for (const e of state.ents.values()) {
     if (!hostile(e)) continue;
     const d = reach(e);
-    if (d <= range + 40 && d < bestD) { best = e; bestD = d; }
+    if (d <= limit && d < bestD) { best = e; bestD = d; }
   }
   return best;
 }
@@ -87,6 +90,8 @@ function tryAttack(): void {
   if (!t) return;
   if (t.id !== state.target) state.target = t.id;
   deps.send({ t: 'cast', slot: ATTACK_SLOT, target: t.id });
+  // 先在本地记上冷却，不等下一次同步，否则按住左键时这段时间里会一直发、一直被拒
+  state.cds[sk.id] = (sk.cooldown || 0) + (now - state.cdsAt) / 1000;
 }
 
 function setBlock(on: boolean): void {
