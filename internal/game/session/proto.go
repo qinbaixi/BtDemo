@@ -33,6 +33,7 @@ func entityState(e *core.Entity) *pb.EntityState {
 		Id: core.I32(e.ID), X: core.F32(core.Round1(e.X)), Y: core.F32(core.Round1(e.Y)),
 		Hp: core.F32(math.Ceil(e.HP)), MaxHp: core.F32(math.Ceil(e.Attr.MaxHP)), Lv: core.I32(e.Level),
 		Act: proto.String(e.Action), Tg: core.I32(e.Target), Dead: proto.Bool(e.Dead),
+		Shield: core.F32(math.Ceil(e.Shield())), Blocking: proto.Bool(e.Blocking),
 	}
 }
 

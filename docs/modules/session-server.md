@@ -25,7 +25,7 @@
 
 用 protobuf（proto2）二进制编码。服务端用 `protoc` 生成的 `internal/pb`；前端用 protobufjs 从同一份 `.proto` 生成 JS 代码和 TypeScript 类型（`web` 下 `npm run proto`），字段对不上时编译期就报错。服务端仍在 `/btdemo.proto` 提供原文，方便查看；地图文件在 `/map.tmj` 原样提供（见 [地图](map.md)）。
 
-客户端 → 服务端 `ClientMsg`（oneof 四选一）：
+客户端 → 服务端 `ClientMsg`（oneof 五选一）：
 
 | 消息 | 含义 |
 | --- | --- |
@@ -33,6 +33,7 @@
 | `SetTarget{id}` | 选中目标 |
 | `Cast{slot, target}` | 释放第 slot 个技能 |
 | `Watch{id}` | 调试面板要观察这个实体的行为树（0 表示不看） |
+| `Block{on}` | 按下 / 松开右键格挡 |
 
 服务端 → 客户端 `ServerMsg`：
 
@@ -60,6 +61,7 @@
 
 - `Move`：归一化方向写进 `e.MoveX/MoveY`，下一帧 `move.Tick` 才真正移动（输入和移动解耦，移动速度只由服务端决定）。
 - `Cast`：选中的目标无效时自动找最近的怪，然后 `combat.Cast`，失败就回一个 `Toast`。
+- `Block`：写进 `e.Blocking`，伤害结算和移动会读它。
 - `SetTarget`、`Watch`：记下来。
 
 ### Flush：同步

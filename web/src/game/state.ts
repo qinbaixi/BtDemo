@@ -1,7 +1,7 @@
 // 客户端的全部本地状态，以及实体相关的小工具函数。
 // 服务端是权威：这里只保存最近一次同步的结果，加上插值和动画需要的数据。
 
-import type { FX } from '../render/fx';
+import type { Aura, FX } from '../render/fx';
 import type { createScenery } from '../render/scenery';
 import type {
   EntityInfo, EntityKind, Obstacle, SelfInfo, SkillInfo,
@@ -31,6 +31,9 @@ export interface ClientEntity {
   act: string;        // 行为树当前动作名
   tg: number;         // 当前目标 id
   dead: boolean;
+  shield: number;     // 护盾还能吸收的伤害
+  shieldMax: number;  // 这层护盾刚加上时的量，用来算剩余比例
+  blocking: boolean;  // 正在格挡
   model: string;
   // 动画状态
   facing: number;     // 0 朝右，PI 朝左
@@ -143,6 +146,9 @@ export function makeEntity(d: Partial<EntityInfo> & { id: number }, now: number)
     act: '',
     tg: 0,
     dead: false,
+    shield: 0,
+    shieldMax: 0,
+    blocking: false,
     model: d.model || '',
     facing: kind === 'player' ? 0 : (Math.random() < 0.5 ? 0 : Math.PI),
     walk: Math.random() * 6,
@@ -175,11 +181,23 @@ export function faceToward(e: ClientEntity, x: number, y: number, now: number): 
 }
 
 // fxResolve 让特效跟着活着的实体走（身体中心）。
-export function fxResolve(id: number): { x: number; y: number; r: number } | null {
+export function fxResolve(id: number): { x: number; y: number; r: number; facing: number; h: number } | null {
   const e = state.ents.get(id);
   if (!e) return null;
   const p = posOf(e, performance.now());
-  return { x: p.x, y: p.y, r: e.r || 14 };
+  return { x: p.x, y: p.y, r: e.r || 14, facing: e.facing, h: p.y - headY(e, p) };
+}
+
+// fxAuras 列出身上带护盾、要画护盾泡泡的实体。
+export function fxAuras(): Aura[] {
+  const out: Aura[] = [];
+  const now = performance.now();
+  for (const e of state.ents.values()) {
+    if (e.dead || e.shield <= 0) continue;
+    const p = posOf(e, now);
+    out.push({ id: e.id, x: p.x, y: p.y, r: e.r || 14, h: p.y - headY(e, p), frac: e.shieldMax > 0 ? e.shield / e.shieldMax : 1 });
+  }
+  return out;
 }
 
 export function cdRemaining(skillId: string, now: number): number {

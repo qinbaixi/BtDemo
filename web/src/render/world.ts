@@ -180,6 +180,7 @@ function poseOf(e: ClientEntity, p: Point, now: number): Pose {
     dead: e.dead ? clamp((now - (e.deadAt < 0 ? now - DEATH_MS : e.deadAt)) / DEATH_MS, 0, 1) : -1,
     time: now + e.id * 397,
     isSelf: e.id === state.myId,
+    blocking: e.blocking && !e.dead,
   };
 }
 

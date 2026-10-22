@@ -29,4 +29,5 @@ player:
   radius: 16
   color: "#4da3ff"
   respawn: 3
-  skills: [slash, fireball, whirlwind, heal, warcry]
+  skills: [slash, fireball, whirlwind, heal, warcry, shield]
+  block: { reduce: 0.8, speed: 0.5 }   # 按住右键格挡：受到的伤害减少 80%，移动速度减半，不能放技能

@@ -118,10 +118,17 @@ func (m *System) Tick() {
 		if e.Kind != core.KindPlayer || e.Dead {
 			return
 		}
-		if e.MoveX != 0 || e.MoveY != 0 {
-			m.By(e, e.MoveX*e.Attr.Speed*dt, e.MoveY*e.Attr.Speed*dt)
+		speed := e.Attr.Speed
+		if e.Blocking {
+			speed *= m.s.Cfg.World.Player.Block.Speed // 格挡时走得慢
+		}
+		switch {
+		case e.MoveX != 0 || e.MoveY != 0:
+			m.By(e, e.MoveX*speed*dt, e.MoveY*speed*dt)
 			e.Action = "move"
-		} else {
+		case e.Blocking:
+			e.Action = "block"
+		default:
 			e.Action = ""
 		}
 	})

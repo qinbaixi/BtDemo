@@ -31,9 +31,21 @@ export function onEvent(ev: GameEvent, now: number): void {
         const t = performance.now();
         const e = state.ents.get(ev.dst);
         if (e) e.hitAt = t;
-        fx.impact(ev.dst, color, ev.crit, t);
-        if (ev.crit) addFloat(t, ev.dst, `暴击 ${ev.v}`, '#ffe14d', 26, 1100, { pop: true, rise: 54 });
-        else addFloat(t, ev.dst, `-${ev.v}`, ev.dst === state.myId ? '#ff6b6b' : '#ffffff', 17, 900);
+        const v = ev.v || 0;
+        if (ev.blocked) {
+          // 格挡：盾上迸出火花，伤害数字小一号
+          fx.block(ev.dst, t);
+          addFloat(t, ev.dst, '格挡', '#9ad7ff', 18, 900, { pop: true, rise: 46 });
+        } else {
+          fx.impact(ev.dst, color, ev.crit, t);
+        }
+        if (ev.absorbed) {
+          fx.shieldHit(ev.dst, t);
+          addFloat(t, ev.dst, `吸收 ${ev.absorbed}`, '#7fd8ff', 15, 900, { rise: 30 });
+        }
+        if (v <= 0) return;   // 全被挡下或吸收
+        if (ev.crit) addFloat(t, ev.dst, `暴击 ${v}`, '#ffe14d', ev.blocked ? 20 : 26, 1100, { pop: true, rise: 54 });
+        else addFloat(t, ev.dst, `-${v}`, ev.dst === state.myId ? '#ff6b6b' : '#ffffff', ev.blocked ? 14 : 17, 900);
       };
       if (at > now) state.pending.push({ at, fn: hit });
       else hit();

@@ -3,7 +3,8 @@
 #   damage: physical 物理（攻击 vs 防御）| magic 法术（法强 vs 法抗）
 #   伤害 = (攻击 × ratio + base) × 防御减免 × 暴击 × 随机浮动
 #   heal:   治疗量 = 最大生命 × heal
-#   fx:     前端表现 melee | projectile | circle | heal | buff
+#   fx:     前端表现 melee | projectile | circle | heal | buff | shield
+#   buff.shield_pct: 护盾，吸收 最大生命 × shield_pct 的伤害，吸收完或到时间消失
 skills:
   slash:      { name: 斩击,   kind: target, range: 70,  cooldown: 0.7, damage: physical, ratio: 1.0, base: 4,  fx: melee,      color: "#ffd166" }
   fireball:   { name: 火球术, kind: target, range: 280, cooldown: 2.0, damage: magic,    ratio: 1.5, base: 10, fx: projectile, color: "#ff7b39" }
@@ -11,6 +12,8 @@ skills:
   heal:       { name: 治疗术, kind: self,   cooldown: 8,  heal: 0.35, fx: heal, color: "#7dff9b" }
   warcry:     { name: 战吼,   kind: self,   cooldown: 15, fx: buff, color: "#ff4d6d",
                 buff: { name: 战吼, duration: 6, atk_pct: 0.4, speed_pct: 0.25 } }
+  shield:     { name: 护盾,   kind: self,   cooldown: 14, fx: shield, color: "#7fd8ff",
+                buff: { name: 护盾, duration: 8, shield_pct: 0.3 } }
 
   bite:       { name: 撕咬,   kind: target, range: 60,  cooldown: 1.2, damage: physical, ratio: 1.0, base: 2,  fx: melee, color: "#b8f28b" }
   heavy_bite: { name: 猛扑,   kind: target, range: 60,  cooldown: 5,   damage: physical, ratio: 1.5, base: 3,  fx: melee, color: "#ffef5c" }

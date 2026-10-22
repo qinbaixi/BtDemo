@@ -123,6 +123,7 @@ export function createProtocol(): Protocol {
       case 'target': body = { target: { id: o.target || 0 } }; break;
       case 'cast': body = { cast: { slot: o.slot, target: o.target || 0 } }; break;
       case 'watch': body = { watch: { id: o.id || 0 } }; break;
+      case 'block': body = { block: { on: o.on } }; break;
       default: return null;
     }
     const data = btdemo.ClientMsg.encode(btdemo.ClientMsg.create(body)).finish();

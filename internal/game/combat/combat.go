@@ -21,6 +21,7 @@ var (
 	ErrNoTarget = errors.New("没有有效目标")
 	ErrTooFar   = errors.New("目标太远")
 	ErrBadSkill = errors.New("未知的技能类型")
+	ErrBlocking = errors.New("格挡中不能出招")
 )
 
 // System 负责执行技能与伤害。
@@ -114,6 +115,9 @@ func (c *System) Cast(e *core.Entity, sk *config.Skill, targetID int) error {
 	if e.Dead {
 		return ErrDead
 	}
+	if e.Blocking {
+		return ErrBlocking
+	}
 	if now < e.Cooldowns[sk.ID] {
 		return ErrCooldown
 	}
@@ -155,7 +159,7 @@ func (c *System) Cast(e *core.Entity, sk *config.Skill, targetID int) error {
 		if sk.Buff != nil {
 			// 重复施放会刷新 Buff，而不是叠加。
 			filterBuffs(e, func(b *core.Buff) bool { return b.Cfg.Name != sk.Buff.Name })
-			e.Buffs = append(e.Buffs, &core.Buff{Cfg: sk.Buff, Until: now + sk.Buff.Duration})
+			e.Buffs = append(e.Buffs, &core.Buff{Cfg: sk.Buff, Until: now + sk.Buff.Duration, Absorb: math.Round(e.Attr.MaxHP * sk.Buff.ShieldPct)})
 			attr.Recalc(e)
 			c.s.Events.Emit(e, &core.Event{Kind: pb.EventKind_BUFF.Enum(), Dst: core.I32(e.ID), Name: &sk.Buff.Name, Dur: core.F32(sk.Buff.Duration)})
 		}
@@ -167,14 +171,47 @@ func (c *System) Cast(e *core.Entity, sk *config.Skill, targetID int) error {
 }
 
 // applyDamage 从 dst 中扣除 dmg，记录攻击者，并在 HP 归零时击杀 dst。
+// 先按格挡减伤，再由护盾吸收，剩下的才扣生命。
 func (c *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, sk *config.Skill) {
+	ev := &core.Event{Kind: pb.EventKind_DAMAGE.Enum(), Src: core.I32(src.ID), Dst: core.I32(dst.ID), Crit: &crit, Skill: &sk.ID}
+	if dst.Blocking {
+		blocked := math.Round(dmg * c.s.Cfg.World.Player.Block.Reduce)
+		dmg -= blocked
+		ev.Blocked = core.F32(blocked)
+	}
+	if absorbed := c.absorb(dst, dmg); absorbed > 0 {
+		dmg -= absorbed
+		ev.Absorbed = core.F32(absorbed)
+	}
+	ev.Value = core.F32(dmg)
 	dst.HP -= dmg
 	dst.LastAttacker = src.ID
 	dst.LastHitAt = c.s.Now()
-	c.s.Events.Emit(dst, &core.Event{Kind: pb.EventKind_DAMAGE.Enum(), Src: core.I32(src.ID), Dst: core.I32(dst.ID), Value: core.F32(dmg), Crit: &crit, Skill: &sk.ID})
+	c.s.Events.Emit(dst, ev)
 	if dst.HP <= 0 {
 		c.Kill(dst, src)
 	}
+}
+
+// absorb 用 e 身上的护盾吸收至多 dmg 点伤害，返回吸收了多少；吸收完的护盾 Buff 被移除。
+func (c *System) absorb(e *core.Entity, dmg float64) float64 {
+	total := 0.0
+	for _, b := range e.Buffs {
+		if dmg <= 0 {
+			break
+		}
+		take := math.Min(b.Absorb, dmg)
+		b.Absorb -= take
+		dmg -= take
+		total += take
+	}
+	if total > 0 {
+		// 护盾打破了就去掉这个 Buff（只靠护盾存在的 Buff，没有别的加成）
+		if filterBuffs(e, func(b *core.Buff) bool { return b.Cfg.ShieldPct == 0 || b.Absorb > 0 }) {
+			attr.Recalc(e)
+		}
+	}
+	return total
 }
 
 // Kill 将 e 标记为死亡，安排其重生，并奖励击杀者。

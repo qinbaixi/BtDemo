@@ -486,6 +486,12 @@ const KNIGHT_STRUCK = 1.25;
 function knightArms(q, g) {
   const ph = q.ph;
   if (!ph && q.dead >= 0) return [g.arms[0], [g.arms[1][0] * 0.6 + 0.5, -0.9 + g.arms[1][1] * 0.3]];
+  if (!ph && q.blocking) {
+    // 格挡：中世纪骑士的架势。近侧手把盾竖在身前护住胸口和下巴，
+    // 远侧手把剑举过肩、剑尖斜向后上方，随时能劈下来（剑和盾分开，不会叠在一起）
+    const k = Math.sin(q.time / 200) * 0.04;
+    return [[-1.9 + k, -0.4], [0.8, 2.1 - k * 0.5]];
+  }
   if (!ph) {
     // 盾举在身前、剑尖朝前：一眼就能看出朝哪边（盾和剑都在身后时容易看成背对）
     const sw = q.moving ? Math.sin(q.walk || 0) * 0.12 : g.breathe * 0.03;
@@ -505,7 +511,7 @@ function drawKnight(ctx, q) {
   humanoid(ctx, q, {
     legs: '#4a5160', boots: '#2b2f3a', body: steel, sleeve: color, forearm: steel, hand: '#8a6a4c',
     skin: '#f0c8a0', shoulder: 9, waist: 6, headR: 7.4,
-    lean: (q) => (q.ph ? arc3(q.ph, 0, -0.22, 0.28) : 0),
+    lean: (q) => (q.ph ? arc3(q.ph, 0, -0.22, 0.28) : q.blocking && !(q.dead >= 0) ? 0.14 : 0),
     arms: knightArms,
     back(ctx, q, B) {
       // cape: flows back with speed and ripples
@@ -554,6 +560,14 @@ function drawKnight(ctx, q) {
       rivets(ctx, rv, 0.55);
       cel(ctx, (c) => pEll(c, x + 0.5, y, 2.4, 3), gold, { sd: 1, lw: 1 });
       glint(ctx, x - 0.3, y - 1.2, 2.2, 'rgba(255,240,200,0.8)');
+      if (q.blocking && hand.near) {
+        // 格挡时盾沿亮一圈冷光
+        ctx.strokeStyle = 'rgba(160,220,255,0.85)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.ellipse(x, y, 7.9, 9.7, 0, 0, TAU);
+        ctx.stroke();
+      }
     },
     torsoDetail(ctx, q, B) {
       // tunic skirt under the cuirass, then a gold-trimmed belt

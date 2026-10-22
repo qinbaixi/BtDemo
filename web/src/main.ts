@@ -11,7 +11,7 @@ import './styles/debug.css';
 import './styles/debug-proto.css';
 
 import { ATTACK_MS } from './game/config';
-import { state, fxResolve } from './game/state';
+import { state, fxAuras, fxResolve } from './game/state';
 import { handleMessage, resetOnClose } from './game/sync';
 import { castSlot, initInput, resendMove } from './input';
 import { createConnection } from './net/connection';
@@ -85,7 +85,7 @@ async function init(): Promise<void> {
   initHud(castSlot);
   await loadArt();   // 美术资源要在建场景、建角色之前就绪
   await initWorld(canvas, document.getElementById('overlay') as HTMLCanvasElement);
-  state.fx = new FX(fxResolve);
+  state.fx = new FX(fxResolve, fxAuras);
   window.btdemo = { state };   // 方便在浏览器控制台里查看
   // ?bake：挂上美术模板导出工具（见 render/bake.ts），按需加载，不进正常游戏的主包
   if (new URLSearchParams(location.search).has('bake')) {

@@ -17,7 +17,14 @@ message ClientMsg {
     SetTarget target = 2;
     Cast cast = 3;
     Watch watch = 4;
+    Block block = 5;
   }
+}
+
+// Block starts (on = true) or stops raising the guard: while blocking the
+// player takes 80% less damage, moves at half speed and cannot use skills.
+message Block {
+  required bool on = 1;
 }
 
 // Move sets the held movement direction; the server normalizes it. 0,0 stops.
@@ -64,7 +71,7 @@ message SkillInfo {
   optional float radius = 6;
   optional float cooldown = 7;
   optional string color = 8;
-  optional string fx = 9;    // melee | projectile | circle | heal | buff
+  optional string fx = 9;    // melee | projectile | circle | heal | buff | shield
 }
 
 // Welcome is the first message after connecting: a new character was created.
@@ -134,6 +141,8 @@ message EntityState {
   optional string act = 7;   // behavior tree task currently running
   optional int32 tg = 8;     // current target id
   optional bool dead = 9;
+  optional float shield = 10;  // damage the active shield can still absorb
+  optional bool blocking = 11; // guard raised
 }
 
 enum EventKind {
@@ -166,6 +175,8 @@ message Event {
   optional string text = 14;  // SAY
   optional int32 lv = 15;     // LEVEL_UP
   optional float dur = 16;    // BUFF
+  optional float absorbed = 17; // DAMAGE: taken by a shield (not included in value)
+  optional float blocked = 18;  // DAMAGE: stopped by blocking (not included in value)
 }
 
 message Attrs {

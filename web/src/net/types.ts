@@ -49,6 +49,8 @@ export interface EntityState {
   act?: string;
   tg?: number;
   dead?: boolean;
+  shield?: number;     // 护盾还能吸收的伤害
+  blocking?: boolean;  // 正在格挡
 }
 
 export type EventKind = 'cast' | 'dmg' | 'heal' | 'buff' | 'die' | 'respawn' | 'say' | 'lvl';
@@ -70,6 +72,8 @@ export interface GameEvent {
   text?: string;
   lv?: number;
   dur?: number;
+  absorbed?: number; // dmg：被护盾吸收的部分（不含在 v 里）
+  blocked?: number;  // dmg：被格挡挡掉的部分（不含在 v 里）
 }
 
 export interface Attrs { str?: number; agi?: number; int?: number; vit?: number }
@@ -166,4 +170,5 @@ export type ClientMessage =
   | { t: 'move'; dx: number; dy: number }
   | { t: 'target'; target: number }
   | { t: 'cast'; slot: number; target: number }
-  | { t: 'watch'; id: number };
+  | { t: 'watch'; id: number }
+  | { t: 'block'; on: boolean };

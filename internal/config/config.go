@@ -38,6 +38,13 @@ type Player struct {
 	Model      string   `yaml:"model"`
 	Respawn    float64  `yaml:"respawn"`
 	Skills     []string `yaml:"skills"`
+	Block      Block    `yaml:"block"`
+}
+
+// Block 是玩家按住右键格挡时的效果。
+type Block struct {
+	Reduce float64 `yaml:"reduce"` // 格挡时受到的伤害减少的比例，0.8 = 减少 80%
+	Speed  float64 `yaml:"speed"`  // 格挡时的移动速度倍率
 }
 
 // World 对应 config/world.yaml。
@@ -63,6 +70,8 @@ type Buff struct {
 	AtkPct   float64 `yaml:"atk_pct"`
 	DefPct   float64 `yaml:"def_pct"`
 	SpeedPct float64 `yaml:"speed_pct"`
+	// ShieldPct 让 Buff 带一个护盾：吸收最大生命 × ShieldPct 的伤害，吸收完或到时间就消失。
+	ShieldPct float64 `yaml:"shield_pct"`
 }
 
 // Skill 对应 config/skills.yaml 中的一个条目。
@@ -175,6 +184,13 @@ func (c *Config) validate(knownTrees map[string]bool) error {
 	}
 	if w.Player.Model == "" {
 		w.Player.Model = "knight"
+	}
+	// 没配格挡时：减伤 80%、速度减半
+	if w.Player.Block.Reduce == 0 && w.Player.Block.Speed == 0 {
+		w.Player.Block = Block{Reduce: 0.8, Speed: 0.5}
+	}
+	if b := w.Player.Block; b.Reduce < 0 || b.Reduce > 1 || b.Speed < 0 {
+		return fmt.Errorf("world.yaml: player.block.reduce must be 0..1 and speed >= 0")
 	}
 	for f, targets := range w.Hostile {
 		for _, t := range targets {

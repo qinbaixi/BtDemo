@@ -94,6 +94,8 @@ func (n *System) Input(s *Session, msg *pb.ClientMsg) {
 		} else {
 			e.MoveX, e.MoveY = 0, 0
 		}
+	case *pb.ClientMsg_Block:
+		e.Blocking = m.Block.GetOn()
 	case *pb.ClientMsg_Target:
 		e.Target = int(m.Target.GetId())
 	case *pb.ClientMsg_Watch:

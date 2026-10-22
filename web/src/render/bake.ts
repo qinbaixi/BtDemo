@@ -26,7 +26,7 @@ const CHARACTERS: Record<string, { r: number; color: string }> = {
 
 // 每个动画的帧数；待机按 fps 循环，其余按进度取帧
 const ANIMS: [AnimName, number, number?][] = [
-  ['idle', 8, 6], ['walk', 8], ['attack', 8], ['hit', 4], ['death', 8],
+  ['idle', 8, 6], ['walk', 8], ['attack', 8], ['hit', 4], ['death', 8], ['block', 1],
 ];
 
 export interface Baked { files: Record<string, string>; manifest: Manifest }   // 文件名 -> data URL
@@ -72,13 +72,14 @@ export function bakeCharacter(model: string, radius: number, color?: string): { 
       const k = i / n;
       const pose = {
         x: 0, y: 0, r, color, facing: 0, walk: 0, moving: false, attack: -1, hit: -1, dead: -1,
-        time: 0, isSelf: false, bare: true,
+        time: 0, isSelf: false, bare: true, blocking: false,
       };
       if (name === 'idle') pose.time = (i / fps!) * 1000;
       if (name === 'walk') { pose.moving = true; pose.walk = k * Math.PI * 2; }
       if (name === 'attack') pose.attack = (i + 0.5) / n;
       if (name === 'hit') pose.hit = (i + 0.5) / n;
       if (name === 'death') pose.dead = (i + 1) / n;
+      if (name === 'block') pose.blocking = true;
       g.save();
       g.beginPath();
       g.rect(i * fw, row * fh, fw, fh);

@@ -301,3 +301,68 @@ func TestMonsterKillerGetsNoExp(t *testing.T) {
 		t.Fatalf("monster got exp %v", a.Exp)
 	}
 }
+
+// lastDamage 返回最后一个伤害事件。
+func lastDamage(w *World) *pb.Event {
+	var ev *pb.Event
+	for _, pe := range w.State.Events.List() {
+		if pe.Ev.GetKind() == pb.EventKind_DAMAGE {
+			ev = pe.Ev
+		}
+	}
+	return ev
+}
+
+func TestBlockReducesDamage(t *testing.T) {
+	w := testWorld()
+	w.State.Cfg.World.Player.Block = config.Block{Reduce: 0.8, Speed: 0.5}
+	p := addTestEntity(w, 1, "player", 0, 0, playerBase)
+	m := addTestEntity(w, 2, "monster", 60, 0, monsterBase)
+	big := &config.Skill{ID: "big", Kind: "target", Range: 70, Damage: "physical", Base: 1000}
+	p.Blocking = true
+	if err := w.Combat.Cast(m, big, p.ID); err != nil {
+		t.Fatalf("cast: %v", err)
+	}
+	ev := lastDamage(w)
+	total := float64(ev.GetValue() + ev.GetBlocked())
+	if math.Abs(float64(ev.GetBlocked())-math.Round(total*0.8)) > 0.5 || p.HP != p.Attr.MaxHP-float64(ev.GetValue()) {
+		t.Fatalf("blocked %v of %v, HP %v/%v", ev.GetBlocked(), total, p.HP, p.Attr.MaxHP)
+	}
+	// 格挡时不能出招
+	if err := w.Combat.Cast(p, slashSkill(), m.ID); err != combat.ErrBlocking {
+		t.Fatalf("cast while blocking: %v, want ErrBlocking", err)
+	}
+}
+
+func TestShieldAbsorbsThenBreaks(t *testing.T) {
+	w := testWorld()
+	p := addTestEntity(w, 1, "player", 0, 0, playerBase)
+	m := addTestEntity(w, 2, "monster", 60, 0, monsterBase)
+	shield := &config.Skill{ID: "shield", Kind: "self", Cooldown: 14, FX: "shield",
+		Buff: &config.Buff{Name: "护盾", Duration: 8, ShieldPct: 0.3}}
+	if err := w.Combat.Cast(p, shield, 0); err != nil {
+		t.Fatalf("cast: %v", err)
+	}
+	want := math.Round(p.Attr.MaxHP * 0.3)
+	if p.Shield() != want {
+		t.Fatalf("shield = %v, want %v", p.Shield(), want)
+	}
+	// 小伤害全被吸收
+	small := &config.Skill{ID: "small", Kind: "target", Range: 70, Damage: "physical", Base: 5}
+	if err := w.Combat.Cast(m, small, p.ID); err != nil {
+		t.Fatalf("cast: %v", err)
+	}
+	if ev := lastDamage(w); ev.GetValue() != 0 || p.HP != p.Attr.MaxHP || p.Shield() != want-float64(ev.GetAbsorbed()) {
+		t.Fatalf("after small hit: value %v absorbed %v HP %v shield %v", ev.GetValue(), ev.GetAbsorbed(), p.HP, p.Shield())
+	}
+	// 大伤害打破护盾，剩下的扣血，护盾 Buff 消失
+	left := p.Shield()
+	big := &config.Skill{ID: "big", Kind: "target", Range: 70, Damage: "physical", Base: 1000}
+	if err := w.Combat.Cast(m, big, p.ID); err != nil {
+		t.Fatalf("cast: %v", err)
+	}
+	ev := lastDamage(w)
+	if float64(ev.GetAbsorbed()) != left || p.Shield() != 0 || len(p.Buffs) != 0 {
+		t.Fatalf("after big hit: absorbed %v (want %v), shield %v, buffs %d", ev.GetAbsorbed(), left, p.Shield(), len(p.Buffs))
+	}
+}

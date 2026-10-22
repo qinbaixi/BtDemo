@@ -18,6 +18,7 @@ const HIT_FLASH = 0.35;          // 受击动作里白闪占的比例
 export interface Pose {
   x: number; y: number; r: number; color: string; facing: number; walk: number;
   moving: boolean; attack: number; hit: number; dead: number; time: number; isSelf: boolean;
+  blocking?: boolean;   // 正在格挡（举盾）
 }
 
 export class ActorView {
@@ -106,6 +107,7 @@ export class ActorView {
       if (pose.dead >= 0 && anims.death) return [anims.death, pose.dead];
       if (pose.hit >= 0 && anims.hit) return [anims.hit, pose.hit];
       if (pose.attack >= 0 && anims.attack) return [anims.attack, pose.attack];
+      if (pose.blocking && anims.block) return [anims.block, 0];
       if (pose.moving && anims.walk) return [anims.walk, (((pose.walk / (Math.PI * 2)) % 1) + 1) % 1];
       const idle = anims.idle || anims.walk;
       const fps = def.anims.idle?.fps ?? 8;

@@ -87,8 +87,9 @@ type Combat struct {
 
 // Buff 是一个生效中的限时修饰效果。
 type Buff struct {
-	Cfg   *config.Buff
-	Until float64
+	Cfg    *config.Buff
+	Until  float64
+	Absorb float64 // 护盾还能吸收的伤害（Cfg.ShieldPct > 0 时）
 }
 
 // Life 表示实体是否死亡，以及何时重生（由 spawn 管理）。
@@ -100,6 +101,7 @@ type Life struct {
 // Control 是玩家的输入（由 session 管理，由 move 读取）。
 type Control struct {
 	MoveX, MoveY float64 // 输入方向，已归一化或为零
+	Blocking     bool    // 按住右键格挡
 }
 
 // Steering 是怪物或 NPC 正在行走的路线（由 move 管理）。
@@ -140,4 +142,13 @@ func (e *Entity) HPRatio() float64 {
 		return 0
 	}
 	return e.HP / e.Attr.MaxHP
+}
+
+// Shield 是 e 身上所有护盾还能吸收的伤害之和。
+func (e *Entity) Shield() float64 {
+	sum := 0.0
+	for _, b := range e.Buffs {
+		sum += b.Absorb
+	}
+	return sum
 }

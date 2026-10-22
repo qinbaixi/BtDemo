@@ -57,11 +57,12 @@ warcry:   { kind: self,   cooldown: 15, buff: { duration: 6, atk_pct: 0.4, speed
 
 ```text
 Cast(e, skill, targetID)
-  ├─ 死了 → ErrDead；冷却中 → ErrCooldown
+  ├─ 死了 → ErrDead；格挡中 → ErrBlocking；冷却中 → ErrCooldown
   ├─ target：目标无效或不敌对 → ErrNoTarget；太远 → ErrTooFar
   │          发 CAST 事件 → CalcDamage → applyDamage
   ├─ aoe：   发 CAST 事件（带半径）→ 先收集半径内的敌人，再逐个结算
-  ├─ self：  发 CAST 事件 → 治疗（HEAL 事件）/ 加 Buff（BUFF 事件，重放刷新不叠加）
+  ├─ self：  发 CAST 事件 → 治疗（HEAL 事件）/ 加 Buff（BUFF 事件，重放刷新不叠加；
+  │          Buff 有 shield_pct 时带一个护盾，能吸收 最大生命 × shield_pct 的伤害）
   └─ 成功后设置冷却：Cooldowns[技能] = 现在 + cooldown
 ```
 
@@ -80,6 +81,15 @@ AOE 先收集目标再结算，是因为结算可能杀死目标，而遍历 AOI
 ```
 
 防御减免是 `防御/(防御+100)`：100 防御减伤 50%，300 防御减伤 75%，永远到不了 100%，堆防御收益递减。
+
+### 格挡和护盾
+
+`applyDamage` 扣血前依次减掉两部分，伤害事件里分别记下来，前端据此飘“格挡”“吸收 N”：
+
+1. **格挡**：玩家按住右键时 `e.Blocking` 为真，伤害减少 `world.yaml` 的 `player.block.reduce`（默认 0.8，即减 80%），记在 `Event.blocked`。格挡时移速乘 `player.block.speed`（默认 0.5），不能放技能。
+2. **护盾**：剩下的伤害先由护盾 Buff 的 `Absorb` 吸收，记在 `Event.absorbed`；护盾打完这个 Buff 就被移除（时间到也会移除）。
+
+剩下的才扣生命（`Event.v`），可能是 0。
 
 ### 死亡
 

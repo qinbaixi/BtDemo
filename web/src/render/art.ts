@@ -17,7 +17,7 @@ export interface CharacterArt {
   anims: Partial<Record<AnimName, { row: number; frames: number; fps?: number }>>;
 }
 
-export type AnimName = 'idle' | 'walk' | 'attack' | 'hit' | 'death';
+export type AnimName = 'idle' | 'walk' | 'attack' | 'hit' | 'death' | 'block';
 
 // 物件：每个外观变体一张图（或一行动画帧）。
 export interface PropArt {

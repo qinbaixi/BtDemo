@@ -110,6 +110,11 @@ function onSync(m: SyncMsg, now: number, deps: SyncDeps): void {
     e.act = s.act || '';
     e.tg = s.tg || 0;
     e.dead = !!s.dead;
+    const shield = s.shield || 0;
+    if (shield > e.shield) e.shieldMax = shield;          // 新加了一层护盾
+    else if (shield <= 0 && e.shield > 0 && !e.dead) state.fx?.shieldBreak(e.id, performance.now());
+    e.shield = shield;
+    e.blocking = !!s.blocking && !e.dead;
     e.fresh = false;
   }
   if (m.self) {

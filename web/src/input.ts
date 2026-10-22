@@ -2,7 +2,7 @@
 
 import { MOVE_DIR } from './game/config';
 import { clamp, hypot } from './game/math';
-import { headY, posOf, state, type ClientEntity } from './game/state';
+import { cdRemaining, headY, posOf, state, type ClientEntity } from './game/state';
 import type { ClientMessage } from './net/types';
 import type { Debug } from './ui/debug';
 import { showToast } from './ui/hud';
@@ -40,11 +40,65 @@ function sendMove(force = false): void {
 export function resendMove(): void {
   lastMove = '';
   sendMove(true);
+  if (blocking) deps.send({ t: 'block', on: true });
 }
 
 export function castSlot(slot: number): void {
   if (!state.skillBySlot[slot]) return;
   deps.send({ t: 'cast', slot, target: state.target || 0 });
+}
+
+// 普攻：左键点怪就打它，点空地打当前目标或身边最近的怪；按住左键会一直打。
+// 冷却中、格挡中、身边没怪时什么也不发，免得服务端一直弹“冷却中”“没有有效目标”。
+const ATTACK_SLOT = 1;
+const ATTACK_REPEAT_MS = 100;
+let attackHeld = 0;      // 按住左键时的重试定时器
+let blocking = false;
+
+function hostile(e: ClientEntity | undefined): e is ClientEntity {
+  return !!e && !e.dead && e.kind === 'monster';
+}
+
+// attackTarget 选普攻的对象：当前目标够得着就打它，否则找射程内最近的怪（和服务端自动选目标的范围一样）。
+function attackTarget(now: number): ClientEntity | null {
+  const me = state.ents.get(state.myId);
+  const sk = state.skillBySlot[ATTACK_SLOT];
+  if (!me || me.dead || !sk) return null;
+  const mp = posOf(me, now);
+  const reach = (e: ClientEntity) => hypot(mp.x, mp.y, posOf(e, now).x, posOf(e, now).y) - (me.r || 14) - (e.r || 14);
+  const range = sk.range || 0;
+  const cur = state.ents.get(state.target);
+  if (hostile(cur) && reach(cur) <= range + 8) return cur;
+  let best: ClientEntity | null = null;
+  let bestD = Infinity;
+  for (const e of state.ents.values()) {
+    if (!hostile(e)) continue;
+    const d = reach(e);
+    if (d <= range + 40 && d < bestD) { best = e; bestD = d; }
+  }
+  return best;
+}
+
+function tryAttack(): void {
+  const now = performance.now();
+  const sk = state.skillBySlot[ATTACK_SLOT];
+  if (!sk || blocking || cdRemaining(sk.id, now) > 0.03) return;
+  const t = attackTarget(now);
+  if (!t) return;
+  if (t.id !== state.target) state.target = t.id;
+  deps.send({ t: 'cast', slot: ATTACK_SLOT, target: t.id });
+}
+
+function setBlock(on: boolean): void {
+  if (blocking === on) return;
+  blocking = on;
+  deps.send({ t: 'block', on });
+}
+
+function stopMouse(): void {
+  clearInterval(attackHeld);
+  attackHeld = 0;
+  setBlock(false);
 }
 
 function toWorld(ev: MouseEvent): { x: number; y: number } {
@@ -99,7 +153,7 @@ function onKeyDown(e: KeyboardEvent): void {
     deps.debug.toggle();
     return;
   }
-  const m = /^(?:Digit|Numpad)([1-5])$/.exec(e.code);
+  const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
   if (m) castSlot(Number(m[1]));
 }
 
@@ -113,18 +167,37 @@ function onKeyUp(e: KeyboardEvent): void {
 function releaseKeys(): void {
   keys.clear();
   sendMove(true);
+  stopMouse();
 }
 
 export function initInput(d: InputDeps): void {
   deps = d;
   const { canvas } = d;
-  canvas.addEventListener('click', (ev) => {
+  canvas.addEventListener('mousedown', (ev) => {
+    if (ev.button === 2) {                  // 右键按住格挡
+      ev.preventDefault();
+      setBlock(true);
+      return;
+    }
+    if (ev.button !== 0) return;
+    // 左键：点到实体先选中它；点到的是怪就顺手打一下，按住不放会一直打
     const w = toWorld(ev);
     const hit = pickEntity(w.x, w.y, performance.now());
-    if (!hit) return;                       // 点空地什么也不做
-    state.target = hit.id;
-    d.send({ t: 'target', target: hit.id });
+    if (hit && hit.id !== state.target) {
+      state.target = hit.id;
+      d.send({ t: 'target', target: hit.id });
+    }
+    if (hit && !hostile(hit)) return;       // 点队友、NPC 只选中
+    tryAttack();
+    clearInterval(attackHeld);
+    attackHeld = window.setInterval(tryAttack, ATTACK_REPEAT_MS);
   });
+  // 松开可能发生在画布外面，所以挂在 window 上
+  window.addEventListener('mouseup', (ev) => {
+    if (ev.button === 0) { clearInterval(attackHeld); attackHeld = 0; }
+    if (ev.button === 2) setBlock(false);
+  });
+  canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
   canvas.addEventListener('mousemove', (ev) => {
     const w = toWorld(ev);
     canvas.style.cursor = pickEntity(w.x, w.y, performance.now()) ? 'pointer' : 'default';

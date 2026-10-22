@@ -89,10 +89,15 @@ function buildAttrRows(): void {
   mk(DERIVED_ATTRS, ui.derivedAttrs, 'der.');
 }
 
+// slotCount 是技能栏的格数：至少 5 格，技能多了就多给，最多 9 格（对应数字键 1～9）。
+function slotCount(): number {
+  return Math.min(9, Math.max(5, ...Object.keys(state.skillBySlot).map(Number)));
+}
+
 export function buildSkillBar(): void {
   ui.skillbar.replaceChildren();
   skillBtns = {};
-  for (let slot = 1; slot <= 5; slot++) {
+  for (let slot = 1; slot <= slotCount(); slot++) {
     const sk = state.skillBySlot[slot] || null;
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -102,7 +107,7 @@ export function buildSkillBar(): void {
 
     const key = document.createElement('span');
     key.className = 'key';
-    key.textContent = String(slot);
+    key.textContent = slot === 1 ? '1 / 左键' : String(slot);   // 1 号技能就是普攻
     const name = document.createElement('span');
     name.className = 'sname';
     name.textContent = sk ? sk.name : '—';
@@ -123,8 +128,7 @@ export function buildSkillBar(): void {
 }
 
 export function renderSkillBar(now: number): void {
-  for (let slot = 1; slot <= 5; slot++) {
-    const b = skillBtns[slot];
+  for (const b of Object.values(skillBtns)) {
     if (!b || !b.sk) continue;
     const left = cdRemaining(b.sk.id, now);
     const total = b.sk.cooldown || 0;

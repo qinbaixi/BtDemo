@@ -142,7 +142,8 @@ npm run build         # 生成协议代码 + 类型检查 + 输出 web/dist
 ## 加东西时改哪里
 
 - 新怪物模型：`render/models.ts` 加画法，`game/config.ts` 的 `MODEL_H` 加头顶高度。
-- 新技能特效：`render/fx.ts` 的 `cast()` 按 `fx` 字段分支。
+- 新技能特效：`render/fx.ts` 的 `cast()` 按 `fx` 字段分支。护盾泡泡是常驻效果，由 `game/state.ts` 的 `fxAuras()` 每帧列出带护盾的实体，`fx.shieldAuras()` 画。
+- 鼠标操作在 `input.ts`：左键普攻（1 号技能，冷却中或身边没怪时不发请求，按住连续打），右键按住发 `block`。
 - 新场景物件：`render/scenery.ts` 的 `KINDS`，同时在 `config/map.tmj` 加碰撞形状并摆放（见 [地图](map.md#加一种新物件)）。
 - 新 HUD 元素：`index.html` 加元素，`ui/hud.ts` 取元素并刷新。
 - 新事件：`net/types.ts` 的 `EventKind`、`protocol.ts` 的 `EVENT_KIND`，再在 `game/events.ts` 处理。

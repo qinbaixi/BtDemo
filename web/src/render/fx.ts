@@ -64,7 +64,10 @@ function blit(ctx, sprite, x, y, r, alpha) {
 
 /* ------------------------------ engine ------------------------------ */
 
-export type Resolve = (id: number) => { x: number; y: number; r: number } | null;
+export type Resolve = (id: number) => { x: number; y: number; r: number; facing?: number; h?: number } | null;
+
+// Aura 是身上带护盾的实体：位置、身高（脚到头顶的像素）和护盾剩余比例（0..1，按满护盾算）。
+export type Aura = { id: number; x: number; y: number; r: number; h: number; frac: number };
 
 export class FX {
   resolve: Resolve;
@@ -73,8 +76,11 @@ export class FX {
   shake: number;
 
   // resolve(id) returns the live {x, y, r} of an entity, or null.
-  constructor(resolve: Resolve) {
+  auras: () => Aura[];   // 每帧要画护盾泡泡的实体
+
+  constructor(resolve: Resolve, auras: () => Aura[] = () => []) {
     this.resolve = resolve;
+    this.auras = auras;
     this.effects = [];
     this.parts = [];
     this.shake = 0;          // screen shake strength in px, decays
@@ -136,6 +142,18 @@ export class FX {
             vx: 0, vy: -rand(0.06, 0.13), life: rand(500, 900), size: rand(2, 4), color, kind: 'spark', born: now + rand(0, 400) });
         }
         return 0;
+      case 'shield': {
+        // 护盾成形：一圈六边形碎片从外面飞回来拼成泡泡，脚下一道光环
+        this.effects.push({ ...base, kind: 'shieldForm', life: 700 });
+        this.effects.push({ ...base, kind: 'buff', life: 800 });
+        for (let i = 0; i < 26; i++) {
+          const a = rand(0, TAU);
+          const d = rand(46, 70);
+          this.spawn({ anchor: ev.src, ox: Math.cos(a) * d, oy: Math.sin(a) * d * 0.6 - 18, vx: -Math.cos(a) * d / 420,
+            vy: -Math.sin(a) * d * 0.6 / 420, life: 420, size: rand(2, 3.5), color: i % 3 ? color : '#ffffff', kind: 'glow', born: now + rand(0, 160) });
+        }
+        return 0;
+      }
       default: { // melee
         const heavy = /heavy|smash|pounce/.test(ev.skill || '');
         this.effects.push({ ...base, kind: 'slash', life: heavy ? 340 : 260, heavy,
@@ -166,6 +184,50 @@ export class FX {
         len: (p.r || 14) * (crit ? 2.6 : 1.9), born: now + i * 40, life: 170 });
     }
     if (crit) this.shake = Math.max(this.shake, 5);
+  }
+
+  // block 是格挡住一击：盾面（朝向那一侧）闪一道弧光，火花向外溅。
+  block(id, now) {
+    const p = this.pos(id, null);
+    if (!p) return;
+    const r = p.r || 14;
+    const dir = Math.cos(p.facing ?? 0) < 0 ? -1 : 1;
+    // 盾举在胸前：身高的六成左右、身体前面一点
+    const ox = dir * r * 0.95;
+    const oy = -(p.h || r * 2.6) * 0.6;
+    const x = p.x + ox;
+    const y = p.y + oy;
+    this.effects.push({ kind: 'parry', anchor: id, ox, oy, x, y, dir, r,
+      color: '#9ad7ff', rgb: rgbOf('#9ad7ff'), born: now, life: 260 });
+    for (let i = 0; i < 16; i++) {
+      const a = (dir > 0 ? 0 : Math.PI) + rand(-1.1, 1.1);
+      const sp = rand(0.2, 0.5);
+      this.spawn({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.12, grav: 0.0012,
+        life: rand(200, 380), size: rand(1.4, 2.6), color: i % 3 ? '#fff3c4' : '#9ad7ff', kind: 'spark', drag: 0.98, born: now });
+    }
+    this.shake = Math.max(this.shake, 2.5);
+  }
+
+  // shieldHit 是护盾吸收了伤害：泡泡亮一下，受击处荡开一圈波纹。
+  shieldHit(id, now) {
+    const p = this.pos(id, null);
+    if (!p) return;
+    this.effects.push({ kind: 'shieldPing', anchor: id, a: rand(-2.6, -0.5), born: now, life: 380,
+      color: '#7fd8ff', rgb: rgbOf('#7fd8ff') });
+  }
+
+  // shieldBreak 是护盾被打破（或到时间消失）：泡泡碎成一片片往外飞。
+  shieldBreak(id, now) {
+    const p = this.pos(id, null);
+    if (!p) return;
+    const b = this.bubbleShape(p.x, p.y, p.r || 14, p.h || (p.r || 14) * 2.6);
+    for (let i = 0; i < 24; i++) {
+      const a = rand(0, TAU);
+      const sp = rand(0.08, 0.22);
+      this.spawn({ x: b.cx + Math.cos(a) * b.rx, y: b.cy + Math.sin(a) * b.ry, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.04,
+        grav: 0.0004, life: rand(320, 560), size: rand(1.5, 2.8), color: i % 4 ? '#7fd8ff' : '#ffffff', kind: 'spark', drag: 0.99, born: now });
+    }
+    this.effects.push({ kind: 'ring', x: b.cx, y: b.cy + b.ry * 0.6, color: '#7fd8ff', rgb: rgbOf('#7fd8ff'), radius: b.rx * 1.6, born: now, life: 420 });
   }
 
   death(id, color, now) {
@@ -255,6 +317,8 @@ export class FX {
           break;
         }
         case 'ring': add(f.x, f.y, f.radius * 1.5, f.color, fade * 0.6, 0.3); break;
+        case 'parry': add(f.x, f.y, 70, f.color, fade, 0.55); break;
+        case 'shieldForm': { const p = this.pos(f.src, { x: f.sx, y: f.sy }); add(p.x, p.y - 18, 110, f.color, fade, 0.4); break; }
       }
     }
   }
@@ -324,8 +388,11 @@ export class FX {
         case 'gash': this.gash(ctx, f, t); break;
         case 'pillar': this.pillar(ctx, f, t); break;
         case 'buff': this.buffTop(ctx, f, t); break;
+        case 'parry': this.parry(ctx, f, t); break;
+        case 'shieldForm': this.shieldForm(ctx, f, t); break;
       }
     }
+    this.shieldAuras(ctx, now);
     this.particles(ctx, now, dt);
     ctx.restore();
   }
@@ -588,6 +655,138 @@ export class FX {
     ctx.quadraticCurveTo(p.x + w * 0.7, p.y - h * 0.6, p.x + w, p.y);
     ctx.closePath();
     ctx.fill();
+  }
+
+  // bubbleShape 是护盾泡泡的椭圆：罩住脚到头顶，略宽于身体。
+  bubbleShape(x: number, y: number, r: number, h: number) {
+    const ry = h * 0.62 + 6;
+    return { cx: x, cy: y - h * 0.5 + 2, rx: Math.max(r * 1.9, ry * 0.78), ry };
+  }
+
+  // drawBubble 画一个护盾泡泡。k 是整体亮度，flash 是受击闪光（0..1），ping 是波纹的位置角和进度。
+  drawBubble(ctx, b, k: number, flash: number, now: number) {
+    const { cx, cy, rx, ry } = b;
+    const rgb = rgbOf('#7fd8ff');
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(1, ry / rx);
+    // 球面：中间透明，越靠边越亮
+    const g = ctx.createRadialGradient(0, 0, rx * 0.55, 0, 0, rx);
+    g.addColorStop(0, rgba(rgb, 0));
+    g.addColorStop(0.8, rgba(rgb, 0.1 * k + 0.25 * flash));
+    g.addColorStop(1, rgba(rgb, 0.32 * k + 0.4 * flash));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, rx, 0, TAU);
+    ctx.fill();
+    // 边缘细线
+    ctx.strokeStyle = rgba(whiten(rgb, 0.4), 0.45 * k + 0.5 * flash);
+    ctx.lineWidth = 1.4 * rx / ry;
+    ctx.stroke();
+    // 六边形网格：沿着一条斜带慢慢扫过去，只在带子里显出来
+    const cell = 9;
+    const sweep = ((now / 1400) % 1) * rx * 3 - rx * 1.5;
+    ctx.lineWidth = 0.9;
+    for (let gy = -rx; gy <= rx; gy += cell * 1.5) {
+      const row = Math.round(gy / (cell * 1.5));
+      for (let gx = -rx + (row & 1 ? cell * 0.866 : 0); gx <= rx; gx += cell * 1.732) {
+        const d = Math.hypot(gx, gy) / rx;
+        if (d > 0.93) continue;
+        const band = Math.max(0, 1 - Math.abs(gx * 0.7 + gy * 0.7 - sweep) / (rx * 0.35));
+        const a = (band * 0.35 * k + flash * 0.3) * (0.3 + d * 0.7);
+        if (a < 0.02) continue;
+        ctx.strokeStyle = rgba(rgb, a);
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const ang = Math.PI / 6 + (i * TAU) / 6;
+          const hx = gx + Math.cos(ang) * cell * 0.92;
+          const hy = gy + Math.sin(ang) * cell * 0.92;
+          if (i) ctx.lineTo(hx, hy); else ctx.moveTo(hx, hy);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+    }
+    // 左上角一道高光弧
+    ctx.strokeStyle = rgba([255, 255, 255], 0.35 * k + 0.3 * flash);
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, rx * 0.84, -2.55, -1.75);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // shieldAuras 画所有带护盾实体身上的泡泡（受击时闪一下）。
+  shieldAuras(ctx, now: number) {
+    for (const a of this.auras()) {
+      let flash = 0;
+      let ping = null;
+      for (const f of this.effects) {
+        if (f.kind !== 'shieldPing' || f.anchor !== a.id) continue;
+        const t = (now - f.born) / f.life;
+        if (t < 0 || t >= 1) continue;
+        flash = Math.max(flash, 1 - t);
+        ping = { f, t };
+      }
+      // 护盾快破时闪烁
+      const low = a.frac < 0.3 ? 0.55 + 0.45 * Math.sin(now / 70) : 1;
+      const k = (0.55 + 0.45 * a.frac) * low;
+      const b = this.bubbleShape(a.x, a.y, a.r, a.h);
+      this.drawBubble(ctx, b, k, flash, now);
+      if (ping) {
+        // 受击处的波纹：从泡泡表面的一点荡开
+        const { f, t } = ping;
+        const px = b.cx + Math.cos(f.a) * b.rx;
+        const py = b.cy + Math.sin(f.a) * b.ry;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.strokeStyle = rgba(f.rgb, (1 - t) * 0.9);
+        ctx.lineWidth = 3 * (1 - t) + 0.5;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 4 + 22 * easeOut(t), 3 + 14 * easeOut(t), f.a + Math.PI / 2, 0, TAU);
+        ctx.stroke();
+        ctx.restore();
+        blit(ctx, glow(f.color), px, py, 26 * (1 - t) + 6, 1 - t);
+      }
+    }
+  }
+
+  // shieldForm 是护盾成形：泡泡从一圈亮光收拢、显出网格，然后交给 shieldAuras 常驻显示。
+  shieldForm(ctx, f, t) {
+    const p = this.pos(f.src, { x: f.sx, y: f.sy, r: f.sr });
+    const h = p.h || (p.r || 14) * 2.6;
+    const b = this.bubbleShape(p.x, p.y, p.r || 14, h);
+    const grow = easeOutCubic(clamp01(t / 0.55));
+    const s = 1.6 - 0.6 * grow;
+    this.drawBubble(ctx, { cx: b.cx, cy: b.cy, rx: b.rx * s, ry: b.ry * s }, grow, 1 - grow * 0.7, f.born + t * f.life);
+    // 收拢时的白色外环
+    ctx.save();
+    ctx.translate(b.cx, b.cy);
+    ctx.scale(1, b.ry / b.rx);
+    ctx.strokeStyle = rgba([255, 255, 255], (1 - t) * 0.8);
+    ctx.lineWidth = 3 * (1 - t) + 0.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, b.rx * (2.2 - 1.2 * grow), 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // parry 是格挡时盾面上的一道弧光。
+  parry(ctx, f, t) {
+    const p = this.pos(f.anchor, null);
+    const x = p ? p.x + f.ox : f.x;
+    const y = p ? p.y + f.oy : f.y;
+    const fade = 1 - t;
+    const R = f.r * (1.2 + 0.5 * easeOut(t));
+    const mid = f.dir > 0 ? 0 : Math.PI;
+    ctx.save();
+    ctx.strokeStyle = rgba(whiten(f.rgb, 0.5), fade);
+    ctx.lineWidth = 5 * fade + 1;
+    ctx.beginPath();
+    ctx.arc(x - f.dir * R * 0.6, y, R, mid - 0.9, mid + 0.9);
+    ctx.stroke();
+    ctx.restore();
+    blit(ctx, glow('#cfeeff'), x, y, 34 * fade + 8, fade);
   }
 
   gash(ctx, f, t) {
