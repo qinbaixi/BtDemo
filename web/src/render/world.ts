@@ -162,9 +162,11 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
 function poseOf(e: ClientEntity, p: Point, now: number): Pose {
   // 走路循环按这一帧实际画出来的移动距离推进
   const moved = hypot(e.rx, e.ry, p.x, p.y);
+  // 往背对的方向走（举盾倒退）时腿反着迈，不然看起来像在原地滑步
+  const back = (p.x - e.rx) * Math.cos(e.facing) < -0.05;
   e.rx = p.x;
   e.ry = p.y;
-  if (moved < 40) e.walk += moved * 0.16 * (16 / (e.r || 14));
+  if (moved < 40) e.walk += (back ? -1 : 1) * moved * 0.16 * (16 / (e.r || 14));
   const atk = (now - e.attackAt) / ATTACK_MS;
   const hit = (now - e.hitAt) / HIT_MS;
   return {

@@ -318,13 +318,14 @@ function gait(q, stride = 0.62) {
       // the swinging leg bends at the knee as it comes forward
       const knee = 0.12 + Math.max(0, Math.cos(f)) * 1.0;
       g.legs.push([thigh, thigh - knee]);
-      g.arms.push([-Math.sin(f) * 0.55, -0.45 - Math.max(0, Math.sin(f)) * 0.5]);
+      // 手臂和同侧的腿反着摆；肘只能往前弯（小臂角度比大臂大），往前摆时弯得多一些
+      g.arms.push([-Math.sin(f) * 0.55, 0.35 + Math.max(0, -Math.sin(f)) * 0.55]);
     }
     g.bob = Math.abs(Math.cos(ph)) * 1.8 - 0.6;
     g.lean = 0.1;
   } else {
     g.legs.push([-0.12, -0.16], [0.14, 0.08]);
-    g.arms.push([0.12 + g.breathe * 0.03, -0.35], [-0.08 - g.breathe * 0.03, -0.3]);
+    g.arms.push([0.12 + g.breathe * 0.03, 0.3], [-0.08 - g.breathe * 0.03, 0.25]);
     g.bob = g.breathe * 0.5;
   }
   if (q.hit >= 0) g.lean -= 0.35 * (1 - q.hit) * (1 - q.hit);
@@ -842,7 +843,7 @@ function drawVillager(ctx, q) {
       if (q.moving) return g.arms;
       // idle: one hand on the satchel strap, the other gesturing now and then
       const talk = Math.max(0, Math.sin(t * 0.9)) ** 3;
-      return [[0.15, -0.5], [0.35 + talk * 0.9, -0.6 - talk * 0.9]];
+      return [[0.15, 0.5], [0.35 + talk * 0.9, 0.6 + talk * 0.9]];
     },
     back(ctx, q, B) {
       // satchel on the far hip

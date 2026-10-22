@@ -97,6 +97,7 @@ function tryAttack(): void {
 function setBlock(on: boolean): void {
   if (blocking === on) return;
   blocking = on;
+  state.blockHeld = on;
   deps.send({ t: 'block', on });
 }
 

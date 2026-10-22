@@ -11,7 +11,7 @@ import './styles/debug.css';
 import './styles/debug-proto.css';
 
 import { ATTACK_MS } from './game/config';
-import { state, fxAuras, fxResolve } from './game/state';
+import { faceToward, fxAuras, fxResolve, posOf, state } from './game/state';
 import { handleMessage, resetOnClose } from './game/sync';
 import { castSlot, initInput, resendMove } from './input';
 import { createConnection } from './net/connection';
@@ -42,6 +42,12 @@ protocol.tap = (dir, type, bytes, obj) => debug.frame(dir, type, bytes, obj);
 // 动作结束后再转回按键方向（被墙挡住走不动时也一样）。
 function faceInput(now: number): void {
   const me = state.ents.get(state.myId);
+  if (me && state.blockHeld) {
+    // 格挡时盾牌一直朝着目标（没有目标就保持按下右键时的朝向），往后退也不转身
+    const t = state.ents.get(state.target);
+    if (t && !t.dead && t.kind === 'monster') faceToward(me, posOf(t, now).x, posOf(t, now).y, now);
+    return;
+  }
   if (me && state.moveDx !== 0 && now - me.attackAt > ATTACK_MS) me.facing = state.moveDx < 0 ? Math.PI : 0;
 }
 

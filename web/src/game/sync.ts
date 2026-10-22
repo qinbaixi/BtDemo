@@ -93,7 +93,8 @@ function onSync(m: SyncMsg, now: number, deps: SyncDeps): void {
     if (!jump && hypot(e.x, e.y, s.x, s.y) > 0.5) {
       e.moveUntil = now + LERP_MS * 1.6;
       // 自己按着左右键时朝向由按键决定（main.ts 的 faceInput），这里只管别人和被推动的情况
-      const steered = s.id === state.myId && state.moveDx !== 0;
+      // 格挡中的人举着盾倒退，朝向不跟着移动方向转
+      const steered = (s.id === state.myId && (state.moveDx !== 0 || state.blockHeld)) || e.blocking;
       if (!steered && Math.abs(mdx) > 0.3 && now - e.attackAt > ATTACK_MS) e.facing = mdx < 0 ? Math.PI : 0;
     }
     if (jump) { e.rx = s.x; e.ry = s.y; }
