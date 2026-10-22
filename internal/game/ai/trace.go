@@ -57,12 +57,12 @@ func (sys *System) nodeLabel(node *bt.Node) string {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	var text strings.Builder
-	text.WriteString(node.SubType)
+	var builder strings.Builder
+	builder.WriteString(node.SubType)
 	for _, k := range keys {
-		fmt.Fprintf(&text, " %s=%v", k, node.Props[k])
+		fmt.Fprintf(&builder, " %s=%v", k, node.Props[k])
 	}
-	sys.labels[node] = text.String()
+	sys.labels[node] = builder.String()
 	return sys.labels[node]
 }
 

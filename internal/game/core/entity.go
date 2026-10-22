@@ -21,7 +21,7 @@ const (
 )
 
 // Entity 是玩家、怪物或 NPC。其字段按职责分组为组件，每类职责一个组件；
-// 组件以内嵌方式引入，因此 e.X 或 e.HP 的写法与之前相同。
+// 组件以内嵌方式引入，因此可以直接写 entity.X、entity.HP，不用写 entity.Transform.X。
 type Entity struct {
 	Identity
 	Transform
@@ -124,7 +124,7 @@ type Brain struct {
 // MaxRadius 为判断边缘距离的范围查询设定实体半径的上限。
 const MaxRadius = 64
 
-// Alive 报告 e 是否可以行动并且可以被选为目标。
+// Alive 报告 entity 是否可以行动并且可以被选为目标。
 func (entity *Entity) Alive() bool { return entity != nil && !entity.Dead }
 
 // Dist 是 a 与 b 中心之间的距离。
@@ -133,7 +133,7 @@ func Dist(a, b *Entity) float64 { return math.Hypot(a.X-b.X, a.Y-b.Y) }
 // EdgeDist 是 a 与 b 边缘之间的距离（不会为负数）。
 func EdgeDist(a, b *Entity) float64 { return math.Max(0, Dist(a, b)-a.Radius-b.Radius) }
 
-// HomeDist 是 e 与其家之间的距离。
+// HomeDist 是 entity 与其家之间的距离。
 func (entity *Entity) HomeDist() float64 {
 	return math.Hypot(entity.X-entity.HomeX, entity.Y-entity.HomeY)
 }
@@ -146,7 +146,7 @@ func (entity *Entity) HPRatio() float64 {
 	return entity.HP / entity.Attr.MaxHP
 }
 
-// Shield 是 e 身上所有护盾还能吸收的伤害之和。
+// Shield 是 entity 身上所有护盾还能吸收的伤害之和。
 func (entity *Entity) Shield() float64 {
 	sum := 0.0
 	for _, buff := range entity.Buffs {

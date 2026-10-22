@@ -17,7 +17,7 @@ type Grid struct {
 	where      map[int]int // 实体 ID -> 格子
 }
 
-// NewGrid 创建一个覆盖 w×h 地图的格子网格。
+// NewGrid 创建一个覆盖 width×height 地图的格子网格。
 func NewGrid(width, height, cell float64) *Grid {
 	grid := &Grid{
 		Cell:  cell,
@@ -39,14 +39,14 @@ func (grid *Grid) CellOf(x, y float64) int {
 	return cy*grid.Cols + cx
 }
 
-// Add 将 e 放入网格。
+// Add 将 entity 放入网格。
 func (grid *Grid) Add(entity *core.Entity) {
 	cell := grid.CellOf(entity.X, entity.Y)
 	grid.cells[cell][entity.ID] = entity
 	grid.where[entity.ID] = cell
 }
 
-// Remove 将 e 从网格中移除。
+// Remove 将 entity 从网格中移除。
 func (grid *Grid) Remove(entity *core.Entity) {
 	if cell, ok := grid.where[entity.ID]; ok {
 		delete(grid.cells[cell], entity.ID)
@@ -54,7 +54,7 @@ func (grid *Grid) Remove(entity *core.Entity) {
 	}
 }
 
-// Moved 在 e 的位置变化后更新其所在格子。
+// Moved 在 entity 的位置变化后更新其所在格子。
 func (grid *Grid) Moved(entity *core.Entity) {
 	old, ok := grid.where[entity.ID]
 	if !ok {
@@ -79,7 +79,7 @@ func (grid *Grid) Neighbors(cell int, fn func(*core.Entity)) {
 	}
 }
 
-// InRange 对中心位于 (x, y) 半径 r 之内的每个实体调用 fn。
+// InRange 对中心位于 (x, y) 半径 radius 之内的每个实体调用 fn。
 func (grid *Grid) InRange(x, y, radius float64, fn func(*core.Entity)) {
 	x0 := clampInt(int((x-radius)/grid.Cell), 0, grid.Cols-1)
 	x1 := clampInt(int((x+radius)/grid.Cell), 0, grid.Cols-1)

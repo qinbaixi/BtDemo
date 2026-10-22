@@ -50,15 +50,15 @@ func NewRegistry() *Registry {
 	}
 }
 
-func (registry *Registry) Task(subType string, fn TaskFunc) { registry.tasks[subType] = fn }
+func (registry *Registry) Task(subType string, fn TaskFunc) {
+	registry.tasks[subType] = fn
+}
+
 func (registry *Registry) Condition(subType string, fn ConditionFunc) {
 	registry.conditions[subType] = fn
 }
 
-func (registry *Registry) Service(
-	subType string,
-	fn ServiceFunc,
-) {
+func (registry *Registry) Service(subType string, fn ServiceFunc) {
 	registry.services[subType] = fn
 }
 
@@ -143,7 +143,7 @@ type Instance struct {
 	serviceMem  map[int]map[string]any
 }
 
-// NewInstance 为 agent 创建一份可运行的 t 副本。
+// NewInstance 为 agent 创建一份可运行的 tree 副本。
 func NewInstance(tree *Tree, reg *Registry, agent any, rng *rand.Rand) *Instance {
 	return &Instance{
 		Tree:        tree,
@@ -311,7 +311,7 @@ func (instance *Instance) run(node *Node) Status {
 // builtinDecorators 是直接改变结果而非检查条件的装饰器，无需游戏代码即可使用。
 var builtinDecorators = map[string]bool{"cooldown": true, "invert": true, "force_success": true}
 
-// applyResultDecorators 让 n 的结果装饰器改变 st。当条件装饰器阻止了节点时，这些结果装饰器同样生效，
+// applyResultDecorators 让 node 的结果装饰器改变 status。当条件装饰器阻止了节点时，这些结果装饰器同样生效，
 // 因此 ForceSuccess 可以让一个可选步骤（例如冷却中的一句台词）永远不会导致其父节点失败。
 func (instance *Instance) applyResultDecorators(node *Node, status Status, step int) Status {
 	for _, decorator := range node.Decorators {
@@ -343,7 +343,8 @@ func (instance *Instance) checkDecorator(decorator *Node, step int) bool {
 			if ok {
 				instance.Trace[step].Checks[checkIdx].Why = "冷却完毕"
 			} else {
-				instance.Trace[step].Checks[checkIdx].Why = fmt.Sprintf("冷却中，还剩 %.1fs", ready-instance.now)
+				left := ready - instance.now
+				instance.Trace[step].Checks[checkIdx].Why = fmt.Sprintf("冷却中，还剩 %.1fs", left)
 			}
 		}
 	} else {

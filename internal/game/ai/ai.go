@@ -90,17 +90,17 @@ func checkSlots(tree *bt.Tree, tmpl *config.Template) error {
 // Registry 返回节点处理器，用于校验额外的行为树（供测试使用）。
 func (sys *System) Registry() *bt.Registry { return sys.reg }
 
-// Attach 为 e 分配一个指定行为树的新实例。
+// Attach 为 entity 分配一个指定行为树的新实例。
 func (sys *System) Attach(entity *core.Entity, tree string) {
 	entity.AI = sys.Instance(entity, sys.trees[tree])
 }
 
-// Instance 创建一个驱动 e 的行为树实例。
+// Instance 创建一个驱动 entity 的行为树实例。
 func (sys *System) Instance(entity *core.Entity, tree *bt.Tree) *bt.Instance {
 	return bt.NewInstance(tree, sys.reg, &Agent{sys: sys, Entity: entity}, sys.state.Rand)
 }
 
-// Reset 让 e 的行为树从头重新开始，例如在其重生之后。
+// Reset 让 entity 的行为树从头重新开始，例如在其重生之后。
 func (sys *System) Reset(entity *core.Entity) {
 	if entity.AI != nil {
 		entity.AI = sys.Instance(entity, entity.AI.Tree)

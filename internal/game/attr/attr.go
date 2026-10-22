@@ -52,7 +52,7 @@ func Compute(base config.Attrs, speed float64, buffs []*core.Buff) core.Derived 
 	return derived
 }
 
-// Recalc 根据 e.Base、e.Speed 和 e.Buffs 重新计算 e.Attr。MaxHP 变化时，HP 保持与
+// Recalc 根据 entity.Base、entity.Speed 和 entity.Buffs 重新计算 entity.Attr。MaxHP 变化时，HP 保持与
 // MaxHP 的比例不变（若旧的 MaxHP 为 0，则 HP 保持不变）。随后 HP 被限制在 [0, MaxHP] 之内。
 func Recalc(entity *core.Entity) {
 	old := entity.Attr.MaxHP
@@ -63,7 +63,7 @@ func Recalc(entity *core.Entity) {
 	entity.HP = math.Max(0, math.Min(entity.HP, entity.Attr.MaxHP))
 }
 
-// Init 从零开始设置 e 的属性，并将 HP 补满。
+// Init 从零开始设置 entity 的属性，并将 HP 补满。
 func Init(entity *core.Entity) {
 	Recalc(entity)
 	entity.HP = entity.Attr.MaxHP
@@ -80,7 +80,7 @@ type System struct {
 // New 创建属性系统。
 func New(state *core.State) *System { return &System{state: state} }
 
-// LevelUp 使 e 升一级：基础属性按 e.Growth 增长。
+// LevelUp 使 entity 升一级：基础属性按 entity.Growth 增长。
 func LevelUp(entity *core.Entity) {
 	entity.Level++
 	entity.Base.Str += entity.Growth.Str
@@ -89,7 +89,7 @@ func LevelUp(entity *core.Entity) {
 	entity.Base.Vit += entity.Growth.Vit
 }
 
-// GainExp 为 e 增加经验，并在经验允许的范围内连续升级。每次升级都会提升基础属性、
+// GainExp 为 entity 增加经验，并在经验允许的范围内连续升级。每次升级都会提升基础属性、
 // 补满 HP，并通知客户端。
 func (sys *System) GainExp(entity *core.Entity, amount int) {
 	entity.Exp += amount

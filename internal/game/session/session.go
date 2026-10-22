@@ -114,7 +114,8 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 	switch body := msg.Msg.(type) {
 	case *pb.ClientMsg_Move:
 		dx, dy := float64(body.Move.GetDx()), float64(body.Move.GetDy())
-		if length := math.Hypot(dx, dy); length > 0 && !math.IsNaN(length) && !math.IsInf(length, 0) {
+		length := math.Hypot(dx, dy)
+		if length > 0 && !math.IsNaN(length) && !math.IsInf(length, 0) {
 			entity.MoveX, entity.MoveY = dx/length, dy/length
 		} else {
 			entity.MoveX, entity.MoveY = 0, 0
@@ -137,10 +138,10 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 			target = entity.Target
 		}
 		targetEnt := sys.state.Ents.Get(target)
-		usable := targetEnt.Alive() &&
-			sys.state.Hostile(entity, targetEnt) &&
-			core.EdgeDist(entity, targetEnt) <= skill.Range
-		if skill.Kind == "target" && !usable {
+		unusable := !targetEnt.Alive() ||
+			!sys.state.Hostile(entity, targetEnt) ||
+			core.EdgeDist(entity, targetEnt) > skill.Range
+		if skill.Kind == "target" && unusable {
 			// 未选择可用目标：选取范围内最近的怪物。
 			targetEnt = sys.combat.NearestMonster(entity, skill.Range+entity.Radius+40)
 			if targetEnt != nil {

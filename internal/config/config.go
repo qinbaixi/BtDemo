@@ -299,7 +299,7 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 	return nil
 }
 
-// Hostile 报告阵营 a 是否会攻击阵营 b。
+// Hostile 报告阵营 attacker 是否会攻击阵营 target。
 func (cfg *Config) Hostile(attacker, target string) bool {
 	for _, faction := range cfg.World.Hostile[attacker] {
 		if faction == target {

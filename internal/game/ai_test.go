@@ -7,7 +7,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/bt"
 )
 
-// aiInstance 将 raw 作为 e 的行为树加载，检查每个节点都有处理器，并返回一个可运行的实例。
+// aiInstance 将 raw 作为 entity 的行为树加载，检查每个节点都有处理器，并返回一个可运行的实例。
 func aiInstance(
 	t *testing.T,
 	world *World,
@@ -31,7 +31,7 @@ func tickAI(world *World, inst *bt.Instance) bt.Status {
 	return inst.Tick(world.State.Clock.Now)
 }
 
-// condHolds 报告条件 sub（带属性 props）对 e 是否通过。它把该条件挂在 selector 下的
+// condHolds 报告条件 sub（带属性 props）对 entity 是否通过。它把该条件挂在 selector 下的
 // Wait(0) 之上，因此 Success 即表示条件成立。
 func condHolds(
 	t *testing.T,

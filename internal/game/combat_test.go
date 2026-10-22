@@ -34,7 +34,7 @@ func testWorld(obstacles ...nav.Shape) *World {
 	return world
 }
 
-// addTestEntity 在 w 中放入一个半径为 16 的存活实体。"player" 的 Kind 为 core.KindPlayer，其余为 core.KindMonster。
+// addTestEntity 在 world 中放入一个半径为 16 的存活实体。"player" 的 Kind 为 core.KindPlayer，其余为 core.KindMonster。
 func addTestEntity(
 	world *World,
 	id int,

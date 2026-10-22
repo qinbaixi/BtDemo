@@ -72,7 +72,7 @@ func (grid *Grid) center(cell int) Vec {
 	}
 }
 
-// nearestOpen 在 maxRing 圈内查找离 c 最近的开放单元格。
+// nearestOpen 在 maxRing 圈内查找离 cell 最近的开放单元格。
 func (grid *Grid) nearestOpen(cell, maxRing int) (int, bool) {
 	if !grid.blocked[cell] {
 		return cell, true
@@ -89,9 +89,9 @@ func (grid *Grid) nearestOpen(cell, maxRing int) (int, bool) {
 				if x < 0 || y < 0 || x >= grid.cols || y >= grid.rows {
 					continue
 				}
-				if cell := y*grid.cols + x; !grid.blocked[cell] {
+				if candidate := y*grid.cols + x; !grid.blocked[candidate] {
 					if distSq := float64(dx*dx + dy*dy); distSq < bestD {
-						best, bestD = cell, distSq
+						best, bestD = candidate, distSq
 					}
 				}
 			}
@@ -121,8 +121,8 @@ var dirs = [8][3]int{
 	{-1, -1, 1},
 }
 
-// astar 返回从 a 所在单元格（不含）到 b 所在单元格的单元格序列；
-// 若 b 不可达，则返回到离 b 最近的单元格。被阻挡的起点和终点单元格
+// astar 返回从 from 所在单元格（不含）到 to 所在单元格的单元格序列；
+// 若 to 不可达，则返回到离 to 最近的单元格。被阻挡的起点和终点单元格
 // 会被替换为最近的开放单元格。
 func (grid *Grid) astar(from, to Vec) []int {
 	start, ok := grid.nearestOpen(grid.cellOf(from), 8)
@@ -170,15 +170,15 @@ func (grid *Grid) astar(from, to Vec) []int {
 			if grid.blocked[next] || grid.shut[next] == grid.gen {
 				continue
 			}
-			cost := 1.0
+			stepCost := 1.0
 			if dir[2] == 1 {
 				// 不允许在障碍物旁边切角
 				if grid.blocked[cy*grid.cols+x] || grid.blocked[y*grid.cols+cx] {
 					continue
 				}
-				cost = math.Sqrt2
+				stepCost = math.Sqrt2
 			}
-			newCost := grid.cost[cur] + cost
+			newCost := grid.cost[cur] + stepCost
 			if grid.stamp[next] == grid.gen && newCost >= grid.cost[next] {
 				continue
 			}

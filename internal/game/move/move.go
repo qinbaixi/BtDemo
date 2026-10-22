@@ -32,30 +32,30 @@ func (sys *System) Nav() *nav.Map { return sys.nav }
 
 func pos(entity *core.Entity) nav.Vec { return nav.Vec{X: entity.X, Y: entity.Y} }
 
-// By 让 e 移动 (dx, dy)，遇到障碍物时沿其表面滑动。
+// By 让 entity 移动 (dx, dy)，遇到障碍物时沿其表面滑动。
 func (sys *System) By(entity *core.Entity, dx, dy float64) {
 	point := sys.nav.Resolve(nav.Vec{X: entity.X + dx, Y: entity.Y + dy}, entity.Radius)
 	entity.X, entity.Y = point.X, point.Y
 	sys.grid.Moved(entity)
 }
 
-// Place 把 e 放到离 (x, y) 最近的空闲位置。
+// Place 把 entity 放到离 (x, y) 最近的空闲位置。
 func (sys *System) Place(entity *core.Entity, x, y float64) {
 	point := sys.nav.NearestFree(nav.Vec{X: x, Y: y}, entity.Radius)
 	entity.X, entity.Y = point.X, point.Y
 	sys.grid.Moved(entity)
 }
 
-// FreeSpot 返回离 (x, y) 最近的、能放下 e 的位置。
+// FreeSpot 返回离 (x, y) 最近的、能放下 entity 的位置。
 func (sys *System) FreeSpot(entity *core.Entity, x, y float64) (float64, float64) {
 	point := sys.nav.NearestFree(nav.Vec{X: x, Y: y}, entity.Radius)
 	return point.X, point.Y
 }
 
-// Toward 让 e 沿路径朝 (x, y) 最多走 step 像素，并报告
+// Toward 让 entity 沿路径朝 (x, y) 最多走 step 像素，并报告
 // 是否已到达。若 (x, y) 无法到达，则到达最近的可达位置也算到达。
 // 目标移动时路径会立即重新规划，
-// 行走途中也会定时重新规划，e 卡住时同样会重新规划。
+// 行走途中也会定时重新规划，entity 卡住时同样会重新规划。
 func (sys *System) Toward(entity *core.Entity, x, y, step float64) bool {
 	goal := nav.Vec{X: x, Y: y}
 	steering := &entity.Steering
@@ -109,7 +109,7 @@ func (sys *System) Toward(entity *core.Entity, x, y, step float64) bool {
 	return false
 }
 
-// Stop 清除 e 的路径。
+// Stop 清除 entity 的路径。
 func (sys *System) Stop(entity *core.Entity) { entity.Steering = core.Steering{} }
 
 // Tick 让每个存活的玩家按其输入方向行走。

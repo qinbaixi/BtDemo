@@ -155,8 +155,8 @@ func (sys *System) register() {
 			dx, dy := agent.Entity.X-threat.X, agent.Entity.Y-threat.Y
 			length := math.Hypot(dx, dy)
 			if length < 1e-6 { // 正压在威胁目标上：任选一个方向
-				ang := sys.state.Rand.Float64() * 2 * math.Pi
-				dx, dy, length = math.Cos(ang), math.Sin(ang), 1
+				angle := sys.state.Rand.Float64() * 2 * math.Pi
+				dx, dy, length = math.Cos(angle), math.Sin(angle), 1
 			}
 			dist := ctx.Node.Num("Distance", 160)
 			ctx.Mem["x"], ctx.Mem["y"] = sys.move.FreeSpot(
@@ -234,9 +234,9 @@ func (sys *System) register() {
 
 	reg.Condition("far_from_home", func(ctx *bt.Ctx) bool {
 		agent := ctx.Agent.(*Agent)
-		dist, lim := agent.Entity.HomeDist(), ctx.Node.Num("Distance", 400)
-		ctx.Explain("离家 %.0f %s %.0f", dist, cmp(dist > lim, ">", "≤"), lim)
-		return dist > lim
+		dist, limit := agent.Entity.HomeDist(), ctx.Node.Num("Distance", 400)
+		ctx.Explain("离家 %.0f %s %.0f", dist, cmp(dist > limit, ">", "≤"), limit)
+		return dist > limit
 	})
 
 	reg.Condition("was_attacked", func(ctx *bt.Ctx) bool {
@@ -245,9 +245,9 @@ func (sys *System) register() {
 			ctx.Explain("没被攻击过")
 			return false
 		}
-		ago, lim := ctx.Now-agent.Entity.LastHitAt, ctx.Node.Num("Seconds", 3)
-		ctx.Explain("%.1fs 前受击 %s %.0fs", ago, cmp(ago <= lim, "≤", ">"), lim)
-		return ago <= lim
+		ago, limit := ctx.Now-agent.Entity.LastHitAt, ctx.Node.Num("Seconds", 3)
+		ctx.Explain("%.1fs 前受击 %s %.0fs", ago, cmp(ago <= limit, "≤", ">"), limit)
+		return ago <= limit
 	})
 
 	reg.Service("update_target", func(ctx *bt.Ctx) {
@@ -260,11 +260,11 @@ func (sys *System) register() {
 			return
 		}
 		entity.Target = 0
-		if atk := sys.state.Ents.Get(entity.LastAttacker); atk.Alive() &&
-			sys.state.Hostile(entity, atk) &&
+		if attacker := sys.state.Ents.Get(entity.LastAttacker); attacker.Alive() &&
+			sys.state.Hostile(entity, attacker) &&
 			ctx.Now-entity.LastHitAt <= attackerWindow {
-			entity.Target = atk.ID
-			ctx.Explain("改打攻击者 %s", who(atk))
+			entity.Target = attacker.ID
+			ctx.Explain("改打攻击者 %s", who(attacker))
 			return
 		}
 		if target := sys.combat.NearestHostile(entity, radius); target != nil {

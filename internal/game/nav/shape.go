@@ -107,22 +107,12 @@ func (shape Shape) bounds(pad float64) (Vec, Vec) {
 		return Vec{shape.A.X - pad, shape.A.Y - pad}, Vec{shape.B.X + pad, shape.B.Y + pad}
 	case Capsule:
 		radius := shape.Radius + pad
-		return Vec{
-				math.Min(shape.A.X, shape.B.X) - radius,
-				math.Min(shape.A.Y, shape.B.Y) - radius,
-			}, Vec{
-				math.Max(shape.A.X, shape.B.X) + radius,
-				math.Max(shape.A.Y, shape.B.Y) + radius,
-			}
+		minCorner := Vec{math.Min(shape.A.X, shape.B.X) - radius, math.Min(shape.A.Y, shape.B.Y) - radius}
+		maxCorner := Vec{math.Max(shape.A.X, shape.B.X) + radius, math.Max(shape.A.Y, shape.B.Y) + radius}
+		return minCorner, maxCorner
 	default:
 		radius := shape.Radius + pad
-		return Vec{
-				shape.A.X - radius,
-				shape.A.Y - radius,
-			}, Vec{
-				shape.A.X + radius,
-				shape.A.Y + radius,
-			}
+		return Vec{shape.A.X - radius, shape.A.Y - radius}, Vec{shape.A.X + radius, shape.A.Y + radius}
 	}
 }
 

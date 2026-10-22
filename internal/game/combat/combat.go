@@ -32,8 +32,8 @@ type System struct {
 }
 
 // New 创建战斗系统。
-func New(state *core.State, grid *aoi.Grid, sys *attr.System) *System {
-	return &System{state: state, grid: grid, attr: sys}
+func New(state *core.State, grid *aoi.Grid, attrSys *attr.System) *System {
+	return &System{state: state, grid: grid, attr: attrSys}
 }
 
 // Tick 清除已过期的 Buff。
@@ -45,7 +45,7 @@ func (sys *System) Tick() {
 	})
 }
 
-// UpdateBuffs 清除已过期的 Buff；若有 Buff 被移除，则重新计算 e。
+// UpdateBuffs 清除已过期的 Buff；若有 Buff 被移除，则重新计算 entity。
 func (sys *System) UpdateBuffs(entity *core.Entity) {
 	now := sys.state.Now()
 	if filterBuffs(entity, func(buff *core.Buff) bool { return buff.Until > now }) {
@@ -67,7 +67,7 @@ func filterBuffs(entity *core.Entity, keep func(*core.Buff) bool) bool {
 	return removed
 }
 
-// NearestHostile 返回 r 范围内与 e 敌对的、距离最近的存活实体。
+// NearestHostile 返回 radius 范围内与 entity 敌对的、距离最近的存活实体。
 func (sys *System) NearestHostile(entity *core.Entity, radius float64) *core.Entity {
 	return sys.nearest(entity, radius, func(other *core.Entity) bool { return true })
 }
@@ -100,7 +100,7 @@ func (sys *System) nearest(
 	return best
 }
 
-// CalcDamage 返回 src 使用技能 sk 对 dst 造成的伤害，以及是否暴击。
+// CalcDamage 返回 src 使用技能 skill 对 dst 造成的伤害，以及是否暴击。
 // 物理技能以 Atk 对抗 Def，法术技能以 MAtk 对抗 MDef。
 func (sys *System) CalcDamage(src, dst *core.Entity, skill *config.Skill) (float64, bool) {
 	atk, def := src.Attr.Atk, dst.Attr.Def
@@ -117,7 +117,7 @@ func (sys *System) CalcDamage(src, dst *core.Entity, skill *config.Skill) (float
 	return math.Max(1, math.Round(dmg)), crit
 }
 
-// Cast 让 e 使用技能 sk。targetID 用于 kind 为 "target" 的技能。技能无法施放时，
+// Cast 让 entity 使用技能 skill。targetID 用于 kind 为 "target" 的技能。技能无法施放时，
 // 返回面向用户的错误。
 func (sys *System) Cast(entity *core.Entity, skill *config.Skill, targetID int) error {
 	now := sys.state.Now()
@@ -240,7 +240,7 @@ func (sys *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, sk
 	}
 }
 
-// absorb 用 e 身上的护盾吸收至多 dmg 点伤害，返回吸收了多少；吸收完的护盾 Buff 被移除。
+// absorb 用 entity 身上的护盾吸收至多 dmg 点伤害，返回吸收了多少；吸收完的护盾 Buff 被移除。
 func (sys *System) absorb(entity *core.Entity, dmg float64) float64 {
 	total := 0.0
 	for _, buff := range entity.Buffs {
@@ -264,7 +264,7 @@ func (sys *System) absorb(entity *core.Entity, dmg float64) float64 {
 	return total
 }
 
-// Kill 将 e 标记为死亡，安排其重生，并奖励击杀者。
+// Kill 将 entity 标记为死亡，安排其重生，并奖励击杀者。
 func (sys *System) Kill(entity, killer *core.Entity) {
 	if entity.Dead {
 		return
@@ -289,7 +289,7 @@ func (sys *System) Kill(entity, killer *core.Entity) {
 	// 尸体保留在网格中，使观察者在其重生前仍能看到它。
 }
 
-// castEvent 描述 e 对 dst 使用技能 sk 的事件（aoe 技能的 dst 为 nil）。
+// castEvent 描述 entity 对 dst 使用技能 skill 的事件（aoe 技能的 dst 为 nil）。
 func castEvent(entity, dst *core.Entity, skill *config.Skill) *core.Event {
 	event := &core.Event{
 		Kind:  pb.EventKind_CAST.Enum(),

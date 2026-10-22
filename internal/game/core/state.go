@@ -72,7 +72,7 @@ func (entities *Entities) New() *Entity {
 	}
 }
 
-// Add 将 e 放入表中。
+// Add 将 entity 放入表中。
 func (entities *Entities) Add(entity *Entity) {
 	if _, ok := entities.byID[entity.ID]; !ok {
 		i, _ := slices.BinarySearch(entities.ids, entity.ID)
@@ -82,7 +82,7 @@ func (entities *Entities) Add(entity *Entity) {
 	entities.nextID = max(entities.nextID, entity.ID)
 }
 
-// Remove 将 e 从表中移除。
+// Remove 将 entity 从表中移除。
 func (entities *Entities) Remove(entity *Entity) {
 	if _, ok := entities.byID[entity.ID]; !ok {
 		return
@@ -119,7 +119,7 @@ type Events struct {
 	list []PendingEvent
 }
 
-// Emit 将 ev 加入队列，位置为 e 所在位置。
+// Emit 将 event 加入队列，位置为 entity 所在位置。
 func (events *Events) Emit(entity *Entity, event *Event) {
 	events.list = append(events.list, PendingEvent{X: entity.X, Y: entity.Y, Event: event})
 }

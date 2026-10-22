@@ -23,7 +23,7 @@ type Map struct {
 // 的查找范围会按它向外扩展。
 const MaxRadius = 64.0
 
-// New 为 w×h 地图上的形状建立索引。
+// New 为 width×height 地图上的形状建立索引。
 func New(width, height float64, shapes []Shape) *Map {
 	navMap := &Map{W: width, H: height, shapes: shapes, grids: map[int]*Grid{}}
 	navMap.cols = int(math.Ceil(width / bucketSize))
@@ -55,19 +55,19 @@ func (navMap *Map) eachBucket(lo, hi Vec, fn func(int)) {
 	}
 }
 
-// near 返回可能与圆心为 p 的圆相接触的形状（半径最大为 MaxRadius）。
+// near 返回可能与圆心为 point 的圆相接触的形状（半径最大为 MaxRadius）。
 func (navMap *Map) near(point Vec) []int32 {
 	x := int(clamp(math.Floor(point.X/bucketSize), 0, float64(navMap.cols-1)))
 	y := int(clamp(math.Floor(point.Y/bucketSize), 0, float64(navMap.rows-1)))
 	return navMap.buckets[y*navMap.cols+x]
 }
 
-// InBounds 让半径为 r 的圆留在地图内。
+// InBounds 让半径为 radius 的圆留在地图内。
 func (navMap *Map) InBounds(point Vec, radius float64) Vec {
 	return Vec{clamp(point.X, radius, navMap.W-radius), clamp(point.Y, radius, navMap.H-radius)}
 }
 
-// Free 报告半径为 r 的圆能否放在 p 处。
+// Free 报告半径为 radius 的圆能否放在 point 处。
 func (navMap *Map) Free(point Vec, radius float64) bool {
 	if point.X < radius || point.Y < radius || point.X > navMap.W-radius ||
 		point.Y > navMap.H-radius {
@@ -81,7 +81,7 @@ func (navMap *Map) Free(point Vec, radius float64) bool {
 	return true
 }
 
-// Resolve 把圆心为 p、半径为 r 的圆推出所有障碍物，并让它回到
+// Resolve 把圆心为 point、半径为 radius 的圆推出所有障碍物，并让它回到
 // 地图内。沿接触法线推出，
 // 移动体才能沿墙滑动，而不是直接停住。
 func (navMap *Map) Resolve(point Vec, radius float64) Vec {
@@ -101,7 +101,7 @@ func (navMap *Map) Resolve(point Vec, radius float64) Vec {
 	return point
 }
 
-// Clear 报告半径为 r 的圆能否沿直线从 a 走到 b
+// Clear 报告半径为 radius 的圆能否沿直线从 from 走到 to
 // 而不碰到任何障碍物。
 func (navMap *Map) Clear(from, to Vec, radius float64) bool {
 	dist := from.Dist(to)
@@ -115,8 +115,8 @@ func (navMap *Map) Clear(from, to Vec, radius float64) bool {
 	return true
 }
 
-// NearestFree 返回半径为 r 的圆在离 p 最近的空闲位置
-// （若 p 本身空闲则返回 p），在路径网格上向外搜索。
+// NearestFree 返回半径为 radius 的圆在离 point 最近的空闲位置
+// （若 point 本身空闲则返回 point），在路径网格上向外搜索。
 func (navMap *Map) NearestFree(point Vec, radius float64) Vec {
 	point = navMap.InBounds(point, radius)
 	if navMap.Free(point, radius) {
@@ -129,9 +129,9 @@ func (navMap *Map) NearestFree(point Vec, radius float64) Vec {
 	return point
 }
 
-// FindPath 返回半径为 r 的圆从 a 到 b 的路径点（不含 a）。
-// 若 b 不可达，路径终止于离它最近的可达位置。
-// 当 a 与 b 是同一位置时返回 nil。
+// FindPath 返回半径为 radius 的圆从 from 到 to 的路径点（不含 from）。
+// 若 to 不可达，路径终止于离它最近的可达位置。
+// 当 from 与 to 是同一位置时返回 nil。
 func (navMap *Map) FindPath(from, to Vec, radius float64) []Vec {
 	if from.Dist(to) < 0.5 {
 		return nil
@@ -182,7 +182,7 @@ func (navMap *Map) smooth(from Vec, pts []Vec, radius float64) []Vec {
 	return out
 }
 
-// grid 返回半径为 r 的移动体所用的路径网格，首次使用时构建。
+// grid 返回半径为 radius 的移动体所用的路径网格，首次使用时构建。
 // 半径向上取整到 4 的倍数，使相近的移动体共用同一网格。
 func (navMap *Map) grid(radius float64) *Grid {
 	class := int(math.Ceil(radius/4)) * 4
