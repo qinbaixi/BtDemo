@@ -34,6 +34,51 @@ export function gradeColor(r: number, g: number, b: number): [number, number, nu
   return [clamp01(r), clamp01(g), clamp01(b)];
 }
 
+// Grade 是一组调色参数：饱和度、对比度（S 曲线混合比例）、暗部和亮部各加多少 RGB、整体亮度倍数。
+export interface Grade {
+  sat: number;
+  contrast: number;
+  shadow: [number, number, number];
+  light: [number, number, number];
+  exposure: number;
+}
+
+// makeGrade 按参数生成调色函数（和 gradeColor 同样的做法）。
+export function makeGrade(grade: Grade): typeof gradeColor {
+  return (r, g, b) => {
+    r *= grade.exposure;
+    g *= grade.exposure;
+    b *= grade.exposure;
+    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    r = lum + (r - lum) * grade.sat;
+    g = lum + (g - lum) * grade.sat;
+    b = lum + (b - lum) * grade.sat;
+    r = r + (smooth(clamp01(r)) - r) * grade.contrast;
+    g = g + (smooth(clamp01(g)) - g) * grade.contrast;
+    b = b + (smooth(clamp01(b)) - b) * grade.contrast;
+    const shadow = Math.pow(1 - clamp01(lum), 3);
+    const light = Math.pow(clamp01(lum), 2);
+    r += shadow * grade.shadow[0] + light * grade.light[0];
+    g += shadow * grade.shadow[1] + light * grade.light[1];
+    b += shadow * grade.shadow[2] + light * grade.light[2];
+    return [clamp01(r), clamp01(g), clamp01(b)];
+  };
+}
+
+// 各区域的调色：走到哪个区域附近，画面就渐渐换成那里的色调（world.ts 按距离混合两张）。
+//   village   村庄：暖金色的午后
+//   meadow    极乐草地：明亮、偏青绿的金光
+//   forest    柏树林：阴凉的墨绿
+//   graveyard 墓地：冷青、去饱和、暗部偏紫
+//   camp      塔尔塔罗斯营地：灼热的橙红、高对比
+export const ZONE_GRADES: Record<string, Grade> = {
+  village: { sat: 1.12, contrast: 0.32, shadow: [0.03, 0.01, 0.04], light: [0.07, 0.04, -0.03], exposure: 1.04 },
+  meadow: { sat: 1.18, contrast: 0.28, shadow: [0.0, 0.025, 0.04], light: [0.05, 0.05, -0.02], exposure: 1.06 },
+  forest: { sat: 1.05, contrast: 0.35, shadow: [0.0, 0.03, 0.03], light: [0.01, 0.04, 0.0], exposure: 0.98 },
+  graveyard: { sat: 0.9, contrast: 0.4, shadow: [0.03, 0.0, 0.07], light: [-0.02, 0.03, 0.06], exposure: 0.97 },
+  camp: { sat: 1.15, contrast: 0.4, shadow: [0.05, 0.0, 0.02], light: [0.06, 0.02, -0.04], exposure: 0.98 },
+};
+
 // makeLut 把调色函数烘焙成 LUT 贴图。
 export function makeLut(fn: typeof gradeColor = gradeColor): TextureSource {
   const N = LUT_SIZE;

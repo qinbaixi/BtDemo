@@ -66,4 +66,5 @@ export const FEEL = {
   squash: 0.2,            // 受击时身体压扁的幅度
   dissolveDelayMs: 1300,  // 倒地后多久开始溶解（只有怪物和 NPC）
   dissolveMs: 1000,       // 溶解持续时间
+  distort: 1.5,           // 冲击波和热浪扭曲强度倍数，0 关闭
 };

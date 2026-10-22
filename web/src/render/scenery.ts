@@ -143,6 +143,15 @@ export function createScenery(mapW: number, mapH: number, map: MapData | null, s
 
   return {
     props,
+    zones: ZONES,       // 区域种类 -> 区域中心，后期处理按离哪个区域近切换调色
+
+    // heat 登记镜头里的热源（营火、火盆），后期处理在它们上方画热浪扭曲。
+    // (x, y) 是火焰底部，radius 是热浪的宽度（向上延伸约两倍），strength 是扭曲强度（像素）。
+    heat(add, view) {
+      const inView = (x, y, r) => x + r > view.x && x - r < view.x + view.w && y + r * 3 > view.y && y - r < view.y + view.h;
+      for (const c of campfires) if (inView(c.x, c.y, 70)) add(c.x, c.y - 24, 60, 3);
+      for (const { x, y } of braziers) if (inView(x, y, 36)) add(x, y - 52, 34, 2.2);
+    },
 
     // visible returns the props intersecting the view, for depth sorting.
     visible(view) {

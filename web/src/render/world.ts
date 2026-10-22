@@ -8,17 +8,17 @@
 //     fx         技能特效和环境粒子（暂时用 Canvas 2D 画，整屏一张画布；不开后期处理时改画在 overlay 上）
 //   overlay      另一块 2D 画布：头顶文字、调试线条、暗角（不参与泛光和调色，保持清晰）
 
-import { Application, Container, Graphics } from 'pixi.js';
+import { Application, Container, Graphics, type TextureSource } from 'pixi.js';
 import { ATTACK_MS, DEATH_MS, FEEL, HIT_MS, MODEL_SCALE, RIM } from '../game/config';
 import { clamp, hypot } from '../game/math';
 import { posOf, state, type ClientEntity, type Point, type Scenery } from '../game/state';
 import { art } from './art';
-import { makeLut } from './grade';
+import { makeGrade, makeLut, ZONE_GRADES } from './grade';
 import { createLighting, type Lighting } from './lighting';
 import { drawOverlay, initOverlay, resizeOverlay } from './overlay';
 import { ActorView, type Pose } from './pixi/actorView';
 import { CanvasSprite } from './pixi/canvasSprite';
-import { PostFilter } from './pixi/postFilter';
+import { PostFilter, type Distort } from './pixi/postFilter';
 import { SceneView } from './pixi/sceneView';
 import { SpriteCtx } from './pixi/spriteCtx';
 import { RibbonPool } from './pixi/trail';
@@ -44,6 +44,9 @@ let sceneView: SceneView | null = null;
 let sceneFor: Scenery | null = null;
 let sceneRes = 0;               // 场景按这个像素密度画的，变了要重建
 const actors = new Map<number, ActorView>();
+let baseLut: TextureSource;
+const zoneLuts = new Map<string, TextureSource>();     // 区域种类 -> LUT，第一次用到时生成
+const zoneWeights = new Map<string, number>();         // 平滑过的各区域权重
 
 // 后期处理参数：泛光强度、发光阈值（亮度 0..1）、调色强度
 const POST = { bloom: 0.8, threshold: 0.68, grade: 1 };
@@ -95,7 +98,8 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
   scene.filterArea = app.screen;   // 后期处理整屏做，不用每帧算整个世界的包围盒
   app.stage.addChild(scene);
   lighting = createLighting(app.renderer, darkness, glowWorld);
-  post = new PostFilter(art.lut?.source ?? makeLut(), POST);   // 美术给了 LUT 就用美术的
+  baseLut = art.lut?.source ?? makeLut();   // 美术给了 LUT 就用美术的，各区域都用它
+  post = new PostFilter(baseLut, POST);
 
   initOverlay(overlay);
   resize();
@@ -168,6 +172,7 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
   // 开后期处理时特效画进 Pixi 才能发光；不开时直接画在叠加层上，省掉每帧整屏上传纹理
   const usePost = state.hq && state.post;
   if (usePost !== (scene.filters?.[0] === post)) scene.filters = usePost ? [post] : null;
+  if (usePost) updatePost(now, dt, mp, shake, zoom);
   drawOverFx(now, dt);
   app.renderer.render(app.stage);
   drawOverlay(now, shake, zoom, mp, ents, debugOpen);
@@ -341,6 +346,61 @@ function drawOverFx(now: number, dt: number): void {
   fx.particles(sparkFx, now, dt);
   if (state.scenery) state.scenery.drawAmbient(sparkFx, state.cam, now);
   sparkFx.end();
+}
+
+// updatePost 每帧更新后期处理：区域调色的混合比例，冲击波和热浪的屏幕位置。
+function updatePost(now: number, dt: number, mp: Point | null, shake: Point, zoom: number): void {
+  const view = state.cam;
+  // 世界坐标 → 屏幕坐标（和 zoomer 的变换一致）
+  const toScreen = (x: number, y: number) => ({
+    x: (view.w / 2) * (1 - zoom) + (x - view.x + shake.x) * zoom,
+    y: (view.h / 2) * (1 - zoom) + (y - view.y + shake.y) * zoom,
+  });
+  const waves: Distort[] = [];
+  state.fx.waves((x: number, y: number, radius: number, strength: number) => {
+    const p = toScreen(x, y);
+    waves.push({ x: p.x, y: p.y, radius: radius * zoom, strength: strength * FEEL.distort });
+  }, now);
+  const heat: Distort[] = [];
+  state.scenery?.heat((x: number, y: number, radius: number, strength: number) => {
+    const p = toScreen(x, y);
+    heat.push({ x: p.x, y: p.y, radius: radius * zoom, strength: strength * FEEL.distort });
+  }, view);
+  post.setDistortion(waves, heat, now / 1000);
+
+  // 区域调色：离各区域中心越近权重越大，权重慢慢跟过去；取最大的两个混合
+  const zones = state.scenery?.zones;
+  if (!zones || !mp || art.lut) {
+    post.setLuts(baseLut, baseLut, 0);
+    return;
+  }
+  const ease = 1 - Math.exp(-Math.min(dt, 100) / 700);
+  for (const kind of Object.keys(ZONE_GRADES)) {
+    let target = 0;
+    for (const c of zones[kind] || []) {
+      const d = Math.hypot(c.x - mp.x, c.y - mp.y);
+      target += Math.exp(-(d * d) / (2 * 420 * 420));
+    }
+    const old = zoneWeights.get(kind) ?? target;
+    zoneWeights.set(kind, old + (target - old) * ease);
+  }
+  // 默认调色也算一个固定权重的“区域”：离所有区域都远时用它。取权重最大的两个混合
+  const ranked: [string, number][] = [['', 0.12], ...zoneWeights.entries()];
+  ranked.sort((a, b) => b[1] - a[1]);
+  const [firstKind, firstWeight] = ranked[0];
+  const [secondKind, secondWeight] = ranked[1];
+  post.setLuts(zoneLut(firstKind), zoneLut(secondKind), secondWeight / Math.max(1e-6, firstWeight + secondWeight));
+}
+
+// zoneLut 返回区域的 LUT（空字符串是默认调色）。
+function zoneLut(kind: string): TextureSource {
+  if (!kind) return baseLut;
+  let lut = zoneLuts.get(kind);
+  if (!lut) {
+    lut = makeLut(makeGrade(ZONE_GRADES[kind]));
+    zoneLuts.set(kind, lut);
+  }
+  return lut;
 }
 
 // updateLights 收集光源：自己身上的光、其他玩家、场景里的火、正在播放的特效。

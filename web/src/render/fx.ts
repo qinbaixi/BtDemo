@@ -295,6 +295,37 @@ export class FX {
     this.parts.push(p);
   }
 
+  // waves 登记正在扩散的冲击波（后期处理把画面往外推一圈，像空气被震开）。
+  // add(x, y, radius, strength)：世界坐标的中心、当前半径（像素）、推开的距离（像素）。
+  waves(add, now) {
+    for (const f of this.effects) {
+      const t = (now - f.born) / f.life;
+      if (t < 0 || t >= 1) continue;
+      switch (f.kind) {
+        case 'whirl': {
+          const k = clamp01(t / 0.7);
+          if (k < 1) add(f.cx, f.cy - 10, f.radius * (0.25 + 1.1 * easeOut(k)), 9 * (1 - k));
+          break;
+        }
+        case 'flare':
+          if (f.crit) { const k = clamp01(t / 0.9); add(f.x, f.y, 14 + 90 * easeOut(k), 7 * (1 - k)); }
+          break;
+        case 'shieldForm': {
+          const p = this.pos(f.src, { x: f.sx, y: f.sy });
+          const k = clamp01((t - 0.5) / 0.5);
+          if (k > 0) add(p.x, p.y - 20, 20 + 90 * easeOut(k), 6 * (1 - k));
+          break;
+        }
+        case 'pillar': {
+          const p = this.pos(f.anchor, f);
+          const k = clamp01(t / 0.6);
+          add(p.x, p.y - 10, 20 + 120 * easeOut(k), 6 * (1 - k));
+          break;
+        }
+      }
+    }
+  }
+
   // lights reports the light that active effects cast on their surroundings.
   lights(add, now) {
     for (const f of this.effects) {

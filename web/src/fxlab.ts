@@ -164,6 +164,7 @@ const SLIDERS: [string, keyof typeof FEEL, number, number, number][] = [
   ['受击形变', 'squash', 0, 0.5, 0.02],
   ['溶解延迟 ms', 'dissolveDelayMs', 0, 4000, 100],
   ['溶解时长 ms', 'dissolveMs', 200, 3000, 100],
+  ['扭曲倍数', 'distort', 0, 5, 0.1],
 ];
 
 function buildPanel(): void {
