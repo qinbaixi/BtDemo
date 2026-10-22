@@ -2,7 +2,7 @@
 //
 // 显示层次（从下到上）：
 //   scene        整个画面，高画质时加后期处理（扭曲 + 泛光 + 区域调色，见 pixi/postFilter.ts）
-//     world      跟随镜头：地表 → 地面标记（AOI、射程、目标圈）→ 地面特效 → 角色和物件（按脚底 y 排序）
+//     world      跟随镜头：地表 → 回血区（render/zones.ts）→ 地面标记（AOI、射程、目标圈）→ 地面特效 → 角色和物件（按脚底 y 排序）
 //     darkness   光照的暗色层（屏幕空间）
 //     glow       光源的彩色叠加（跟随镜头）
 //     fx         技能特效和环境粒子：刀光和尾迹是 GPU 丝带（pixi/trail.ts），粒子和光晕是 GPU 精灵
@@ -10,7 +10,7 @@
 //   overlay      另一块 2D 画布：头顶文字、调试线条、暗角（不参与泛光和调色，保持清晰）
 
 import { Application, Container, Graphics, RenderLayer, type TextureSource } from 'pixi.js';
-import { DEATH_MS, FEEL, HIT_MS, LOOK_FROST, LOOK_HOLY, MODEL_SCALE, RIM } from '../game/config';
+import { DEATH_MS, FEEL, HIT_MS, LOOK_FROST, LOOK_HOLY, MODEL_SCALE, RIM, ZONE_ASPECT } from '../game/config';
 import { clamp, hypot } from '../game/math';
 import { headY, posOf, state, type ClientEntity, type Point, type Quality, type Scenery } from '../game/state';
 import { art } from './art';
@@ -24,6 +24,7 @@ import { PostFilter, type Distort } from './pixi/postFilter';
 import { SceneView, type Mover } from './pixi/sceneView';
 import { SpriteCtx } from './pixi/spriteCtx';
 import { RibbonPool } from './pixi/trail';
+import { pruneZones, ZoneLayer, zoneLights } from './zones';
 
 let app: Application;
 let scene: Container;          // 整个画面（后期处理加在这一层）
@@ -36,6 +37,7 @@ let shapeFx: CanvasSprite;      // 有形状的技能特效（刀光、弹道…
 let sparkFx: SpriteCtx;        // 粒子、光晕、环境粒子：GPU 精灵
 let trails: RibbonPool;        // 刀光、风刃、弹道尾迹：GPU 丝带
 let groundLayer: Container;
+let zoneLayer: ZoneLayer;      // 回血区：出生点泉水、技能法阵
 let marks: Graphics;           // 地面标记
 let targetRing: Container;     // 目标脚下的旋转圈
 let targetRingArcs: Graphics;
@@ -84,7 +86,9 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
   depth = new Container();
   depth.sortableChildren = true;
   xrayLayer = new RenderLayer();
-  world.addChild(groundLayer, marks, targetRing, underFx, depth);
+  const zoneContainer = new Container();
+  zoneLayer = new ZoneLayer(zoneContainer);
+  world.addChild(groundLayer, zoneContainer, marks, targetRing, underFx, depth);
 
   const darkness = new Container();
   glowWorld = new Container();
@@ -171,6 +175,9 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
   }
   const occluded = sceneView?.update(view, now, dt, mp, movers) ?? false;
 
+  state.zones = pruneZones(state.zones, now);
+  zoneLayer.update(state.zones, now, view, state.dpr);
+  zoneLayer.motes(state.fx, state.zones, now, dt, view);
   drawMarks(mp, now);
   drawUnderFx(now);
   // 先收集光源：角色要知道附近最亮的光在哪
@@ -323,8 +330,12 @@ function drawMarks(mp: Point | null, now: number): void {
 
   // 鼠标悬停技能按钮时，脚下显示射程
   const sk = mp && state.hoverSlot ? state.skillBySlot[state.hoverSlot] : null;
-  const R = sk ? (sk.kind === 'aoe' ? (sk.radius || sk.range || 0) : (sk.range || 0)) : 0;
-  if (sk && R > 0) {
+  const R = sk ? (sk.kind === 'aoe' || sk.kind === 'zone' ? (sk.radius || sk.range || 0) : (sk.range || 0)) : 0;
+  if (sk && R > 0 && sk.kind === 'zone') {
+    // 回血区：地上压扁的椭圆，和放下后的范围一样
+    g.ellipse(mp.x, mp.y, R, R * ZONE_ASPECT).fill({ color: 0xffffff, alpha: 0.05 });
+    g.ellipse(mp.x, mp.y, R, R * ZONE_ASPECT).stroke({ width: 2, color: sk.color || '#7dffb0', alpha: 0.85 });
+  } else if (sk && R > 0) {
     g.circle(mp.x, mp.y, R).fill({ color: 0xffffff, alpha: 0.05 });
     dashArc(g, mp.x, mp.y, R, 10, 6);
     g.stroke({ width: 2, color: sk.color || '#ffd166', alpha: 0.85 });
@@ -479,6 +490,7 @@ function updateLights(now: number, mp: Point | null, shake: Point): void {
     }
     if (state.scenery) state.scenery.lights(L.add, state.cam, now);
     state.fx.lights(L.add, now);
+    zoneLights(L.add, state.zones, now);
   }
   // 光照跟着世界走，屏幕震动也算进去
   const c = state.cam;

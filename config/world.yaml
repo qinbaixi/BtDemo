@@ -31,5 +31,10 @@ player:
   respawn: 3
   # 技能：第 1 个是固定的普攻（J / 左键），后面是默认选择；进游戏和死亡时可以从 skill_pool 里重新挑同样多个
   skills: [slash, fireball, whirlwind, heal, warcry, shield]
-  skill_pool: [fireball, whirlwind, heal, warcry, shield, haste, holy_guard, blink, enchant, axe, frost_nova]
+  skill_pool: [fireball, whirlwind, heal, warcry, shield, haste, holy_guard, blink, enchant, axe, frost_nova, healing_spring]
   block: { reduce: 0.8, speed: 0.5 }   # 按住右键格挡：受到的伤害减少 80%，移动速度减半，不能放技能
+
+# 常驻回血区：站在里面的友方（和 faction 互不敌对的阵营）每隔 interval 秒回复 最大生命 × heal
+#   look: 客户端画法 spring 泉水 | rune 法阵
+heal_zones:
+  - { name: 生命之泉, x: 520, y: 800, radius: 130, heal: 0.05, interval: 1, faction: player, look: spring, color: "#7dffc4" }

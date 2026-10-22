@@ -8,7 +8,7 @@ export interface SkillInfo {
   slot: number;
   id: string;
   name: string;
-  kind: 'target' | 'aoe' | 'self' | 'dash' | 'line' | string;
+  kind: 'target' | 'aoe' | 'self' | 'dash' | 'line' | 'zone' | string;
   range?: number;
   radius?: number;
   cooldown?: number;
@@ -79,6 +79,23 @@ export interface GameEvent {
   immune?: boolean;  // dmg：目标无敌，没受伤
   tx?: number;       // cast（闪现、飞斧）：终点；起点是 x、y
   ty?: number;
+  zone?: number;     // heal：站在这个回血区里回的血（Zone.id）
+}
+
+// ZoneInfo 是地上的一块回血区：出生点的常驻泉水，或技能放下的法阵。
+export interface ZoneInfo {
+  id: number;
+  x: number;
+  y: number;
+  radius: number;      // 横向半径；地面上画成椭圆，纵向是 radius × ZONE_ASPECT
+  name?: string;
+  color?: string;
+  look?: string;       // spring 泉水 | rune 法阵
+  owner?: number;      // 放下它的实体，0 表示地图自带
+  until?: number;      // 服务端时间（Sync.time），到这时消失；0 表示常驻
+  dur?: number;        // 一共持续多少秒（画倒计时）
+  interval?: number;   // 隔几秒回一次血
+  heal?: number;       // 每次回复最大生命的比例
 }
 
 export interface Attrs { str?: number; agi?: number; int?: number; vit?: number }
@@ -168,6 +185,7 @@ export interface SyncMsg {
   ev: GameEvent[];
   self: SelfInfo | null;
   ai: AiTrace | null;
+  zones: ZoneInfo[] | null;   // 回血区有变化时是整份新列表，没变化时是 null
 }
 export interface ToastMsg { t: 'msg'; text: string }
 export interface SkillBarMsg { t: 'skills'; skills: SkillInfo[] }

@@ -257,6 +257,19 @@ export class FX {
         this.effects.push({ ...base, kind: 'axe', x0, y0, x1, y1, life, hit: !!ev.dst, lift });
         return life;
       }
+      case 'zone': {
+        // 治愈之泉：手掌按到地上那一刻，一圈绿光贴着地面散开（法阵本身在 render/zones.ts）
+        const cx = ev.x ?? src.x;
+        const cy = ev.y ?? src.y;
+        for (let i = 0; i < 18; i++) {
+          const a = rand(0, TAU);
+          const sp = rand(0.14, 0.3);
+          this.spawn({ x: cx + Math.cos(a) * 22, y: cy + Math.sin(a) * 12, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6 - 0.02,
+            drag: 0.992, life: rand(380, 650), size: rand(1.8, 3), color: i % 3 ? color : '#eafff0', kind: i % 4 ? 'glow' : 'plus', born: now });
+        }
+        this.shake = Math.max(this.shake, 2.5);
+        return 0;
+      }
       case 'frost': {
         // 冰霜新星：地上一圈冰环往外扩，冰碴往外飞，飘几片雪
         const cx = ev.x ?? src.x;
@@ -282,6 +295,14 @@ export class FX {
           flip: Math.random() < 0.5 ? 1 : -1 });
         return heavy ? 120 : 90;
       }
+    }
+  }
+
+  // zoneHeal 是站在回血区里回了一次血：身上冒两三个往上飘的小十字。
+  zoneHeal(id, now) {
+    for (let i = 0; i < 3; i++) {
+      this.spawn({ anchor: id, ox: rand(-12, 12), oy: -rand(6, 26), vx: 0, vy: -rand(0.03, 0.05),
+        life: rand(600, 900), size: rand(2, 2.8), color: i ? '#7dffb0' : '#eafff0', kind: 'plus', born: now + i * 90 });
     }
   }
 

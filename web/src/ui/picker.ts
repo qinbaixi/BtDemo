@@ -12,7 +12,7 @@ const STORE_KEY = 'btdemo.loadout';
 
 // 技能类型在卡片上的叫法
 const KIND_NAMES: Record<string, string> = {
-  target: '单体', aoe: '范围', self: '自身', dash: '位移', line: '投掷',
+  target: '单体', aoe: '范围', self: '自身', dash: '位移', line: '投掷', zone: '法阵',
 };
 
 let send: (msg: ClientMessage) => void = () => {};

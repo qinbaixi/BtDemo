@@ -3,16 +3,19 @@
 #   kind:   target 单体（需要目标）| aoe 以自身为中心的范围伤害 | self 作用于自己（治疗 / 增益）
 #           | dash 朝瞄准方向位移 distance 像素（遇到障碍物停下）
 #           | line 朝瞄准方向扔出投掷物，命中直线上 range 内第一个敌人（被障碍物挡住就停）
+#           | zone 在脚下放一个回血区（见 zone），同一个人再放时旧的消失
 #   damage: physical 物理（攻击 vs 防御）| magic 法术（法强 vs 法抗）
 #   伤害 = (攻击 × ratio + base) × 防御减免 × 暴击 × 随机浮动
 #   heal:   治疗量 = 最大生命 × heal
-#   fx:     前端表现 melee | projectile | circle | heal | buff | shield
+#   fx:     前端表现 melee | projectile | circle | heal | buff | shield | zone …
 #   buff.shield_pct: 护盾，吸收 最大生命 × shield_pct 的伤害，吸收完或到时间消失
 #   buff.invulnerable: 持续期间不受任何伤害
 #   buff.bonus_magic: 武器附魔，物理技能每次命中额外造成 法强 × bonus_magic 的法术伤害
 #   buff.speed_pct 为负数时是减速
 #   buff.look: 客户端外观 haste 疾风 | holy 金光 | fire 火焰武器 | frost 冰冻
 #   debuff: 命中时加在目标身上的效果，格式同 buff
+#   zone:   kind 为 zone 时放下的回血区：radius 半径、heal 每次回复最大生命的比例、
+#           interval 隔几秒回一次（默认 1）、duration 持续秒数、look 画法（rune 法阵）
 skills:
   slash:      { name: 斩击,   kind: target, range: 70,  cooldown: 0.7, damage: physical, ratio: 1.0, base: 4,  fx: melee,      color: "#ffd166",
                 desc: 普攻，砍面前的敌人 }
@@ -44,6 +47,9 @@ skills:
   frost_nova: { name: 冰霜新星, kind: aoe,  radius: 120, cooldown: 12, damage: magic, ratio: 0.8, base: 6, fx: frost, color: "#8fd8ff",
                 desc: 冻伤身边的敌人，3 秒内减速 50%,
                 debuff: { name: 冰冻, duration: 3, speed_pct: -0.5, look: frost } }
+  healing_spring: { name: 治愈之泉, kind: zone, cooldown: 40, fx: zone, color: "#7dffb0",
+                desc: 在脚下放一个回血法阵，60 秒内站在里面每秒回复 3% 生命,
+                zone: { name: 治愈之泉, radius: 110, heal: 0.03, interval: 1, duration: 60, look: rune, color: "#7dffb0" } }
 
   bite:       { name: 撕咬,   kind: target, range: 60,  cooldown: 1.2, damage: physical, ratio: 1.0, base: 2,  fx: melee, color: "#b8f28b" }
   heavy_bite: { name: 猛扑,   kind: target, range: 60,  cooldown: 5,   damage: physical, ratio: 1.5, base: 3,  fx: melee, color: "#ffef5c" }

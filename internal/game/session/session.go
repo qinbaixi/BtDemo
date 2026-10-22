@@ -27,6 +27,8 @@ type Session struct {
 	Watch   int         // 本会话想要查看其行为树跟踪的实体
 	defSent string      // 已经给本会话发过结构的行为树名；换了观察对象或树时重发
 	visible map[int]bool
+	// zonesSent 是已经发给本会话的回血区版本（core.Zones.Version）
+	zonesSent int
 }
 
 // Visible 报告玩家当前是否看到实体 id（供测试使用）。
@@ -70,9 +72,10 @@ func New(
 // Join 为一个连接创建新角色，并向其发送欢迎消息。
 func (sys *System) Join() *Session {
 	session := &Session{
-		Player:  sys.spawn.Player(),
-		Out:     make(chan []byte, 64),
-		visible: map[int]bool{},
+		Player:    sys.spawn.Player(),
+		Out:       make(chan []byte, 64),
+		visible:   map[int]bool{},
+		zonesSent: -1,
 	}
 	sys.sessions[session] = true
 	cfg := sys.state.Cfg.World
@@ -268,6 +271,10 @@ func (sys *System) Flush() {
 			if sys.grid.Sees(cell, cells[i]) {
 				sync.Ev = append(sync.Ev, pending.Event)
 			}
+		}
+		if version := sys.state.Zones.Version; session.zonesSent != version {
+			sync.Zones, sync.ZonesSet = zoneInfos(sys.state.Zones.List()), proto.Bool(true)
+			session.zonesSent = version
 		}
 		if session.Watch != 0 && now[session.Watch] != nil {
 			sync.Ai = sys.aiSys.Trace(now[session.Watch], session.defSent)

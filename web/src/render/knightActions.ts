@@ -249,6 +249,19 @@ const SPECS: Record<string, ActionSpec> = {
       { t: 1, near: IDLE_NEAR, far: IDLE_FAR },
     ],
   },
+  // 治愈之泉：盾背到背上，空手托向天空接住一团绿光（踮脚、微微后仰），
+  // 再单膝跪下把手掌按进地里，法阵从掌心铺开；剑垂在身侧
+  zone: {
+    ms: 820, release: 0.56, swap: true, slung: true,
+    keys: [
+      { t: 0, near: IDLE_NEAR, far: IDLE_FAR },
+      { t: 0.2, near: [10, -13], far: [-3, 9], blade: -0.35, lean: -0.14, feet: [[-3, 0], [3, 0]], lift: 1.5, ease: 'out' },
+      { t: 0.4, near: [10.5, -13.5], far: [-3, 9], blade: -0.35, lean: -0.16, feet: [[-3, 0], [3, 0]], lift: 2, jitter: 0.25 },
+      { t: 0.56, near: [13.5, 12], far: [-5, 7], blade: -0.8, lean: 0.5, feet: [[-10, 0], [8, 0]], drop: 10, ease: 'in' },
+      { t: 0.84, near: [13.5, 12.3], far: [-5, 7], blade: -0.8, lean: 0.47, feet: [[-10, 0], [8, 0]], drop: 10 },
+      { t: 1, near: IDLE_NEAR, far: IDLE_FAR },
+    ],
+  },
 };
 
 // compile 把关键帧的手位置换成角度，补上默认值，并让相邻帧的角度连续。

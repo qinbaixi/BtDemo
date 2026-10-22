@@ -111,6 +111,7 @@ export function createProtocol(): Protocol {
           t: 'sync', time: s.time, ents: s.ents || [],
           ev: (s.ev || []).map(event), self: s.self ? self(s.self) : null,
           ai: s.ai ? aiTrace(s.ai) : null,
+          zones: s.zonesSet ? s.zones || [] : null,
         };
       }
       case 'toast': return { t: 'msg', text: m.toast.text };

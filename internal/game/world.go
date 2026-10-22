@@ -9,6 +9,7 @@
 //	combat   技能、伤害、增益、死亡
 //	ai       来自 BtTree 的行为树与调试跟踪
 //	spawn    创建怪物、NPC 和玩家，复活
+//	zone     地上的回血区：出生点泉水、技能放的法阵
 //	session  已连接的玩家：输入、AOI 同步、协议
 package game
 
@@ -26,6 +27,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
 	"github.com/qinbaixi/BtDemo/internal/game/session"
 	"github.com/qinbaixi/BtDemo/internal/game/spawn"
+	"github.com/qinbaixi/BtDemo/internal/game/zone"
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
@@ -43,6 +45,7 @@ type World struct {
 	Combat   *combat.System
 	AI       *ai.System
 	Spawn    *spawn.System
+	Zone     *zone.System
 	Sessions *session.System
 
 	inbox chan func()
@@ -62,6 +65,7 @@ func newWorld(cfg *config.Config, seed int64, obstacles []nav.Shape) (*World, er
 	world.Nav = nav.New(cfg.World.Map.Width, cfg.World.Map.Height, obstacles)
 	world.Move = move.New(world.State, world.Grid, world.Nav)
 	world.Combat = combat.New(world.State, world.Grid, world.Attr, world.Nav)
+	world.Zone = zone.New(world.State, world.Grid)
 	var err error
 	if world.AI, err = ai.New(world.State, world.Combat, world.Move); err != nil {
 		return nil, err
@@ -106,6 +110,7 @@ func (world *World) Step() {
 	world.State.Clock.Advance()
 	world.Spawn.Tick()
 	world.Combat.Tick()
+	world.Zone.Tick()
 	world.Move.Tick()
 	world.AI.Tick(world.Sessions.Watched())
 	cfg := world.State.Cfg.World

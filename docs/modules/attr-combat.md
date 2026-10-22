@@ -53,6 +53,8 @@ warcry:   { kind: self,   cooldown: 15, buff: { duration: 6, atk_pct: 0.4, speed
 - `dash`：闪现，朝瞄准方向位移 `distance` 像素，撞墙就停在墙前，不伤害任何人。
 - `line`：投掷物（飞斧），朝瞄准方向飞 `range` 像素，打中直线上第一个敌人，被墙挡住就停在墙前。伤害按 `damage`、`ratio`、`base` 算。
 
+- `zone`：在自己脚下放一块回血区（`zone` 字段），同一个人再放时旧的消失；回血由 zone 系统做，见 [zone](zone.md)。
+
 `dash` 和 `line` 需要方向，玩家的方向从 `Cast` 消息的 `dx`、`dy` 来；没有方向就返回 `ErrNoAim`。
 
 `debuff` 是命中时加在目标身上的 Buff（比如冰霜新星的减速），格式和 `buff` 一样，见下面的 Buff 字段。

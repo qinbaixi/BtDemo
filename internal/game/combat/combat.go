@@ -244,6 +244,21 @@ func (sys *System) CastAimed(
 		if skill.Buff != nil {
 			sys.addBuff(entity, skill.Buff)
 		}
+	case "zone":
+		// 在脚下放回血区，同一个人再放一次时旧的消失
+		event := castEvent(entity, nil, skill)
+		event.Radius = core.F32(skill.Zone.Radius)
+		event.X, event.Y = core.F32(core.Round1(entity.X)), core.F32(core.Round1(entity.Y))
+		sys.state.Events.Emit(entity, event)
+		sys.state.Zones.Replace(&core.Zone{
+			Cfg:       skill.Zone,
+			X:         entity.X,
+			Y:         entity.Y,
+			Faction:   entity.Faction,
+			Owner:     entity.ID,
+			Until:     now + skill.Zone.Duration,
+			NextPulse: now + skill.Zone.Interval,
+		})
 	default:
 		return ErrBadSkill
 	}

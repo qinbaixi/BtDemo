@@ -2,9 +2,10 @@
 // 击杀、技能等效果，拖滑条实时调打击感参数（config.ts 的 FEEL）和后期处理。
 // 改特效时用它看效果、出预览，不用每次进游戏找怪打。
 
-import { FEEL, LOOK_FIRE, LOOK_FROST, LOOK_HASTE, LOOK_HOLY } from './game/config';
+import { FEEL, LOOK_FIRE, LOOK_FROST, LOOK_HASTE, LOOK_HOLY, ZONE_ASPECT } from './game/config';
 import { onEvent } from './game/events';
-import { makeEntity, posOf, state, type ClientEntity } from './game/state';
+import { makeEntity, posOf, state, type ClientEntity, type ClientZone } from './game/state';
+import { ACTIONS as KNIGHT_ACTIONS } from './render/knightActions';
 import { loadMap } from './game/map';
 import type { GameEvent } from './net/types';
 import { createScenery } from './render/scenery';
@@ -86,11 +87,35 @@ function tick(): void {
     me.facing = -Math.sin(a) < 0 ? Math.PI : 0;
   }
   if (auto && tickN % 5 === 0) hit(Math.random() < 0.25);
+  if (tickN % 10 === 0) zoneHeals(now);
   for (const e of state.ents.values()) {
     if (e.dead && e.deadAt >= 0 && now - e.deadAt > 5000) revive(e);
     let looks = 0;
     for (const [look, until] of lookUntil.get(e.id) ?? []) if (until > now) looks |= look;
     e.looks = e.dead ? 0 : looks;
+  }
+}
+
+// 假回血区：和服务端一样，站在椭圆里、没满血的每秒回一次
+let nextZoneId = 1;
+
+function addZone(zone: Omit<ClientZone, 'id' | 'goneAt' | 'seed' | 'pulseFrom'>): void {
+  // 同一个人只能有一个法阵：旧的淡出
+  for (const old of state.zones) if (zone.owner && old.owner === zone.owner && !old.goneAt) old.goneAt = performance.now();
+  state.zones.push({ ...zone, id: nextZoneId++, goneAt: 0, pulseFrom: zone.born, seed: Math.random() * 100 });
+}
+
+function zoneHeals(now: number): void {
+  state.zones = state.zones.filter((zone) => (zone.goneAt ? now - zone.goneAt < 700 : !zone.endsAt || zone.endsAt > now));
+  for (const zone of state.zones) {
+    if (zone.goneAt || now < zone.born) continue;
+    for (const e of state.ents.values()) {
+      if (e.kind !== 'player' || e.dead || e.hp >= e.maxHp) continue;
+      if (Math.hypot(e.x - zone.x, (e.y - zone.y) / ZONE_ASPECT) > zone.radius) continue;
+      const v = Math.min(e.maxHp - e.hp, Math.round(e.maxHp * (zone.heal || 0.03)));
+      e.hp += v;
+      emit({ k: 'heal', dst: e.id, v, zone: zone.id });
+    }
   }
 }
 
@@ -205,6 +230,23 @@ const ACTIONS: [string, () => void][] = [
       damage(e, 24);
       if (e.hp <= 0) kill(e); else addLook(e.id, LOOK_FROST, 3);
     }
+  }],
+  ['治愈之泉', () => {
+    const me = state.ents.get(ME)!;
+    const p = posOf(me, performance.now());
+    emit({ k: 'cast', src: ME, fx: 'zone', skill: 'healing_spring', name: '治愈之泉', color: '#7dffb0', radius: 110, x: p.x, y: p.y });
+    const now = performance.now();
+    addZone({ x: p.x, y: p.y, radius: 110, name: '治愈之泉', color: '#7dffb0', look: 'rune', owner: ME,
+      dur: 60, interval: 1, heal: 0.03, born: now + KNIGHT_ACTIONS.zone.lead, endsAt: now + KNIGHT_ACTIONS.zone.lead + 60000 });
+    me.hp = Math.min(me.hp, me.maxHp * 0.5);   // 先掉点血，看得到回血
+  }],
+  ['生命之泉', () => {
+    const now = performance.now();
+    const old = state.zones.find((zone) => zone.look === 'spring' && !zone.goneAt);
+    if (old) { old.goneAt = now; return; }
+    // 放在广场中间（村子里正好是游戏里出生点的位置）
+    addZone({ x: center.x + 60, y: center.y - 40, radius: 130, name: '生命之泉', color: '#7dffc4', look: 'spring',
+      owner: 0, dur: 0, interval: 1, heal: 0.05, born: now, endsAt: 0 });
   }],
 ];
 

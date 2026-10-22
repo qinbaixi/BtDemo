@@ -17,6 +17,7 @@
 | `internal/game/attr` + `combat` | [attr 和 combat：属性与战斗](modules/attr-combat.md) | 属性公式、升级、技能、伤害、Buff、死亡 |
 | `internal/bt` + `internal/game/ai` | [bt 和 ai：行为树](modules/ai-bt.md) | 解释 BtTree 导出的树，把节点绑定到游戏代码 |
 | `internal/game/spawn` | [spawn：出生与复活](modules/spawn.md) | 刷怪、创建玩家、复活 |
+| `internal/game/zone` | [zone：回血区](modules/zone.md) | 出生点的常驻泉水、技能放下的回血法阵 |
 | `internal/game/session` + `internal/server` | [session 和 server：连接与同步](modules/session-server.md) | WebSocket、协议、AOI 增量同步 |
 | `internal/config` | [config：配置](modules/config.md) | YAML 加载与校验 |
 | `web/` | [前端：浏览器客户端](modules/frontend.md) | TypeScript + Vite，目录结构、开发流程、改协议 |

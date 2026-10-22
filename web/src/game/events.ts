@@ -93,6 +93,12 @@ export function onEvent(ev: GameEvent, now: number): void {
       break;
     }
     case 'heal': {
+      if (ev.zone) {
+        // 站在回血区里：小一号的数字，身上冒两个小十字
+        addFloat(now, ev.dst, `+${ev.v}`, '#7cff9b', 13, 800, { rise: 30 });
+        fx.zoneHeal(ev.dst, now);
+        break;
+      }
       // 自己放的治疗：等动作出手、绿光亮起来再飘数字
       const land = state.lands.get(ev.dst);
       const show = () => addFloat(performance.now(), ev.dst, `+${ev.v}`, '#7cff9b', 18, 1000);

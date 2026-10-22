@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -67,6 +68,28 @@ type World struct {
 	Addr     string              `yaml:"addr"` // HTTP 监听地址，例如 ":8090" 或 "127.0.0.1:8090"
 	Hostile  map[string][]string `yaml:"hostile"`
 	Player   Player              `yaml:"player"`
+	// HealZones 是地图上常驻的回血区（比如出生点的泉水）。
+	HealZones []*Zone `yaml:"heal_zones"`
+}
+
+// ZoneAspect 是回血区纵向半径和横向半径之比：地面上画成压扁的椭圆（和其他地面特效一样），
+// 判断站没站在里面也按这个椭圆，和画面一致。客户端 web/src/game/config.ts 的 ZONE_ASPECT 要和它一样。
+const ZoneAspect = 0.6
+
+// Zone 是地上的一块回血区：站在里面的友方（和区域阵营互不敌对的）每隔 Interval 秒
+// 回复 最大生命 × Heal。world.yaml 的 heal_zones 是常驻的；技能放的（kind: zone）
+// 以施法者为中心，持续 Duration 秒。
+type Zone struct {
+	Name     string  `yaml:"name"`
+	X        float64 `yaml:"x"` // 只有 heal_zones 用：位置
+	Y        float64 `yaml:"y"`
+	Faction  string  `yaml:"faction"`  // 只有 heal_zones 用：给哪个阵营回血；技能放的用施法者的阵营
+	Radius   float64 `yaml:"radius"`   // 横向半径；纵向半径是 Radius × ZoneAspect
+	Heal     float64 `yaml:"heal"`     // 每次回复最大生命的比例
+	Interval float64 `yaml:"interval"` // 隔多少秒回一次，默认 1
+	Duration float64 `yaml:"duration"` // 技能放的持续多少秒；heal_zones 不填（常驻）
+	Look     string  `yaml:"look"`     // 客户端画法：spring 泉水 | rune 法阵
+	Color    string  `yaml:"color"`
 }
 
 // Buff 是技能授予的限时属性修正。
@@ -94,7 +117,7 @@ type Skill struct {
 	ID       string  `yaml:"-"`
 	Name     string  `yaml:"name"`
 	Desc     string  `yaml:"desc"` // 选技能面板上的一句话说明
-	Kind     string  `yaml:"kind"` // target | aoe | self | dash 位移 | line 直线投掷
+	Kind     string  `yaml:"kind"` // target | aoe | self | dash 位移 | line 直线投掷 | zone 放回血区
 	Range    float64 `yaml:"range"`
 	Radius   float64 `yaml:"radius"`
 	Cooldown float64 `yaml:"cooldown"`
@@ -105,6 +128,7 @@ type Skill struct {
 	Distance float64 `yaml:"distance"` // dash：位移距离
 	Buff     *Buff   `yaml:"buff"`
 	Debuff   *Buff   `yaml:"debuff"` // 命中时加在目标身上的效果（比如减速）
+	Zone     *Zone   `yaml:"zone"`   // zone：在脚下放的回血区
 	FX       string  `yaml:"fx"`
 	Color    string  `yaml:"color"`
 }
@@ -227,7 +251,7 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 	for id, skill := range cfg.Skills {
 		skill.ID = id
 		switch skill.Kind {
-		case "target", "aoe", "self", "dash", "line":
+		case "target", "aoe", "self", "dash", "line", "zone":
 		default:
 			return fmt.Errorf("skills.yaml: skill %s has unknown kind %q", id, skill.Kind)
 		}
@@ -242,6 +266,14 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		if skill.Kind == "line" && skill.Range <= 0 {
 			return fmt.Errorf("skills.yaml: line skill %s needs a range", id)
 		}
+		if skill.Kind == "zone" {
+			if skill.Zone == nil || skill.Zone.Duration <= 0 {
+				return fmt.Errorf("skills.yaml: zone skill %s needs a zone with a duration", id)
+			}
+			if err := checkZone("skills.yaml: skill "+id, skill.Zone); err != nil {
+				return err
+			}
+		}
 		for _, buff := range []*Buff{skill.Buff, skill.Debuff} {
 			if buff == nil || buff.Look == "" {
 				continue
@@ -249,6 +281,18 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 			if _, ok := Looks[buff.Look]; !ok {
 				return fmt.Errorf("skills.yaml: skill %s has unknown buff look %q", id, buff.Look)
 			}
+		}
+	}
+	for i, zone := range world.HealZones {
+		owner := fmt.Sprintf("world.yaml: heal_zones[%d]", i)
+		if _, ok := world.Hostile[zone.Faction]; !ok {
+			return fmt.Errorf("%s has faction %q missing from hostile", owner, zone.Faction)
+		}
+		if zone.Duration != 0 {
+			return fmt.Errorf("%s is permanent and must not have a duration", owner)
+		}
+		if err := checkZone(owner, zone); err != nil {
+			return err
 		}
 	}
 	checkSkills := func(owner string, ids []string) error {
@@ -346,6 +390,29 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		}
 	}
 	return nil
+}
+
+// checkZone 检查回血区的半径和回血量，并补上默认的回血间隔和画法。
+func checkZone(owner string, zone *Zone) error {
+	if zone.Radius <= 0 || zone.Heal <= 0 {
+		return fmt.Errorf("%s: zone needs a radius and heal", owner)
+	}
+	if zone.Interval <= 0 {
+		zone.Interval = 1
+	}
+	switch zone.Look {
+	case "":
+		zone.Look = "rune"
+	case "spring", "rune":
+	default:
+		return fmt.Errorf("%s: zone has unknown look %q", owner, zone.Look)
+	}
+	return nil
+}
+
+// Contains 报告 (x, y) 是否在中心为 (centerX, centerY) 的这块回血区的椭圆里。
+func (zone *Zone) Contains(centerX, centerY, x, y float64) bool {
+	return math.Hypot(x-centerX, (y-centerY)/ZoneAspect) <= zone.Radius
 }
 
 // Hostile 报告阵营 attacker 是否会攻击阵营 target。

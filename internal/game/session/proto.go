@@ -55,13 +55,17 @@ func entityState(entity *core.Entity) *pb.EntityState {
 
 // skillInfo 是一个技能在技能栏（slot 从 1 起）或技能池（slot 为 0）里的样子。
 func skillInfo(slot int, skill *config.Skill) *pb.SkillInfo {
+	radius := skill.Radius
+	if skill.Zone != nil {
+		radius = skill.Zone.Radius // 放回血区的技能：悬停时显示区域多大
+	}
 	return &pb.SkillInfo{
 		Slot:     core.I32(slot),
 		Id:       proto.String(skill.ID),
 		Name:     proto.String(skill.Name),
 		Kind:     proto.String(skill.Kind),
 		Range:    core.F32(skill.Range),
-		Radius:   core.F32(skill.Radius),
+		Radius:   core.F32(radius),
 		Cooldown: core.F32(skill.Cooldown),
 		Color:    proto.String(skill.Color),
 		Fx:       proto.String(skill.FX),
@@ -146,4 +150,26 @@ func obstacles(navMap *nav.Map) []*pb.Obstacle {
 		obs = append(obs, obstacle)
 	}
 	return obs
+}
+
+// zoneInfos 是发给客户端的回血区列表。
+func zoneInfos(zones []*core.Zone) []*pb.Zone {
+	infos := make([]*pb.Zone, 0, len(zones))
+	for _, zone := range zones {
+		infos = append(infos, &pb.Zone{
+			Id:       core.I32(zone.ID),
+			X:        core.F32(core.Round1(zone.X)),
+			Y:        core.F32(core.Round1(zone.Y)),
+			Radius:   core.F32(zone.Cfg.Radius),
+			Name:     proto.String(zone.Cfg.Name),
+			Color:    proto.String(zone.Cfg.Color),
+			Look:     proto.String(zone.Cfg.Look),
+			Owner:    core.I32(zone.Owner),
+			Until:    core.F32(core.Round1(zone.Until)),
+			Dur:      core.F32(zone.Cfg.Duration),
+			Interval: core.F32(zone.Cfg.Interval),
+			Heal:     core.F32(zone.Cfg.Heal),
+		})
+	}
+	return infos
 }

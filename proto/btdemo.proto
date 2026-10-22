@@ -84,7 +84,7 @@ message SkillInfo {
   required int32 slot = 1;
   required string id = 2;
   required string name = 3;
-  required string kind = 4;  // target | aoe | self | dash | line
+  required string kind = 4;  // target | aoe | self | dash | line | zone
   optional float range = 5;
   optional float radius = 6;
   optional float cooldown = 7;
@@ -202,6 +202,7 @@ message Event {
   optional bool immune = 19;    // DAMAGE: the target was invulnerable (value is 0)
   optional float tx = 20;       // CAST of a dash or line skill: where it ended (x, y is where it started)
   optional float ty = 21;
+  optional int32 zone = 22;     // HEAL: from standing in this zone (Zone.id)
 }
 
 message Attrs {
@@ -252,6 +253,27 @@ message Sync {
   repeated Event ev = 3;
   optional SelfInfo self = 4;
   optional AiTrace ai = 5;
+  // zones_set: zones is the whole new list of heal zones (sent when it changes;
+  // otherwise zones is empty and the client keeps what it has).
+  repeated Zone zones = 6;
+  optional bool zones_set = 7;
+}
+
+// Zone is a healing area on the ground: a permanent spring from world.yaml or
+// a circle a skill put down.
+message Zone {
+  required int32 id = 1;
+  required float x = 2;
+  required float y = 3;
+  required float radius = 4;
+  optional string name = 5;
+  optional string color = 6;
+  optional string look = 7;      // spring | rune
+  optional int32 owner = 8;      // entity that cast it; 0 = part of the map
+  optional float until = 9;      // Sync.time when it disappears; 0 = permanent
+  optional float dur = 10;       // total seconds it lasts, for the countdown ring
+  optional float interval = 11;  // seconds between heals
+  optional float heal = 12;      // fraction of max HP per heal
 }
 
 // AiNode is one behavior tree node visited during a tick, in visiting order.

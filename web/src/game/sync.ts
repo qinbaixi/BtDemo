@@ -5,11 +5,13 @@ import { buildSkillBar, renderSelf, setConn, showToast } from '../ui/hud';
 import { closePicker, openPicker } from '../ui/picker';
 import { createScenery } from '../render/scenery';
 import { loadMap } from './map';
-import type { ClientMessage, ServerMessage, SkillInfo, SyncMsg, WelcomeMsg } from '../net/types';
+import type { ClientMessage, ServerMessage, SkillInfo, SyncMsg, WelcomeMsg, ZoneInfo } from '../net/types';
+import { ACTIONS } from '../render/knightActions';
+import { ZONE_FADE_MS } from '../render/zones';
 import { DEATH_MS, LERP_MS, SNAP_DIST } from './config';
 import { onEvent } from './events';
 import { hypot } from './math';
-import { makeEntity, posOf, state } from './state';
+import { makeEntity, posOf, state, type ClientZone } from './state';
 
 export interface SyncDeps {
   send(msg: ClientMessage): void;
@@ -54,6 +56,41 @@ function setSkills(skills: SkillInfo[]): void {
   for (const sk of state.skills) state.skillBySlot[sk.slot] = sk;
 }
 
+// setZones 换上服务端发来的整份回血区列表。新出现的技能法阵从施法动作按地的那一刻开始铺开；
+// 刚连上时收到的（已经在那儿的）直接显示；服务端去掉的留一会儿淡出。
+function setZones(zones: ZoneInfo[], serverTime: number, now: number): void {
+  const first = !zonesSeen;
+  zonesSeen = true;
+  const old = new Map(state.zones.map((zone) => [zone.id, zone]));
+  const next: ClientZone[] = [];
+  for (const info of zones) {
+    const prev = old.get(info.id);
+    old.delete(info.id);
+    const endsAt = info.until ? now + (info.until - serverTime) * 1000 : 0;
+    let born = prev ? prev.born : now;
+    if (!prev && first) born = now - 10000;
+    else if (!prev) {
+      // 施法者在放“治愈之泉”的动作：等手按到地上
+      const caster = info.owner ? state.ents.get(info.owner) : undefined;
+      if (caster && caster.action === 'zone') born = Math.max(now, caster.attackAt + (ACTIONS.zone?.lead ?? 0));
+    }
+    next.push({
+      ...info, born, endsAt, goneAt: 0,
+      pulseFrom: prev ? prev.pulseFrom : now,
+      seed: prev ? prev.seed : Math.random() * 100,
+    });
+  }
+  // 被替换或到时间的：淡出（已经在淡出的继续）
+  for (const zone of old.values()) {
+    if (!zone.goneAt) zone.goneAt = now;
+    if (now - zone.goneAt < ZONE_FADE_MS) next.push(zone);
+  }
+  state.zones = next;
+}
+
+// 是否已经收到过回血区列表（第一次收到的直接显示，不播铺开动画）
+let zonesSeen = false;
+
 // resetOnClose 在连接断开时清掉旧角色的状态。
 export function resetOnClose(): void {
   closePicker();
@@ -74,6 +111,8 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   state.ents.clear();
   state.fx!.clear();
   state.lands.clear();
+  state.zones = [];
+  zonesSeen = false;
   state.pending = [];
   state.floats = [];
   state.bubbles.clear();
@@ -96,6 +135,7 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
 }
 
 function onSync(m: SyncMsg, now: number, deps: SyncDeps): void {
+  if (m.zones) setZones(m.zones, m.time, now);
   for (const s of m.ents || []) {
     let e = state.ents.get(s.id);
     if (!e && s.id === state.myId) {

@@ -37,7 +37,8 @@ cfg, err := config.Load("config", game.TreeNames())
 2. `validate` 补默认值并检查：
    - 地图尺寸、AOI 格子为正；`tick_rate` 默认 20、`sync_rate` 默认 10、`addr` 默认 `:8080`（只写端口时补冒号）。
    - 敌对表里引用的阵营都存在，且必须有 `player`。
-   - 技能的 `kind` 是 target、aoe、self、dash、line 之一，`damage` 是 physical、magic 或空。
+   - 技能的 `kind` 是 target、aoe、self、dash、line、zone 之一，`damage` 是 physical、magic 或空；`zone` 技能要有 `zone` 且 `duration` 大于 0。
+   - `heal_zones` 的阵营在敌对表里、不写 `duration`；回血区的 `radius`、`heal` 为正，`interval` 默认 1，`look` 默认 `rune`（见 [zone](zone.md)）。
    - 技能的 `buff` 和 `debuff` 里，`look` 为空或者是 haste、holy、fire、frost 之一。
    - 玩家的默认技能（`player.skills`）至少有一个；第 2 个起的默认技能都在 `skill_pool` 里；`skill_pool` 里的技能都存在。
    - 玩家和模板引用的技能都存在；模板的 `kind` 是 monster 或 npc；`tree` 是编译进程序的行为树（由调用方传入 `knownTrees`）；`faction` 在敌对表里。
@@ -58,7 +59,7 @@ cfg, err := config.Load("config", game.TreeNames())
 
 ## skills.yaml 的字段
 
-- `kind`：`target` 单体、`aoe` 范围、`self` 自身、`dash` 位移（用 `distance`）、`line` 直线投掷（用 `range`）。
+- `kind`：`target` 单体、`aoe` 范围、`self` 自身、`dash` 位移（用 `distance`）、`line` 直线投掷（用 `range`）、`zone` 在脚下放回血区（用 `zone`，见 [zone](zone.md)）。
 - `desc`：选技能面板上的一句话说明。
 - `debuff`：命中时加在目标身上的效果，格式同 `buff`。没被免疫、也没被打死才会加上。
 - `buff` 的新字段：`invulnerable`（期间不受任何伤害）、`bonus_magic`（物理技能每次命中额外造成法术伤害）、`look`（客户端外观）。`look` 只能是 `haste`、`holy`、`fire`、`frost`，对应 `config.Looks` 里的位。

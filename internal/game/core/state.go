@@ -16,6 +16,7 @@ type State struct {
 	Clock  Clock
 	Ents   Entities
 	Events Events
+	Zones  Zones
 }
 
 // NewState 创建一个空的世界状态。

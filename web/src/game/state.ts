@@ -4,7 +4,7 @@
 import type { Aura, FX } from '../render/fx';
 import type { createScenery } from '../render/scenery';
 import type {
-  EntityInfo, EntityKind, Obstacle, SelfInfo, SkillInfo,
+  EntityInfo, EntityKind, Obstacle, SelfInfo, SkillInfo, ZoneInfo,
 } from '../net/types';
 import { ATTACK_MS, KIND_COLOR, LERP_MS, MODEL_H, MODEL_SCALE } from './config';
 import { clamp, lerp } from './math';
@@ -96,6 +96,7 @@ export interface State {
   aiPath: { id: number; pts: number[]; at: number } | null;
   vignette: { w: number; h: number; g: CanvasGradient } | null;
   lands: Map<number, { at: number; color?: string }>;   // 施法者 id -> 最近一次施法命中的时间和颜色
+  zones: ClientZone[];            // 地上的回血区（见 render/zones.ts）
   pending: { at: number; fn: () => void }[];             // 等弹道飞到再播的受击
   lastFrame: number;
   // 画质三档（见 setQuality）：高 = 全部效果；中 = 保留描边、光照和泛光调色，
@@ -114,6 +115,15 @@ export interface State {
   combo: { n: number; at: number };   // 自己的连击数和最近一次命中的时间
   hurtAt: number;                 // 自己最近一次掉血的时间（屏幕边缘闪红）
   dpr: number;
+}
+
+// ClientZone 是客户端记着的一块回血区：服务端的 ZoneInfo 加上本地时间。
+export interface ClientZone extends ZoneInfo {
+  born: number;     // 出现的时间（performance.now()）：技能放的从施法动作按地的那一刻开始铺开
+  pulseFrom: number; // 回血节奏的起点：服务端放下区域的时间（收到列表的时刻），画回血脉冲用
+  endsAt: number;   // 消失的时间（performance.now()），0 表示常驻
+  goneAt: number;   // 服务端已经去掉、正在淡出时是去掉的时间，否则为 0
+  seed: number;
 }
 
 export type Quality = 'high' | 'medium' | 'low';
@@ -153,6 +163,7 @@ export const state: State = {
   aiPath: null,
   vignette: null,
   lands: new Map(),
+  zones: [],
   pending: [],
   lastFrame: 0,
   quality: initialQuality(),

@@ -620,6 +620,27 @@ function knightHandProp(ctx, act, B, hand) {
       c.closePath();
     }, '#e9eef6', { dark: '#8e9bb0', lit: '#ffffff', sd: 0.8, hl: 0.7, lw: 1.2 });
   }
+  if (act.name === 'zone') {
+    // 托在掌心的一团绿光：实心的圆加白芯，几颗绕着转的小星；按进地里后熄灭
+    const hold = envelope(act.k, 0.08, 0.2, 0.5, 0.6);
+    if (hold > 0) {
+      const r = 2.6 * hold * (1 + 0.08 * Math.sin(act.k * 60));
+      const cx = hand.x;
+      const cy = hand.y - 3.2 * hold;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, TAU);
+      ctx.fillStyle = '#5cf08f';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx - r * 0.2, cy - r * 0.2, r * 0.55, 0, TAU);
+      ctx.fillStyle = '#eafff0';
+      ctx.fill();
+      for (let i = 0; i < 3; i++) {
+        const angle = act.k * 14 + (i * TAU) / 3;
+        sparkle(ctx, cx + Math.cos(angle) * r * 2, cy + Math.sin(angle) * r * 0.9 - r * 0.4, 1.3 * hold, '#c9ffd8');
+      }
+    }
+  }
   if (act.name === 'enchant') {
     const burn = envelope(act.k, 0.1, 0.18, 0.56, 0.68);
     if (burn > 0) flame(ctx, hand.x, hand.y - 1, 1.6 * burn, act.k * 720, 7);

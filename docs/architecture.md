@@ -42,9 +42,10 @@ w.Do(func() { w.Input(s, msg) })   // 把“要做的事”丢进 inbox
 w.State.Clock.Advance()        // 时间前进 Dt = 1/20 秒
 w.Spawn.Tick()                 // 1. 复活时间到了的实体
 w.Combat.Tick()                // 2. 去掉过期的 Buff，重算属性
-w.Move.Tick()                  // 3. 玩家按方向键移动（带碰撞）
-w.AI.Tick(w.Sessions.Watched())// 4. 每个怪物 / NPC 跑一次行为树：选目标、追击、放技能……
-if 该同步了 { w.Sessions.Flush() } // 5. 给每个玩家发 AOI 变化、视野内实体状态、事件
+w.Zone.Tick()                  // 3. 回血区：去掉到时间的，给站在里面的友方回血
+w.Move.Tick()                  // 4. 玩家按方向键移动（带碰撞）
+w.AI.Tick(w.Sessions.Watched())// 5. 每个怪物 / NPC 跑一次行为树：选目标、追击、放技能……
+if 该同步了 { w.Sessions.Flush() } // 6. 给每个玩家发 AOI 变化、视野内实体状态、事件
 ```
 
 顺序是有意的：先复活和清 Buff，让本帧的移动和 AI 用到最新的属性；AI 在玩家移动之后跑，追的是玩家这一帧的新位置；同步放在最后，把本帧所有变化一起发出去。
@@ -77,6 +78,7 @@ spawn   ──► move, ai, aoi, attr, core
 ai      ──► combat, move, bt, ai/trees, core
 combat  ──► attr, aoi, core
 move    ──► nav, aoi, core
+zone    ──► aoi, core
 attr, aoi, nav ──► core / config
 core    ──► config, bt, nav(只用 Vec), pb
 bt      ──► 无（纯行为树运行时，不认识游戏）

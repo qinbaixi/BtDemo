@@ -11,6 +11,9 @@ export const DEATH_MS = 650;         // 倒地动画
 // 每种实体的轮廓光颜色：金色的英雄、血红的怪物、幽蓝的 NPC
 export const RIM: Record<EntityKind, string> = { player: '#ffcf6a', monster: '#ff3b2e', npc: '#6fe3ff' };
 export const MODEL_SCALE = 1.25;     // 模型画得比碰撞半径略大
+// 回血区在地上画成椭圆（和其他地面特效一样压扁），纵向半径 = 横向半径 × ZONE_ASPECT。
+// 服务端按同一个椭圆判断站没站在里面（internal/config 的 ZoneAspect），两边要一致。
+export const ZONE_ASPECT = 0.6;
 // 画角色时的范围（左右、向上、向下各是绘制半径的几倍），要容得下挥舞的武器和倒地的姿势
 export const MODEL_BOX: Record<string, [number, number, number]> = {
   default: [3, 3.5, 1.8],
