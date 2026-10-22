@@ -21,6 +21,7 @@ import { CanvasSprite } from './pixi/canvasSprite';
 import { PostFilter } from './pixi/postFilter';
 import { SceneView } from './pixi/sceneView';
 import { SpriteCtx } from './pixi/spriteCtx';
+import { RibbonPool } from './pixi/trail';
 
 let app: Application;
 let scene: Container;          // 整个画面（后期处理加在这一层）
@@ -31,6 +32,7 @@ let glowWorld: Container;      // 光照彩色层，和 world 用同一个镜头
 let fxWorld: Container;        // 技能特效和环境粒子，同样跟随镜头
 let shapeFx: CanvasSprite;      // 有形状的技能特效（刀光、弹道……），只画在特效所在的小范围里
 let sparkFx: SpriteCtx;        // 粒子、光晕、环境粒子：GPU 精灵
+let trails: RibbonPool;        // 刀光、风刃、弹道尾迹：GPU 丝带
 let groundLayer: Container;
 let marks: Graphics;           // 地面标记
 let targetRing: Container;     // 目标脚下的旋转圈
@@ -83,7 +85,9 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
   shapeFx = new CanvasSprite();
   const sparkLayer = new Container();
   sparkFx = new SpriteCtx(sparkLayer);
-  fxWorld.addChild(shapeFx, sparkLayer);
+  const trailLayer = new Container();
+  trails = new RibbonPool(trailLayer);
+  fxWorld.addChild(trailLayer, shapeFx, sparkLayer);
   scene = new Container();
   zoomer = new Container();
   zoomer.addChild(world, darkness, glowWorld, fxWorld);
@@ -317,8 +321,8 @@ function drawUnderFx(now: number): void {
   if (box) underFx.paint(box, state.dpr, (g) => state.fx.drawUnder(g, now));
 }
 
-// drawOverFx 画角色上方的特效：有形状的特效画进一块只覆盖特效范围的画布，
-// 粒子、光晕和环境粒子（雾、火星、光点）用 GPU 精灵画。
+// drawOverFx 画角色上方的特效：刀光和尾迹用 GPU 丝带，粒子、光晕和环境粒子（雾、火星、光点）用 GPU 精灵，
+// 其余有形状的特效（护盾泡泡、格挡弧光……）画进一块只覆盖特效范围的画布。
 function drawOverFx(now: number, dt: number): void {
   const fx = state.fx;
   fx.step(now);
@@ -331,6 +335,9 @@ function drawOverFx(now: number, dt: number): void {
   shapeFx.visible = !!box;
   if (box) shapeFx.paint(box, state.dpr, (g) => fx.drawShapes(g, now));
   sparkFx.begin();
+  trails.begin();
+  fx.drawTrails(trails, sparkFx, now);
+  trails.end();
   fx.particles(sparkFx, now, dt);
   if (state.scenery) state.scenery.drawAmbient(sparkFx, state.cam, now);
   sparkFx.end();

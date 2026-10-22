@@ -34,6 +34,12 @@ function whiten([r, g, b]: RGB, k: number): RGB {
   return [r + (255 - r) * k, g + (255 - g) * k, b + (255 - b) * k].map((v) => v | 0);
 }
 
+// whitenHex 是 whiten 的结果转成 0xRRGGBB，给 GPU 着色用。
+function whitenHex(c: RGB, k: number): number {
+  const [r, g, b] = whiten(c, k);
+  return (r << 16) | (g << 8) | b;
+}
+
 const spriteCache = new Map();
 
 // glow returns a soft round sprite: white-hot core fading through the colour.
@@ -390,10 +396,7 @@ export class FX {
       const t = (now - f.born) / f.life;
       if (t < 0) continue;
       switch (f.kind) {
-        case 'slash': this.slash(ctx, f, t); break;
-        case 'orb': this.orb(ctx, f, t, now); break;
         case 'arrow': this.arrow(ctx, f, t, now); break;
-        case 'whirl': this.whirlTop(ctx, f, t); break;
         case 'flare': this.flare(ctx, f, t); break;
         case 'gash': this.gash(ctx, f, t); break;
         case 'pillar': this.pillar(ctx, f, t); break;
@@ -418,8 +421,6 @@ export class FX {
       const t = (now - f.born) / f.life;
       if (t < 0 || t >= 1) continue;
       switch (f.kind) {
-        case 'slash': { const p = this.pos(f.src, { x: f.sx, y: f.sy }); add(p.x, p.y, 120, 140, 80); break; }
-        case 'orb':
         case 'arrow': {
           const sp = this.pos(f.src, { x: f.sx, y: f.sy });
           const dp = this.pos(f.dst, { x: f.dx, y: f.dy });
@@ -427,7 +428,6 @@ export class FX {
           add(dp.x, dp.y, 60, 110, 40);
           break;
         }
-        case 'whirl': add(f.cx, f.cy, f.radius * 1.2 + 20, f.radius * 0.8 + 60, f.radius * 0.6 + 20); break;
         case 'flare': add(f.x, f.y, f.size * 2.5, f.size * 2.5, f.size * 2.5); break;
         case 'gash': add(f.x, f.y, f.len + 10, f.len + 10, f.len + 10); break;
         case 'pillar': { const p = this.pos(f.anchor, f); add(p.x, p.y, 50, (f.height || 120) + 50, 20); break; }
@@ -442,71 +442,116 @@ export class FX {
 
   /* --------------------------- effect kinds -------------------------- */
 
-  slash(ctx, f, t) {
+  /* ------------------------ 拖尾（GPU 丝带） ------------------------ */
+
+  // drawTrails 用丝带画刀光、旋风斩的风刃、法球和箭的尾迹（ribbons 是 pixi/trail.ts 的 RibbonPool），
+  // 光点用 sprites（pixi/spriteCtx.ts）。
+  drawTrails(ribbons, sprites, now) {
+    sprites.save();
+    sprites.globalCompositeOperation = 'lighter';
+    for (const f of this.effects) {
+      const t = (now - f.born) / f.life;
+      if (t < 0 || t >= 1) continue;
+      switch (f.kind) {
+        case 'slash': this.slash(ribbons, sprites, f, t); break;
+        case 'whirl': this.whirlBlades(ribbons, f, t); break;
+        case 'orb': this.orb(ribbons, sprites, f, t, now); break;
+        case 'arrow': this.arrowTrail(ribbons, f, t); break;
+      }
+    }
+    sprites.restore();
+  }
+
+  // slash 是一道弧形刀光：头部最亮、尾部渐隐，下面垫一层墨色，像毛笔扫过。
+  slash(ribbons, sprites, f, t) {
     const sp = this.pos(f.src, { x: f.sx, y: f.sy, r: f.sr });
     const dp = this.pos(f.dst, { x: f.dx, y: f.dy, r: f.dr });
     const cy = sp.y - (sp.r || 14) * 0.9;
     const ang = Math.atan2(dp.y - (dp.r || 14) * 0.9 - cy, dp.x - sp.x);
     const reach = Math.min(Math.hypot(dp.x - sp.x, dp.y - sp.y), 70) * 0.55 + (f.heavy ? 26 : 18);
-    const sweep = f.heavy ? 2.4 : 2.0;
-    const head = easeOutCubic(clamp01(t / 0.45));
-    const tail = easeOut(clamp01((t - 0.15) / 0.85));
+    const sweep = f.heavy ? 2.6 : 2.1;
+    const head = easeOutCubic(clamp01(t / 0.4));
+    const tail = easeOut(clamp01((t - 0.12) / 0.88));
     const a0 = ang - f.flip * sweep / 2;
     const aHead = a0 + f.flip * sweep * head;
     const aTail = a0 + f.flip * sweep * tail;
     if (Math.abs(aHead - aTail) < 0.02) return;
-    const fade = 1 - clamp01((t - 0.55) / 0.45);
-    const width = (f.heavy ? 15 : 11) * (1 - t * 0.5);
-
-    // Crescent: outer arc out, inner arc back, thickest in the middle.
-    const crescent = (w, color, alpha) => {
-      const steps = 18;
-      ctx.beginPath();
-      for (let i = 0; i <= steps; i++) {
-        const k = i / steps;
-        const a = aTail + (aHead - aTail) * k;
-        const th = Math.sin(k * Math.PI) * w * (0.35 + 0.65 * k);
-        const x = sp.x + Math.cos(a) * (reach + th / 2);
-        const y = cy + Math.sin(a) * (reach + th / 2) * 0.8;
-        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-      }
-      for (let i = steps; i >= 0; i--) {
-        const k = i / steps;
-        const a = aTail + (aHead - aTail) * k;
-        const th = Math.sin(k * Math.PI) * w * (0.35 + 0.65 * k);
-        const x = sp.x + Math.cos(a) * (reach - th / 2);
-        const y = cy + Math.sin(a) * (reach - th / 2) * 0.8;
-        ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = color;
-      ctx.fill();
-    };
-    // ink backing first, so the slash reads like a brush stroke on any ground
-    ctx.save();
-    ctx.globalCompositeOperation = 'source-over';
-    crescent(width * 2.4, 'rgba(8,3,12,0.55)', fade * 0.85);
-    ctx.restore();
-    crescent(width * 1.9, rgba(f.rgb, 0.35), fade);
-    crescent(width, rgba(whiten(f.rgb, 0.3), 0.9), fade);
-    crescent(width * 0.35, '#ffffff', fade);
-
-    // a glint at the leading edge
-    const gx = sp.x + Math.cos(aHead) * reach;
-    const gy = cy + Math.sin(aHead) * reach * 0.8;
-    blit(ctx, glow(f.color), gx, gy, 16 * fade, 0.8 * fade);
+    const fade = 1 - clamp01((t - 0.5) / 0.5);
+    const width = (f.heavy ? 28 : 20) * (1 - t * 0.45);
+    const n = 16;
+    const pts = new Array(n * 2);
+    const ws = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const k = i / (n - 1);
+      const a = aTail + (aHead - aTail) * k;
+      pts[i * 2] = sp.x + Math.cos(a) * reach;
+      pts[i * 2 + 1] = cy + Math.sin(a) * reach * 0.8;
+      ws[i] = width * (0.25 + 0.75 * Math.sin(Math.min(1, k * 1.15) * Math.PI * 0.5));
+    }
+    const scaled = (m) => ws.map((w) => w * m);
+    ribbons.stroke(pts, scaled(1.7), 0x08030c, 0.6 * fade, 'ink');
+    ribbons.stroke(pts, scaled(2.2), f.color, 0.75 * fade, 'glow');
+    ribbons.stroke(pts, scaled(1), whitenHex(f.rgb, 0.45), fade, 'glow');
+    ribbons.stroke(pts, scaled(0.4), 0xffffff, fade, 'glow');
+    // 刀尖的闪光
+    const gx = pts[(n - 1) * 2];
+    const gy = pts[(n - 1) * 2 + 1];
+    blit(sprites, glow(f.color), gx, gy, 18 * fade, 0.85 * fade);
   }
 
-  orb(ctx, f, t, now) {
+  // whirlBlades 是旋风斩的三道风刃：绕着施法者转，头亮尾淡，地面上压扁成椭圆。
+  whirlBlades(ribbons, f, t) {
+    const R = f.radius;
+    const fade = 1 - clamp01((t - 0.5) / 0.5);
+    const spin = easeOut(t) * TAU * 1.8;
+    const grow = easeOut(clamp01(t / 0.3 + 0.2));
+    const n = 14;
+    for (let blade = 0; blade < 3; blade++) {
+      const r = R * (0.5 + 0.22 * blade) * grow;
+      const a0 = spin + (blade * TAU) / 3;
+      const len = 2.0 - blade * 0.25;
+      const pts = new Array(n * 2);
+      const ws = new Array(n);
+      for (let i = 0; i < n; i++) {
+        const k = i / (n - 1);
+        const a = a0 + len * k;
+        pts[i * 2] = f.cx + Math.cos(a) * r;
+        pts[i * 2 + 1] = f.cy - 14 + Math.sin(a) * r * 0.5;
+        ws[i] = (12 - blade * 2.5) * (0.3 + 0.7 * k);
+      }
+      ribbons.stroke(pts, ws.map((w) => w * 1.8), f.color, 0.7 * fade, 'glow');
+      ribbons.stroke(pts, ws.map((w) => w * 0.45), 0xffffff, 0.9 * fade, 'glow');
+    }
+  }
+
+  // projectilePath 是法球或箭在进度 k 时的位置（略微上拱的弧线）。
+  projectilePath(f, k, lift) {
     const sp = this.pos(f.src, { x: f.sx, y: f.sy, r: f.sr });
     const dp = this.pos(f.dst, { x: f.dx, y: f.dy, r: f.dr });
-    const k = clamp01(t);
-    const x0 = sp.x, y0 = sp.y - (sp.r || 14) * 1.3;
+    const x0 = sp.x, y0 = sp.y - (sp.r || 14) * (f.kind === 'orb' ? 1.3 : 1.2);
     const x1 = dp.x, y1 = dp.y - (dp.r || 14) * 1.0;
-    const arc = Math.sin(k * Math.PI) * Math.min(40, Math.hypot(x1 - x0, y1 - y0) * 0.12);
-    const x = x0 + (x1 - x0) * k;
-    const y = y0 + (y1 - y0) * k - arc;
+    const arc = Math.sin(k * Math.PI) * Math.min(lift, Math.hypot(x1 - x0, y1 - y0) * (f.kind === 'orb' ? 0.12 : 0.08));
+    return { x: x0 + (x1 - x0) * k, y: y0 + (y1 - y0) * k - arc };
+  }
+
+  // trailPoints 取弹道最近一段的位置做尾迹：从 k - span 到 k。
+  trailPoints(f, k, span, lift, width) {
+    const n = 10;
+    const pts = new Array(n * 2);
+    const ws = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const q = Math.max(0, k - span * (1 - i / (n - 1)));
+      const p = this.projectilePath(f, q, lift);
+      pts[i * 2] = p.x;
+      pts[i * 2 + 1] = p.y;
+      ws[i] = width * (0.2 + 0.8 * (i / (n - 1)));
+    }
+    return { pts, ws };
+  }
+
+  orb(ribbons, sprites, f, t, now) {
+    const k = clamp01(t);
+    const { x, y } = this.projectilePath(f, k, 40);
     // trail embers
     if (now - f.trailAt > 14) {
       f.trailAt = now;
@@ -515,9 +560,18 @@ export class FX {
           life: rand(200, 380), size: rand(3, 6), color: f.color, kind: 'glow', born: now });
       }
     }
+    const trail = this.trailPoints(f, k, 0.35, 40, 22);
+    ribbons.stroke(trail.pts, trail.ws, f.color, 0.7, 'glow');
+    ribbons.stroke(trail.pts, trail.ws.map((w) => w * 0.35), 0xffffff, 0.8, 'glow');
     const flick = 1 + Math.sin(now / 30) * 0.1;
-    blit(ctx, glow(f.color), x, y, 26 * flick, 0.9);
-    blit(ctx, glow('#ffffff'), x, y, 8, 1);
+    blit(sprites, glow(f.color), x, y, 26 * flick, 0.9);
+    blit(sprites, glow('#ffffff'), x, y, 8, 1);
+  }
+
+  // arrowTrail 是箭后面一道细细的风痕。
+  arrowTrail(ribbons, f, t) {
+    const trail = this.trailPoints(f, clamp01(t), 0.22, 28, 5);
+    ribbons.stroke(trail.pts, trail.ws, f.color, 0.55, 'glow');
   }
 
   arrow(ctx, f, t, now) {
@@ -531,14 +585,6 @@ export class FX {
     const y = y0 + (y1 - y0) * k - Math.sin(k * Math.PI) * lift;
     const vy = (y1 - y0) - Math.cos(k * Math.PI) * Math.PI * lift;
     const ang = Math.atan2(vy, x1 - x0);
-    // streak
-    ctx.globalAlpha = 0.5;
-    ctx.strokeStyle = rgba(f.rgb, 0.6);
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(x - Math.cos(ang) * 34, y - Math.sin(ang) * 34);
-    ctx.lineTo(x, y);
-    ctx.stroke();
     // shaft, head and fletching drawn normally on top of the glow
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
@@ -603,31 +649,6 @@ export class FX {
       ctx.moveTo(Math.cos(a) * R * 0.15, Math.sin(a) * R * 0.15);
       ctx.lineTo(Math.cos(a + 0.12) * R * 0.5 * grow, Math.sin(a + 0.12) * R * 0.5 * grow);
       ctx.lineTo(Math.cos(a - 0.05) * R * 0.8 * grow, Math.sin(a - 0.05) * R * 0.8 * grow);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  whirlTop(ctx, f, t) {
-    const R = f.radius;
-    const fade = 1 - clamp01((t - 0.5) / 0.5);
-    ctx.save();
-    ctx.translate(f.cx, f.cy - 14);
-    ctx.scale(1, 0.5);
-    const spin = t * TAU * 1.6;
-    for (let i = 0; i < 3; i++) {
-      const r = R * (0.45 + 0.22 * i) * easeOut(clamp01(t / 0.3 + 0.2));
-      const a0 = spin + (i * TAU) / 3;
-      ctx.globalAlpha = 0.75 * fade;
-      ctx.strokeStyle = rgba(whiten(f.rgb, 0.25), 0.9);
-      ctx.lineWidth = 7 - i * 1.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, r, a0, a0 + 2.2);
-      ctx.stroke();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, r, a0 + 1.4, a0 + 2.2);
       ctx.stroke();
     }
     ctx.restore();
