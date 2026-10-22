@@ -18,6 +18,7 @@ export const ZONE_ASPECT = 0.6;
 export const MODEL_BOX: Record<string, [number, number, number]> = {
   default: [3, 3.5, 1.8],
   knight: [3.2, 4.2, 1.8],   // 技能动作里剑会举过头顶、伸得更远
+  ranger: [3.4, 4.2, 1.8],   // 拉弓时弓和箭伸到身前，箭雨时弓举过头顶
   guard: [3.6, 3.5, 1.8],
   ogre_chief: [3.6, 4.6, 3.6],
 };
@@ -27,7 +28,7 @@ export function modelBox(model: string, r: number): number[] {
 }
 // 半径 16 时每个模型的绘制高度，用来把名字放在头顶上方
 export const MODEL_H: Record<string, number> = {
-  knight: 46, guard: 50, villager: 42, slime: 26, wolf: 30, skeleton_archer: 46, ogre_chief: 54,
+  knight: 46, ranger: 46, guard: 50, villager: 42, slime: 26, wolf: 30, skeleton_archer: 46, ogre_chief: 54,
 };
 export const ACT_NAMES: Record<string, string> = {
   find_target: '索敌',

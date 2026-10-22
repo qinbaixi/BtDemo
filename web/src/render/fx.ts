@@ -13,6 +13,70 @@ const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
+// 箭雨的时间线（毫秒，从出手算）：先射一箭上天，RAIN_FALL_FROM 后箭开始落，每支落 RAIN_FALL_MS
+const RAIN_UP_MS = 260;
+const RAIN_UP = 220;          // 射上天的那支箭飞多高
+const RAIN_FALL_FROM = 330;
+const RAIN_FALL_MS = 120;
+const RAIN_HEIGHT = 170;      // 落下来的箭从多高开始落
+
+// rainPoint 是一支落下来的箭在进度 k 时的位置：从斜上方直直扎下去。
+function rainPoint(a, k) {
+  const height = RAIN_HEIGHT * (1 - k * k);
+  return { x: a.x - Math.sin(a.tilt) * height, y: a.y - height };
+}
+
+// drawArrowShape 画一支箭（箭头朝 ang 方向，(x, y) 是箭头尖后面一点）。
+// style：plain 普通的箭、frost 结冰的箭头、gold 穿云箭的金箭、stuck 插在地里只露半截。
+function drawArrowShape(ctx, x, y, ang, style, scale, time) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  ctx.scale(scale, scale);
+  ctx.lineCap = 'round';
+  const tail = -20;
+  const front = style === 'stuck' ? -8 : 2;
+  // 描一道深色边，箭在亮地面上也看得清
+  ctx.strokeStyle = 'rgba(20,12,8,0.85)';
+  ctx.lineWidth = 3.4;
+  ctx.beginPath(); ctx.moveTo(tail, 0); ctx.lineTo(front, 0); ctx.stroke();
+  ctx.strokeStyle = style === 'gold' ? '#ffe9a8' : '#d9c093';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.moveTo(tail, 0); ctx.lineTo(front, 0); ctx.stroke();
+  if (style !== 'stuck') {
+    const head = style === 'frost' ? '#c8f0ff' : style === 'gold' ? '#fff3c4' : '#eef2f5';
+    if (style === 'frost') {
+      // 冰晶包住箭头
+      ctx.fillStyle = '#7fd0ff';
+      ctx.beginPath();
+      ctx.moveTo(10, 0); ctx.lineTo(1, -5.5); ctx.lineTo(-4, -3); ctx.lineTo(-4, 3); ctx.lineTo(1, 5.5);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = head;
+    ctx.strokeStyle = 'rgba(20,12,8,0.85)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(8, 0); ctx.lineTo(0, -3.6); ctx.lineTo(1.5, 0); ctx.lineTo(0, 3.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  // 箭羽
+  ctx.fillStyle = style === 'gold' ? '#ffd45a' : '#c0392b';
+  ctx.beginPath();
+  ctx.moveTo(tail + 6, 0); ctx.lineTo(tail - 1, -4); ctx.lineTo(tail + 1, 0); ctx.lineTo(tail - 1, 4);
+  ctx.closePath();
+  ctx.fill();
+  if (style === 'gold' || style === 'frost') {
+    ctx.globalCompositeOperation = 'lighter';
+    const pulse = 0.8 + 0.2 * Math.sin(time / 40);
+    blit(ctx, glow(style === 'gold' ? '#ffd76a' : '#9fe0ff'), 5, 0, 14 * pulse, 0.7);
+  }
+  ctx.restore();
+}
+
 /* ------------------------------ colour ------------------------------ */
 
 type RGB = number[];
@@ -289,6 +353,82 @@ export class FX {
         this.shake = Math.max(this.shake, 5);
         return 90;
       }
+      case 'arrow':
+      case 'frostarrow': {
+        // 游侠的箭：比法球快，从弓上搭箭的位置飞出去；冰霜箭带一路冰屑
+        const dist = Math.hypot(dst.x - src.x, dst.y - src.y);
+        const life = Math.max(100, Math.min(320, dist / 1.3));
+        const frost = ev.fx === 'frostarrow';
+        this.effects.push({ ...base, kind: 'arrow', life, trailAt: now, origin, frost, ranger: true });
+        return life;
+      }
+      case 'pierce': {
+        // 穿云箭：一道金光贯穿整条线，飞到射程尽头（或墙上）；返回飞到第一个命中目标的时间
+        const lift = origin ? origin.y : -26;
+        const x0 = (ev.x ?? src.x) + (origin ? origin.x : 0);
+        const y0 = (ev.y ?? src.y) + lift;
+        const x1 = ev.tx ?? dst.x;
+        const y1 = (ev.ty ?? dst.y) + lift;
+        const dist = Math.hypot(x1 - x0, y1 - y0);
+        const flight = Math.max(140, Math.min(420, dist / 1.7));
+        this.effects.push({ ...base, kind: 'bolt', x0, y0, x1, y1, flight, life: flight + 320 });
+        for (let i = 0; i < 12; i++) {
+          const a = rand(0, TAU);
+          this.spawn({ x: x0, y: y0, vx: Math.cos(a) * rand(0.05, 0.2), vy: Math.sin(a) * rand(0.05, 0.2), drag: 0.98,
+            life: rand(200, 360), size: rand(1.5, 3), color: i % 3 ? color : '#ffffff', kind: 'spark', born: now });
+        }
+        this.shake = Math.max(this.shake, 3);
+        if (!ev.dst) return flight;
+        const hitAt = Math.hypot(dst.x - x0, dst.y + lift - y0) / Math.max(1, dist);
+        return Math.round(flight * clamp01(hitAt));
+      }
+      case 'rain': {
+        // 箭雨：先一箭射上天，地上亮出落点圈，再一片箭从天上扎下来
+        const cx = ev.x ?? dst.x;
+        const cy = ev.y ?? dst.y;
+        const radius = ev.radius || 90;
+        const x0 = src.x + (origin ? origin.x : 0);
+        const y0 = src.y + (origin ? origin.y : -30);
+        const arrows: any[] = [];
+        for (let i = 0; i < 22; i++) {
+          // 落点在圈里均匀散开（开方让中间不扎堆）
+          const a = rand(0, TAU);
+          const d = Math.sqrt(Math.random()) * radius * 0.95;
+          arrows.push({ x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d, at: RAIN_FALL_FROM + rand(0, 380), tilt: rand(-0.18, 0.18), landed: false });
+        }
+        arrows.sort((a, b) => a.at - b.at);
+        this.effects.push({ ...base, kind: 'rain', cx, cy, radius, x0, y0, arrows, life: 1400 });
+        return RAIN_FALL_FROM + RAIN_FALL_MS;
+      }
+      case 'roll': {
+        // 翻滚：起点扬一团土（人在 game/events.ts 里滑过去）
+        const x0 = ev.x ?? src.x;
+        const y0 = ev.y ?? src.y;
+        const dir = Math.sign((ev.tx ?? x0) - x0) || 1;
+        this.footDust(x0, y0, dir, now);
+        this.footDust(x0 + dir * 10, y0, dir, now + 60);
+        for (let i = 0; i < 10; i++) {
+          this.spawn({ x: x0 + rand(-10, 10), y: y0 - rand(0, 6), vx: -dir * rand(0.02, 0.1), vy: -rand(0.01, 0.05), drag: 0.97,
+            life: rand(300, 520), size: rand(3, 5.5), color: '#cdb894', kind: 'glow', born: now + rand(0, 200) });
+        }
+        return 0;
+      }
+      case 'focus': {
+        // 鹰眼专注：脚下一圈金光，眼前聚起几颗金色星点往里收
+        this.effects.push({ ...base, kind: 'ring', x: src.x, y: src.y, radius: 54, life: 520 });
+        const dir = Math.cos((src as any).facing ?? 0) < 0 ? -1 : 1;
+        for (let i = 0; i < 18; i++) {
+          const a = rand(0, TAU);
+          const d = rand(16, 34);
+          this.spawn({ anchor: ev.src, ox: dir * 8 + Math.cos(a) * d, oy: -38 + Math.sin(a) * d * 0.7, vx: -Math.cos(a) * d / 360,
+            vy: -Math.sin(a) * d * 0.7 / 360, life: 360, size: rand(1.6, 2.8), color: i % 3 ? color : '#ffffff', kind: 'spark', born: now + rand(0, 160) });
+        }
+        for (let i = 0; i < 8; i++) {
+          this.spawn({ anchor: ev.src, ox: rand(-14, 14), oy: -rand(0, 30), vx: 0, vy: -rand(0.04, 0.08),
+            life: rand(500, 800), size: rand(2, 3.4), color, kind: 'glow', born: now + 300 + rand(0, 300) });
+        }
+        return 0;
+      }
       default: { // melee
         const heavy = /heavy|smash|pounce/.test(ev.skill || '');
         this.effects.push({ ...base, kind: 'slash', life: heavy ? 340 : 260, heavy,
@@ -525,6 +665,12 @@ export class FX {
           add(f.x0 + (f.x1 - f.x0) * k, f.y0 + (f.y1 - f.y0) * k - 22, 60, '#dfe8ff', 0.7, 0.3);
           break;
         }
+        case 'bolt': {
+          const k = clamp01((now - f.born) / f.flight);
+          add(f.x0 + (f.x1 - f.x0) * k, f.y0 + (f.y1 - f.y0) * k, 110, f.color, fade, 0.5);
+          break;
+        }
+        case 'rain': add(f.cx, f.cy, f.radius * 1.6, f.color, Math.sin(t * Math.PI), 0.3); break;
       }
     }
     // 身上的外观：圣光和火焰武器会照亮周围
@@ -548,6 +694,7 @@ export class FX {
         case 'ring': this.ring(ctx, f, t); break;
         case 'pillar': this.pillarGround(ctx, f, t); break;
         case 'nova': this.novaGround(ctx, f, t); break;
+        case 'rain': this.rainGround(ctx, f, now - f.born); break;
       }
     }
     ctx.restore();
@@ -570,6 +717,7 @@ export class FX {
         case 'ring': add(f.x, f.y, f.radius + 6, f.radius * 0.45 + 6); break;
         case 'pillar': { const p = this.pos(f.anchor, f); add(p.x, p.y, 62, 26); break; }
         case 'nova': add(f.cx, f.cy, f.radius * 1.15 + 8, f.radius * 0.55 + 8); break;
+        case 'rain': add(f.cx, f.cy, f.radius + 10, f.radius + 10); break;
       }
     }
     return x1 > x0 ? [x0, y0, x1, y1] : null;
@@ -594,7 +742,7 @@ export class FX {
       if ((f.kind === 'orb' || f.kind === 'arrow') && !f.landed && now - f.born >= f.life * 0.95) {
         f.landed = true;
         const dp = this.pos(f.dst, { x: f.dx, y: f.dy, r: f.dr });
-        this.burst(dp.x, dp.y - (dp.r || 14), f.color, f.kind === 'orb' ? 16 : 8, now);
+        this.burst(dp.x, dp.y - (dp.r || 14), f.color, f.kind === 'orb' || f.frost ? 16 : 8, now);
       }
     }
     for (const f of this.effects) {
@@ -605,7 +753,24 @@ export class FX {
         else this.footDust(f.x1, f.y1, Math.sign(f.x1 - f.x0) || 1, now);
       }
     }
+    for (const f of this.effects) {
+      if (f.kind === 'bolt' && !f.landed && now - f.born >= f.flight) {
+        f.landed = true;
+        this.burst(f.x1, f.y1, f.color, 10, now);
+      }
+      if (f.kind === 'rain') this.rainLand(f, now);
+    }
     this.effects = this.effects.filter((f) => now - f.born < f.life);
+    // 冰霜箭一路掉冰屑
+    for (const f of this.effects) {
+      if (f.kind !== 'arrow' || !f.frost || now - f.trailAt <= 20) continue;
+      const t = (now - f.born) / f.life;
+      if (t < 0) continue;
+      f.trailAt = now;
+      const { x, y } = this.projectilePath(f, clamp01(t), 28);
+      this.spawn({ x: x + rand(-2, 2), y: y + rand(-2, 2), vx: rand(-0.02, 0.02), vy: rand(0.005, 0.03),
+        life: rand(240, 420), size: rand(1.4, 2.4), color: Math.random() < 0.4 ? '#ffffff' : f.color, kind: 'spark', born: now });
+    }
     // 法球飞行中一路掉火星
     for (const f of this.effects) {
       if (f.kind !== 'orb' || now - f.trailAt <= 14) continue;
@@ -638,6 +803,8 @@ export class FX {
         case 'parry': this.parry(ctx, f, t); break;
         case 'shieldForm': this.shieldForm(ctx, f, t); break;
         case 'axe': this.axe(ctx, f, t, now); break;
+        case 'bolt': this.bolt(ctx, f, now - f.born); break;
+        case 'rain': this.rainArrows(ctx, f, now - f.born); break;
       }
     }
     this.shieldAuras(ctx, now);
@@ -681,6 +848,11 @@ export class FX {
           add(f.x0 + (f.x1 - f.x0) * k, f.y0 + (f.y1 - f.y0) * k - 22, 30, 30, 30);
           break;
         }
+        case 'bolt': add(f.x0, f.y0, 40, 40, 40); add(f.x1, f.y1, 40, 40, 40); break;
+        case 'rain':
+          add(f.x0, f.y0, 30, RAIN_UP + 30, 30);
+          add(f.cx, f.cy, f.radius + 30, RAIN_HEIGHT + 40, f.radius + 20);
+          break;
       }
     }
     for (const a of this.auras()) add(a.x, a.y, a.r * 2.6 + 20, a.h * 1.8 + 30, a.r + 20);
@@ -704,6 +876,8 @@ export class FX {
         case 'arrow': this.arrowTrail(ribbons, f, t); break;
         case 'blink': this.blinkTrail(ribbons, sprites, f, t); break;
         case 'axe': this.axeTrail(ribbons, f, t); break;
+        case 'bolt': this.boltTrail(ribbons, sprites, f, now - f.born); break;
+        case 'rain': this.rainTrails(ribbons, f, now - f.born); break;
       }
     }
     this.lookGlows(sprites, now);
@@ -971,41 +1145,138 @@ export class FX {
   }
 
   arrow(ctx, f, t, now) {
-    const sp = this.pos(f.src, { x: f.sx, y: f.sy, r: f.sr });
-    const dp = this.pos(f.dst, { x: f.dx, y: f.dy, r: f.dr });
     const k = clamp01(t);
-    const x0 = sp.x, y0 = sp.y - (sp.r || 14) * 1.2;
-    const x1 = dp.x, y1 = dp.y - (dp.r || 14) * 1.0;
-    const lift = Math.min(28, Math.hypot(x1 - x0, y1 - y0) * 0.08);
-    const x = x0 + (x1 - x0) * k;
-    const y = y0 + (y1 - y0) * k - Math.sin(k * Math.PI) * lift;
-    const vy = (y1 - y0) - Math.cos(k * Math.PI) * Math.PI * lift;
-    const ang = Math.atan2(vy, x1 - x0);
-    // shaft, head and fletching drawn normally on top of the glow
+    // 沿弹道取前后两点算箭头朝向
+    const p = this.projectilePath(f, k, 28);
+    const ahead = this.projectilePath(f, Math.min(1, k + 0.02), 28);
+    const behind = this.projectilePath(f, Math.max(0, k - 0.02), 28);
+    const ang = Math.atan2(ahead.y - behind.y, ahead.x - behind.x);
+    drawArrowShape(ctx, p.x, p.y, ang, f.frost ? 'frost' : 'plain', f.ranger ? 1.15 : 1, now);
+  }
+
+  /* ------------------------------ 游侠 ------------------------------ */
+
+  // boltTrail 是穿云箭的金光：箭头后面一道越来越粗的光带，飞到头以后整条光带慢慢淡掉。
+  boltTrail(ribbons, sprites, f, ms) {
+    const k = clamp01(ms / f.flight);
+    const fade = 1 - clamp01((ms - f.flight) / (f.life - f.flight));
+    const tail = ms < f.flight ? Math.max(0, k - 0.55) : clamp01((ms - f.flight) / (f.life - f.flight)) * k;
+    const points: number[] = [];
+    const widths: number[] = [];
+    for (let i = 0; i <= 8; i++) {
+      const q = tail + (k - tail) * (i / 8);
+      points.push(f.x0 + (f.x1 - f.x0) * q, f.y0 + (f.y1 - f.y0) * q);
+      widths.push((4 + 14 * (i / 8)) * fade);
+    }
+    ribbons.stroke(points, widths, f.color, 0.75 * fade, 'glow');
+    ribbons.stroke(points, widths.map((w) => w * 0.3), 0xffffff, 0.9 * fade, 'glow');
+    const hx = f.x0 + (f.x1 - f.x0) * k;
+    const hy = f.y0 + (f.y1 - f.y0) * k;
+    if (ms < f.flight) blit(sprites, glow(f.color), hx, hy, 30, 0.8);
+  }
+
+  // bolt 画穿云箭的箭身：飞行中的发光长箭，插到尽头后停一下再淡掉。
+  bolt(ctx, f, ms) {
+    const k = clamp01(ms / f.flight);
+    const ang = Math.atan2(f.y1 - f.y0, f.x1 - f.x0);
+    const x = f.x0 + (f.x1 - f.x0) * k;
+    const y = f.y0 + (f.y1 - f.y0) * k;
     ctx.save();
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-    ctx.translate(x, y);
-    ctx.rotate(ang);
-    ctx.strokeStyle = '#d9c9a3';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(-18, 0);
-    ctx.lineTo(2, 0);
-    ctx.stroke();
-    ctx.fillStyle = '#eef2f5';
-    ctx.beginPath();
-    ctx.moveTo(7, 0);
-    ctx.lineTo(0, -3.5);
-    ctx.lineTo(0, 3.5);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#c0392b';
-    ctx.beginPath();
-    ctx.moveTo(-18, 0); ctx.lineTo(-23, -4); ctx.lineTo(-14, 0); ctx.lineTo(-23, 4);
-    ctx.closePath();
-    ctx.fill();
+    if (ms > f.flight) ctx.globalAlpha = 1 - clamp01((ms - f.flight) / (f.life - f.flight));
+    drawArrowShape(ctx, x, y, ang, 'gold', 1.3, ms);
     ctx.restore();
+  }
+
+  // rainLand 在箭雨的每支箭落地时扬一点土、闪一下（只发一次）。
+  rainLand(f, now) {
+    const ms = now - f.born;
+    for (const a of f.arrows) {
+      if (a.landed || ms < a.at + RAIN_FALL_MS) continue;
+      a.landed = true;
+      this.spawn({ x: a.x, y: a.y, vx: rand(-0.05, 0.05), vy: -rand(0.02, 0.06), drag: 0.97,
+        life: rand(260, 420), size: rand(2.5, 4), color: '#cdb894', kind: 'glow', born: now });
+      this.spawn({ x: a.x, y: a.y - 2, vx: rand(-0.12, 0.12), vy: -rand(0.05, 0.14), drag: 0.97,
+        life: rand(180, 300), size: rand(1.2, 2), color: '#ffffff', kind: 'spark', born: now });
+    }
+    if (!f.shook && ms >= RAIN_FALL_FROM + RAIN_FALL_MS) {
+      f.shook = true;
+      this.shake = Math.max(this.shake, 3.5);
+    }
+  }
+
+  // rainGround 画箭雨在地上的落点圈：射上天时圈亮出来、往里收，箭落下时闪一下，最后淡掉。
+  rainGround(ctx, f, ms) {
+    const appear = easeOutCubic(clamp01(ms / 320));
+    const fade = 1 - clamp01((ms - 1000) / 400);
+    const flash = Math.max(0, 1 - Math.abs(ms - RAIN_FALL_FROM - 200) / 260);
+    ctx.save();
+    ctx.translate(f.cx, f.cy);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = rgba(f.rgb, 0.08 + 0.12 * flash);
+    ctx.beginPath();
+    ctx.arc(0, 0, f.radius, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = rgba(f.rgb, 0.75);
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 7]);
+    ctx.lineDashOffset = -ms * 0.03;
+    ctx.beginPath();
+    ctx.arc(0, 0, f.radius * (1.25 - 0.25 * appear), 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // 圈里的十字准星
+    ctx.strokeStyle = rgba(f.rgb, 0.5 * appear);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      ctx.moveTo(dx * f.radius * 0.18, dy * f.radius * 0.18);
+      ctx.lineTo(dx * f.radius * 0.42, dy * f.radius * 0.42);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // rainTrails 是射上天那支箭和落下来的箭后面的风痕。
+  rainTrails(ribbons, f, ms) {
+    if (ms < RAIN_UP_MS) {
+      const k = easeOut(ms / RAIN_UP_MS);
+      const y = f.y0 - RAIN_UP * k;
+      ribbons.stroke([f.x0, y + 50, f.x0, y + 20, f.x0, y], [1, 3, 5], f.color, 0.7 * (1 - k * 0.5), 'glow');
+    }
+    for (const a of f.arrows) {
+      const k = (ms - a.at) / RAIN_FALL_MS;
+      if (k < 0 || k >= 1) continue;
+      const p = rainPoint(a, k);
+      const q = rainPoint(a, Math.max(0, k - 0.35));
+      ribbons.stroke([q.x, q.y, p.x, p.y], [1, 4], f.color, 0.6, 'glow');
+    }
+  }
+
+  // rainArrows 画射上天的那支箭、正在落下和插在地上的箭。
+  rainArrows(ctx, f, ms) {
+    if (ms < RAIN_UP_MS) {
+      const k = easeOut(ms / RAIN_UP_MS);
+      ctx.save();
+      ctx.globalAlpha = 1 - clamp01((k - 0.7) / 0.3);
+      drawArrowShape(ctx, f.x0, f.y0 - RAIN_UP * k, -Math.PI / 2, 'plain', 1.15, ms);
+      ctx.restore();
+    }
+    const fade = 1 - clamp01((ms - 1100) / 300);
+    for (const a of f.arrows) {
+      const k = (ms - a.at) / RAIN_FALL_MS;
+      if (k < 0) continue;
+      ctx.save();
+      if (k < 1) {
+        const p = rainPoint(a, k);
+        drawArrowShape(ctx, p.x, p.y, Math.PI / 2 + a.tilt, 'plain', 1, ms);
+      } else {
+        // 插在地上：只露出后半截和箭羽，斜着
+        ctx.globalAlpha = fade;
+        drawArrowShape(ctx, a.x, a.y - 1, Math.PI / 2 + a.tilt, 'stuck', 1, ms);
+      }
+      ctx.restore();
+    }
   }
 
   burst(x, y, color, n, now) {

@@ -60,31 +60,50 @@ func (sys *System) Template(template *config.Template, x, y float64) *core.Entit
 	return entity
 }
 
-// Player 在玩家出生点创建一个新的玩家角色。
+// Player 在玩家出生点创建一个新的玩家角色，职业是默认职业（world.yaml 里的第一个）。
 func (sys *System) Player() *core.Entity {
 	player := sys.state.Cfg.World.Player
+	class := player.DefaultClass()
 	entity := sys.state.Ents.New()
 	entity.Identity = core.Identity{
 		ID:      entity.ID,
 		Kind:    core.KindPlayer,
 		Faction: "player",
 		Name:    fmt.Sprintf("%s%d", player.NamePrefix, entity.ID),
-		Color:   player.Color,
-		Model:   player.Model,
 	}
-	entity.Radius = player.Radius
+	entity.Radius = class.Radius
 	x, y := sys.state.Scatter(player.Spawn.X, player.Spawn.Y, player.Spawn.Spread)
 	x, y = sys.move.FreeSpot(entity, x, y)
-	entity.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: player.Radius}
-	entity.Level = 1
-	entity.Base, entity.Growth, entity.Speed = player.Attrs, player.Growth, player.Speed
-	for entity.Level < player.Level {
-		attr.LevelUp(entity)
-	}
-	entity.Skills = sys.skills(player.Skills)
+	entity.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: class.Radius}
+	entity.Level = max(1, player.Level)
+	sys.ApplyClass(entity, class)
 	attr.Init(entity)
 	sys.add(entity)
 	return entity
+}
+
+// ApplyClass 把玩家 entity 换成职业 class：外观、半径、移速、成长和技能换成职业的，
+// 基础属性按职业的初始值加上当前等级的成长重新算出，血量按比例保留。
+// 冷却和格挡状态被清掉（不能格挡的职业不会留在格挡里）；位置不变，所以 AOI 格子不用动。
+func (sys *System) ApplyClass(entity *core.Entity, class *config.Class) {
+	entity.Class = class.ID
+	entity.Model, entity.Color = class.Model, class.Color
+	entity.Radius = class.Radius
+	entity.Base, entity.Growth, entity.Speed = class.Attrs, class.Growth, class.Speed
+	for level := 1; level < entity.Level; level++ {
+		entity.Base.Str += class.Growth.Str
+		entity.Base.Agi += class.Growth.Agi
+		entity.Base.Int += class.Growth.Int
+		entity.Base.Vit += class.Growth.Vit
+	}
+	entity.Skills = sys.skills(class.Skills)
+	entity.Cooldowns = map[string]float64{}
+	// 现在只有刚进游戏和死亡期间能换职业，那时身上没有 Buff；以后放宽了也别把上个职业的 Buff 带过来
+	entity.Buffs = nil
+	if !class.CanBlock {
+		entity.Blocking = false
+	}
+	attr.Recalc(entity)
 }
 
 func (sys *System) add(entity *core.Entity) {

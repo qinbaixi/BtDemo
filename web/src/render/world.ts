@@ -13,6 +13,7 @@ import { Application, Container, Graphics, RenderLayer, type TextureSource } fro
 import { DEATH_MS, FEEL, HIT_MS, LOOK_FROST, LOOK_HOLY, MODEL_SCALE, RIM, ZONE_ASPECT } from '../game/config';
 import { clamp, hypot } from '../game/math';
 import { headY, posOf, state, type ClientEntity, type Point, type Quality, type Scenery } from '../game/state';
+import { rainCenter } from '../input';
 import { art } from './art';
 import type { LookEnt } from './fx';
 import { makeGrade, makeLut, ZONE_GRADES } from './grade';
@@ -190,6 +191,12 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
     const p = posOf(e, now);
     ents.push({ e, p });
     let v = actors.get(e.id);
+    if (v && v.model !== e.model) {
+      // 换了职业（模型变了）：旧的视图扔掉重建
+      v.destroy();
+      actors.delete(e.id);
+      v = undefined;
+    }
     if (!v) {
       v = new ActorView(e.model, RIM[e.kind], depth, xrayLayer);
       actors.set(e.id, v);
@@ -335,6 +342,15 @@ function drawMarks(mp: Point | null, now: number): void {
     // 回血区：地上压扁的椭圆，和放下后的范围一样
     g.ellipse(mp.x, mp.y, R, R * ZONE_ASPECT).fill({ color: 0xffffff, alpha: 0.05 });
     g.ellipse(mp.x, mp.y, R, R * ZONE_ASPECT).stroke({ width: 2, color: sk.color || '#7dffb0', alpha: 0.85 });
+  } else if (sk && sk.kind === 'rain') {
+    // 箭雨：脚下一圈射程虚线，落点处一个实心圈（就是会被箭扎到的范围）
+    dashArc(g, mp.x, mp.y, R, 10, 6);
+    g.stroke({ width: 1.5, color: sk.color || '#cfe6ff', alpha: 0.5 });
+    const center = rainCenter(sk, now);
+    if (center && sk.radius) {
+      g.circle(center.x, center.y, sk.radius).fill({ color: 0xffffff, alpha: 0.07 });
+      g.circle(center.x, center.y, sk.radius).stroke({ width: 2, color: sk.color || '#cfe6ff', alpha: 0.9 });
+    }
   } else if (sk && R > 0) {
     g.circle(mp.x, mp.y, R).fill({ color: 0xffffff, alpha: 0.05 });
     dashArc(g, mp.x, mp.y, R, 10, 6);

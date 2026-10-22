@@ -2,7 +2,10 @@
 #   desc:   选技能面板上的一句话说明
 #   kind:   target 单体（需要目标）| aoe 以自身为中心的范围伤害 | self 作用于自己（治疗 / 增益）
 #           | dash 朝瞄准方向位移 distance 像素（遇到障碍物停下）
-#           | line 朝瞄准方向扔出投掷物，命中直线上 range 内第一个敌人（被障碍物挡住就停）
+#           | line 朝瞄准方向扔出投掷物，命中直线上 range 内第一个敌人（被障碍物挡住就停）；
+#             pierce: true 时穿透，命中直线上的每个敌人，飞到射程尽头或墙前
+#           | rain 箭雨：有目标（边缘距离 ≤ range）就落在目标位置，否则落在前方 distance 处，
+#             打落点 radius 内的所有敌人
 #           | zone 在脚下放一个回血区（见 zone），同一个人再放时旧的消失
 #   damage: physical 物理（攻击 vs 防御）| magic 法术（法强 vs 法抗）
 #   伤害 = (攻击 × ratio + base) × 防御减免 × 暴击 × 随机浮动
@@ -50,6 +53,22 @@ skills:
   healing_spring: { name: 治愈之泉, kind: zone, cooldown: 40, fx: zone, color: "#7dffb0",
                 desc: 在脚下放一个回血法阵，60 秒内站在里面每秒回复 3% 生命,
                 zone: { name: 治愈之泉, radius: 110, heal: 0.03, interval: 1, duration: 60, look: rune, color: "#7dffb0" } }
+
+  # 游侠
+  shot:        { name: 射击,   kind: target, range: 300, cooldown: 0.8, damage: physical, ratio: 1.0, base: 3, fx: arrow, color: "#f0e2b6",
+                desc: 普攻，朝一个敌人射箭 }
+  pierce_shot: { name: 穿云箭, kind: line, pierce: true, range: 380, cooldown: 5, damage: physical, ratio: 1.4, base: 8, fx: pierce, color: "#ffe08a",
+                desc: 朝面向射出一支穿透的箭，打中直线上所有敌人 }
+  arrow_rain:  { name: 箭雨,   kind: rain,   range: 260, radius: 90, distance: 180, cooldown: 9, damage: physical, ratio: 0.9, base: 5, fx: rain, color: "#cfe6ff",
+                desc: 在目标（没有目标就在前方）脚下降下箭雨，打范围内所有敌人 }
+  roll:        { name: 翻滚,   kind: dash,   distance: 130, cooldown: 6, fx: roll, color: "#c8f0c0",
+                desc: 朝移动方向翻滚一段距离，撞墙就停 }
+  frost_arrow: { name: 冰霜箭, kind: target, range: 300, cooldown: 7, damage: magic, ratio: 1.0, base: 6, fx: frostarrow, color: "#8fd8ff",
+                desc: 射出冰箭，3 秒内目标减速 40%,
+                debuff: { name: 冰冻, duration: 3, speed_pct: -0.4, look: frost } }
+  focus:       { name: 鹰眼专注, kind: self, cooldown: 16, fx: focus, color: "#ffd27a",
+                desc: 6 秒内攻击 +35%，移速 +10%,
+                buff: { name: 鹰眼, duration: 6, atk_pct: 0.35, speed_pct: 0.1 } }
 
   bite:       { name: 撕咬,   kind: target, range: 60,  cooldown: 1.2, damage: physical, ratio: 1.0, base: 2,  fx: melee, color: "#b8f28b" }
   heavy_bite: { name: 猛扑,   kind: target, range: 60,  cooldown: 5,   damage: physical, ratio: 1.5, base: 3,  fx: melee, color: "#ffef5c" }

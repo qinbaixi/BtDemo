@@ -4,6 +4,7 @@ package combat
 import (
 	"errors"
 	"math"
+	"slices"
 
 	"google.golang.org/protobuf/proto"
 
@@ -133,13 +134,13 @@ func (sys *System) CalcDamage(src, dst *core.Entity, skill *config.Skill) (float
 }
 
 // Cast 让 entity 使用技能 skill。targetID 用于 kind 为 "target" 的技能。技能无法施放时，
-// 返回面向用户的错误。dash 和 line 技能要用 CastAimed 给出方向。
+// 返回面向用户的错误。dash、line 和 rain 技能要用 CastAimed 给出方向。
 func (sys *System) Cast(entity *core.Entity, skill *config.Skill, targetID int) error {
 	return sys.CastAimed(entity, skill, targetID, 0, 0)
 }
 
 // CastAimed 和 Cast 一样，多了瞄准方向 (aimX, aimY)（不必是单位向量），
-// 给 dash（往哪闪）和 line（往哪扔）技能用；没有方向时这两类技能放不出来。
+// 给 dash（往哪闪）、line（往哪扔）和 rain（没有目标时落在哪边）技能用；没有方向时 dash、line 放不出来，rain 没有目标时也放不出来。
 func (sys *System) CastAimed(
 	entity *core.Entity,
 	skill *config.Skill,
@@ -215,17 +216,27 @@ func (sys *System) CastAimed(
 		from := nav.Vec{X: entity.X, Y: entity.Y}
 		// 从身体边缘出手；被障碍物挡住的地方就是最远距离
 		end := sys.nav.Reach(from, dir, skill.Range+entity.Radius, projectileRadius)
-		target, hitAt := sys.firstOnLine(entity, from, dir, end.Dist(from))
-		if target != nil {
-			end = from.Add(dir.Scale(hitAt))
+		hits := sys.hostilesOnLine(entity, from, dir, end.Dist(from))
+		var first *core.Entity
+		if len(hits) > 0 {
+			first = hits[0].entity
 		}
-		event := castEvent(entity, target, skill)
+		if !skill.Pierce && first != nil {
+			// 普通投掷物打中第一个敌人就停在它身上；穿透的一直飞到射程尽头或墙前
+			end = from.Add(dir.Scale(hits[0].at))
+			hits = hits[:1]
+		}
+		event := castEvent(entity, first, skill)
 		event.X, event.Y = core.F32(core.Round1(from.X)), core.F32(core.Round1(from.Y))
 		event.Tx, event.Ty = core.F32(core.Round1(end.X)), core.F32(core.Round1(end.Y))
 		sys.state.Events.Emit(entity, event)
-		if target != nil {
-			dmg, crit := sys.CalcDamage(entity, target, skill)
-			sys.applyDamage(entity, target, dmg, crit, skill)
+		for _, hit := range hits {
+			dmg, crit := sys.CalcDamage(entity, hit.entity, skill)
+			sys.applyDamage(entity, hit.entity, dmg, crit, skill)
+		}
+	case "rain":
+		if err := sys.castRain(entity, skill, targetID, aimX, aimY); err != nil {
+			return err
 		}
 	case "self":
 		sys.state.Events.Emit(entity, castEvent(entity, entity, skill))
@@ -276,14 +287,20 @@ func unit(x, y float64) (nav.Vec, bool) {
 	return nav.Vec{X: x / length, Y: y / length}, true
 }
 
-// firstOnLine 找从 from 沿 dir 飞出 maxDist 内最先碰到的敌人，返回它和碰到时飞过的距离。
-func (sys *System) firstOnLine(
+// lineHit 是投掷物飞行线上的一个敌人，和飞到它边缘时飞过的距离。
+type lineHit struct {
+	entity *core.Entity
+	at     float64
+}
+
+// hostilesOnLine 找从 from 沿 dir 飞出 maxDist 内碰到的所有敌人，按先后顺序排好
+// （距离相同时 ID 小的在前，结果不依赖 map 的遍历顺序）。
+func (sys *System) hostilesOnLine(
 	entity *core.Entity,
 	from, dir nav.Vec,
 	maxDist float64,
-) (*core.Entity, float64) {
-	var hit *core.Entity
-	hitAt := math.Inf(1)
+) []lineHit {
+	var hits []lineHit
 	center := from.Add(dir.Scale(maxDist / 2))
 	sys.grid.InRange(
 		center.X,
@@ -301,17 +318,73 @@ func (sys *System) firstOnLine(
 			if across > reach || along < 0 || along > maxDist+reach {
 				return
 			}
-			// 碰到圆的边缘时飞过的距离；超过 maxDist 说明斧头在那之前已经被挡住或飞到头了
+			// 碰到圆的边缘时飞过的距离；超过 maxDist 说明投掷物在那之前已经被挡住或飞到头了
 			touch := math.Max(0, along-math.Sqrt(reach*reach-across*across))
 			if touch > maxDist {
 				return
 			}
-			if touch < hitAt || touch == hitAt && other.ID < hit.ID {
-				hit, hitAt = other, touch
+			hits = append(hits, lineHit{entity: other, at: touch})
+		},
+	)
+	slices.SortFunc(hits, func(left, right lineHit) int {
+		if left.at != right.at {
+			if left.at < right.at {
+				return -1
+			}
+			return 1
+		}
+		return left.entity.ID - right.entity.ID
+	})
+	return hits
+}
+
+// castRain 放箭雨：落点是选中的目标（存活、敌对、边缘距离不超过 range）所在的位置，
+// 没有这样的目标就是施法者沿瞄准方向 distance 处（夹在地图内）；两者都没有返回 ErrNoAim。
+// 先发一个 CAST（x、y 是落点），再对落点 radius 内（边缘距离）的每个敌人发 DAMAGE。
+func (sys *System) castRain(
+	entity *core.Entity,
+	skill *config.Skill,
+	targetID int,
+	aimX, aimY float64,
+) error {
+	centerX, centerY := 0.0, 0.0
+	target := sys.state.Ents.Get(targetID)
+	if target.Alive() && target != entity && sys.state.Hostile(entity, target) &&
+		core.EdgeDist(entity, target) <= skill.Range {
+		centerX, centerY = target.X, target.Y
+	} else {
+		target = nil
+		dir, ok := unit(aimX, aimY)
+		if !ok {
+			return ErrNoAim
+		}
+		world := sys.state.Cfg.World.Map
+		centerX = math.Max(0, math.Min(world.Width, entity.X+dir.X*skill.Distance))
+		centerY = math.Max(0, math.Min(world.Height, entity.Y+dir.Y*skill.Distance))
+	}
+	event := castEvent(entity, target, skill)
+	event.Radius = core.F32(skill.Radius)
+	event.X, event.Y = core.F32(core.Round1(centerX)), core.F32(core.Round1(centerY))
+	sys.state.Events.Emit(entity, event)
+	// 先收集目标，使伤害（及其导致的击杀）不会在遍历过程中改变网格。
+	var victims []*core.Entity
+	sys.grid.InRange(
+		centerX,
+		centerY,
+		skill.Radius+core.MaxRadius,
+		func(other *core.Entity) {
+			if other.Alive() && sys.state.Hostile(entity, other) &&
+				math.Max(0, math.Hypot(other.X-centerX, other.Y-centerY)-other.Radius) <= skill.Radius {
+				victims = append(victims, other)
 			}
 		},
 	)
-	return hit, hitAt
+	slices.SortFunc(victims, func(left, right *core.Entity) int { return left.ID - right.ID })
+	for _, victim := range victims {
+		dmg, crit := sys.CalcDamage(entity, victim, skill)
+		sys.applyDamage(entity, victim, dmg, crit, skill)
+	}
+	return nil
 }
 
 // addBuff 给 entity 加上 Buff（同名的会被刷新，不叠加），并通知客户端。

@@ -25,7 +25,17 @@ func (sp *System) Template(t *config.Template, x, y float64) *core.Entity
 
 ## 创建玩家：Player
 
-和怪物类似，但模板来自 `world.yaml` 的 `player`：名字是 `name_prefix + id`，有成长值 `Growth`；如果配置的初始等级大于 1，就循环调用 `attr.LevelUp` 升上去。玩家没有行为树（`AI == nil`），由客户端输入驱动。
+和怪物类似，但公共部分来自 `world.yaml` 的 `player`（名字是 `name_prefix + id`，初始等级 `level`），职业部分来自默认职业（`player.classes` 的第一个），由 `ApplyClass` 套上。玩家没有行为树（`AI == nil`），由客户端输入驱动。
+
+## 换职业：ApplyClass
+
+```go
+func (sys *System) ApplyClass(entity *core.Entity, class *config.Class)
+```
+
+把 `entity.Class` 设为职业 id，并换掉模型、颜色、半径、移速、成长和技能栏（默认技能）。基础属性从职业的初始值开始，按当前等级重放成长，所以等级保留、属性按新职业重算；`attr.Recalc` 让血量按比例保留。冷却清零，不能格挡的职业会取消格挡。位置不动，所以 AOI 格子不用改（半径只影响碰撞和边缘距离，每次判断时现读）。
+
+`ApplyClass` 不管其他玩家怎么看到新模型，那是 session 的事（`Loadout` 换职业时把实体从所有会话的可见集合里删掉，下次 `Flush` 重发 `Enter`），见 [session-server](session-server.md)。
 
 ## 复活：respawn
 

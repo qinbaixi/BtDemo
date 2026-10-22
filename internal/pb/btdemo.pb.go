@@ -424,12 +424,15 @@ func (*ClientMsg_Block) isClientMsg_Msg() {}
 
 func (*ClientMsg_Loadout) isClientMsg_Msg() {}
 
-// Loadout picks the player's skills for slots 2.. (slot 1, the basic attack,
-// is fixed). Allowed after joining and after dying, until the next cast; the
-// server answers with SkillBar, or a Toast when refused.
+// Loadout picks the player's class and skills for slots 2.. (slot 1, the
+// class's basic attack, is fixed). Allowed after joining and after dying,
+// until the next cast; the server answers with SkillBar, or a Toast when
+// refused. class empty = keep the current class; skills come from that
+// class's pool.
 type Loadout struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Skills        []string               `protobuf:"bytes,1,rep,name=skills" json:"skills,omitempty"`
+	Class         *string                `protobuf:"bytes,2,opt,name=class" json:"class,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -469,6 +472,13 @@ func (x *Loadout) GetSkills() []string {
 		return x.Skills
 	}
 	return nil
+}
+
+func (x *Loadout) GetClass() string {
+	if x != nil && x.Class != nil {
+		return *x.Class
+	}
+	return ""
 }
 
 // Block starts (on = true) or stops raising the guard: while blocking the
@@ -882,6 +892,7 @@ func (*ServerMsg_SkillBar) isServerMsg_Msg() {}
 type SkillBar struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Skills        []*SkillInfo           `protobuf:"bytes,1,rep,name=skills" json:"skills,omitempty"`
+	Class         *string                `protobuf:"bytes,2,opt,name=class" json:"class,omitempty"` // the player's class after the change
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -923,18 +934,26 @@ func (x *SkillBar) GetSkills() []*SkillInfo {
 	return nil
 }
 
+func (x *SkillBar) GetClass() string {
+	if x != nil && x.Class != nil {
+		return *x.Class
+	}
+	return ""
+}
+
 type SkillInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Slot          *int32                 `protobuf:"varint,1,req,name=slot" json:"slot,omitempty"`
 	Id            *string                `protobuf:"bytes,2,req,name=id" json:"id,omitempty"`
 	Name          *string                `protobuf:"bytes,3,req,name=name" json:"name,omitempty"`
-	Kind          *string                `protobuf:"bytes,4,req,name=kind" json:"kind,omitempty"` // target | aoe | self | dash | line | zone
+	Kind          *string                `protobuf:"bytes,4,req,name=kind" json:"kind,omitempty"` // target | aoe | self | dash | line (pierce: hits everyone on the line) | zone | rain
 	Range         *float32               `protobuf:"fixed32,5,opt,name=range" json:"range,omitempty"`
 	Radius        *float32               `protobuf:"fixed32,6,opt,name=radius" json:"radius,omitempty"`
 	Cooldown      *float32               `protobuf:"fixed32,7,opt,name=cooldown" json:"cooldown,omitempty"`
 	Color         *string                `protobuf:"bytes,8,opt,name=color" json:"color,omitempty"`
-	Fx            *string                `protobuf:"bytes,9,opt,name=fx" json:"fx,omitempty"`      // melee | projectile | circle | heal | buff | shield | blink | axe | frost | ...
-	Desc          *string                `protobuf:"bytes,10,opt,name=desc" json:"desc,omitempty"` // one-line description for the skill picker
+	Fx            *string                `protobuf:"bytes,9,opt,name=fx" json:"fx,omitempty"`                // melee | projectile | circle | heal | buff | shield | blink | axe | frost | ...
+	Desc          *string                `protobuf:"bytes,10,opt,name=desc" json:"desc,omitempty"`           // one-line description for the skill picker
+	Distance      *float32               `protobuf:"fixed32,11,opt,name=distance" json:"distance,omitempty"` // dash: how far; rain: how far ahead the centre lands when there is no target
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1039,6 +1058,122 @@ func (x *SkillInfo) GetDesc() string {
 	return ""
 }
 
+func (x *SkillInfo) GetDistance() float32 {
+	if x != nil && x.Distance != nil {
+		return *x.Distance
+	}
+	return 0
+}
+
+// ClassInfo is one player class (knight, ranger, ...) offered in the picker.
+type ClassInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            *string                `protobuf:"bytes,1,req,name=id" json:"id,omitempty"`
+	Name          *string                `protobuf:"bytes,2,req,name=name" json:"name,omitempty"`
+	Desc          *string                `protobuf:"bytes,3,opt,name=desc" json:"desc,omitempty"`
+	Model         *string                `protobuf:"bytes,4,opt,name=model" json:"model,omitempty"`
+	Color         *string                `protobuf:"bytes,5,opt,name=color" json:"color,omitempty"`
+	Skills        []*SkillInfo           `protobuf:"bytes,6,rep,name=skills" json:"skills,omitempty"`                      // default skill bar (slot 1 is the fixed basic attack)
+	Pool          []*SkillInfo           `protobuf:"bytes,7,rep,name=pool" json:"pool,omitempty"`                          // skills to pick from (slot is 0)
+	Pick          *int32                 `protobuf:"varint,8,opt,name=pick" json:"pick,omitempty"`                         // how many to pick (slots 2..pick+1)
+	CanBlock      *bool                  `protobuf:"varint,9,opt,name=can_block,json=canBlock" json:"can_block,omitempty"` // right-click block works (knight has a shield, ranger does not)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClassInfo) Reset() {
+	*x = ClassInfo{}
+	mi := &file_btdemo_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClassInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClassInfo) ProtoMessage() {}
+
+func (x *ClassInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_btdemo_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClassInfo.ProtoReflect.Descriptor instead.
+func (*ClassInfo) Descriptor() ([]byte, []int) {
+	return file_btdemo_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ClassInfo) GetId() string {
+	if x != nil && x.Id != nil {
+		return *x.Id
+	}
+	return ""
+}
+
+func (x *ClassInfo) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+func (x *ClassInfo) GetDesc() string {
+	if x != nil && x.Desc != nil {
+		return *x.Desc
+	}
+	return ""
+}
+
+func (x *ClassInfo) GetModel() string {
+	if x != nil && x.Model != nil {
+		return *x.Model
+	}
+	return ""
+}
+
+func (x *ClassInfo) GetColor() string {
+	if x != nil && x.Color != nil {
+		return *x.Color
+	}
+	return ""
+}
+
+func (x *ClassInfo) GetSkills() []*SkillInfo {
+	if x != nil {
+		return x.Skills
+	}
+	return nil
+}
+
+func (x *ClassInfo) GetPool() []*SkillInfo {
+	if x != nil {
+		return x.Pool
+	}
+	return nil
+}
+
+func (x *ClassInfo) GetPick() int32 {
+	if x != nil && x.Pick != nil {
+		return *x.Pick
+	}
+	return 0
+}
+
+func (x *ClassInfo) GetCanBlock() bool {
+	if x != nil && x.CanBlock != nil {
+		return *x.CanBlock
+	}
+	return false
+}
+
 // Welcome is the first message after connecting: a new character was created.
 type Welcome struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1050,13 +1185,15 @@ type Welcome struct {
 	Obstacles     []*Obstacle            `protobuf:"bytes,7,rep,name=obstacles" json:"obstacles,omitempty"` // collision shapes of the map props, for the debug overlay
 	Pool          []*SkillInfo           `protobuf:"bytes,8,rep,name=pool" json:"pool,omitempty"`           // skills the player may pick from (slot is 0)
 	Pick          *int32                 `protobuf:"varint,9,opt,name=pick" json:"pick,omitempty"`          // how many to pick (slots 2..pick+1)
+	Classes       []*ClassInfo           `protobuf:"bytes,10,rep,name=classes" json:"classes,omitempty"`    // classes to choose from; the first is the default
+	Class         *string                `protobuf:"bytes,11,opt,name=class" json:"class,omitempty"`        // the player's current class (pool/pick above are for it)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Welcome) Reset() {
 	*x = Welcome{}
-	mi := &file_btdemo_proto_msgTypes[10]
+	mi := &file_btdemo_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1068,7 +1205,7 @@ func (x *Welcome) String() string {
 func (*Welcome) ProtoMessage() {}
 
 func (x *Welcome) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[10]
+	mi := &file_btdemo_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1081,7 +1218,7 @@ func (x *Welcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Welcome.ProtoReflect.Descriptor instead.
 func (*Welcome) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{10}
+	return file_btdemo_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Welcome) GetId() int32 {
@@ -1140,6 +1277,20 @@ func (x *Welcome) GetPick() int32 {
 	return 0
 }
 
+func (x *Welcome) GetClasses() []*ClassInfo {
+	if x != nil {
+		return x.Classes
+	}
+	return nil
+}
+
+func (x *Welcome) GetClass() string {
+	if x != nil && x.Class != nil {
+		return *x.Class
+	}
+	return ""
+}
+
 // Obstacle is a collision shape in map coordinates.
 type Obstacle struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1155,7 +1306,7 @@ type Obstacle struct {
 
 func (x *Obstacle) Reset() {
 	*x = Obstacle{}
-	mi := &file_btdemo_proto_msgTypes[11]
+	mi := &file_btdemo_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1167,7 +1318,7 @@ func (x *Obstacle) String() string {
 func (*Obstacle) ProtoMessage() {}
 
 func (x *Obstacle) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[11]
+	mi := &file_btdemo_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1180,7 +1331,7 @@ func (x *Obstacle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Obstacle.ProtoReflect.Descriptor instead.
 func (*Obstacle) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{11}
+	return file_btdemo_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Obstacle) GetShape() ObstacleShape {
@@ -1245,7 +1396,7 @@ type EntityInfo struct {
 
 func (x *EntityInfo) Reset() {
 	*x = EntityInfo{}
-	mi := &file_btdemo_proto_msgTypes[12]
+	mi := &file_btdemo_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1257,7 +1408,7 @@ func (x *EntityInfo) String() string {
 func (*EntityInfo) ProtoMessage() {}
 
 func (x *EntityInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[12]
+	mi := &file_btdemo_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1270,7 +1421,7 @@ func (x *EntityInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntityInfo.ProtoReflect.Descriptor instead.
 func (*EntityInfo) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{12}
+	return file_btdemo_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *EntityInfo) GetId() int32 {
@@ -1359,7 +1510,7 @@ type Enter struct {
 
 func (x *Enter) Reset() {
 	*x = Enter{}
-	mi := &file_btdemo_proto_msgTypes[13]
+	mi := &file_btdemo_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1371,7 +1522,7 @@ func (x *Enter) String() string {
 func (*Enter) ProtoMessage() {}
 
 func (x *Enter) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[13]
+	mi := &file_btdemo_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1384,7 +1535,7 @@ func (x *Enter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Enter.ProtoReflect.Descriptor instead.
 func (*Enter) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{13}
+	return file_btdemo_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Enter) GetEnts() []*EntityInfo {
@@ -1403,7 +1554,7 @@ type Leave struct {
 
 func (x *Leave) Reset() {
 	*x = Leave{}
-	mi := &file_btdemo_proto_msgTypes[14]
+	mi := &file_btdemo_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1415,7 +1566,7 @@ func (x *Leave) String() string {
 func (*Leave) ProtoMessage() {}
 
 func (x *Leave) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[14]
+	mi := &file_btdemo_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1428,7 +1579,7 @@ func (x *Leave) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Leave.ProtoReflect.Descriptor instead.
 func (*Leave) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{14}
+	return file_btdemo_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Leave) GetIds() []int32 {
@@ -1459,7 +1610,7 @@ type EntityState struct {
 
 func (x *EntityState) Reset() {
 	*x = EntityState{}
-	mi := &file_btdemo_proto_msgTypes[15]
+	mi := &file_btdemo_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1471,7 +1622,7 @@ func (x *EntityState) String() string {
 func (*EntityState) ProtoMessage() {}
 
 func (x *EntityState) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[15]
+	mi := &file_btdemo_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1484,7 +1635,7 @@ func (x *EntityState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntityState.ProtoReflect.Descriptor instead.
 func (*EntityState) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{15}
+	return file_btdemo_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *EntityState) GetId() int32 {
@@ -1603,7 +1754,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_btdemo_proto_msgTypes[16]
+	mi := &file_btdemo_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1615,7 +1766,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[16]
+	mi := &file_btdemo_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1628,7 +1779,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{16}
+	return file_btdemo_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *Event) GetKind() EventKind {
@@ -1797,7 +1948,7 @@ type Attrs struct {
 
 func (x *Attrs) Reset() {
 	*x = Attrs{}
-	mi := &file_btdemo_proto_msgTypes[17]
+	mi := &file_btdemo_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1809,7 +1960,7 @@ func (x *Attrs) String() string {
 func (*Attrs) ProtoMessage() {}
 
 func (x *Attrs) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[17]
+	mi := &file_btdemo_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1822,7 +1973,7 @@ func (x *Attrs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Attrs.ProtoReflect.Descriptor instead.
 func (*Attrs) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{17}
+	return file_btdemo_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Attrs) GetStr() float32 {
@@ -1869,7 +2020,7 @@ type Derived struct {
 
 func (x *Derived) Reset() {
 	*x = Derived{}
-	mi := &file_btdemo_proto_msgTypes[18]
+	mi := &file_btdemo_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1881,7 +2032,7 @@ func (x *Derived) String() string {
 func (*Derived) ProtoMessage() {}
 
 func (x *Derived) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[18]
+	mi := &file_btdemo_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1894,7 +2045,7 @@ func (x *Derived) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Derived.ProtoReflect.Descriptor instead.
 func (*Derived) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{18}
+	return file_btdemo_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *Derived) GetMaxHp() float32 {
@@ -1963,7 +2114,7 @@ type SkillCooldown struct {
 
 func (x *SkillCooldown) Reset() {
 	*x = SkillCooldown{}
-	mi := &file_btdemo_proto_msgTypes[19]
+	mi := &file_btdemo_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1975,7 +2126,7 @@ func (x *SkillCooldown) String() string {
 func (*SkillCooldown) ProtoMessage() {}
 
 func (x *SkillCooldown) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[19]
+	mi := &file_btdemo_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1988,7 +2139,7 @@ func (x *SkillCooldown) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillCooldown.ProtoReflect.Descriptor instead.
 func (*SkillCooldown) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{19}
+	return file_btdemo_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SkillCooldown) GetSkill() string {
@@ -2015,7 +2166,7 @@ type BuffInfo struct {
 
 func (x *BuffInfo) Reset() {
 	*x = BuffInfo{}
-	mi := &file_btdemo_proto_msgTypes[20]
+	mi := &file_btdemo_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2027,7 +2178,7 @@ func (x *BuffInfo) String() string {
 func (*BuffInfo) ProtoMessage() {}
 
 func (x *BuffInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[20]
+	mi := &file_btdemo_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2040,7 +2191,7 @@ func (x *BuffInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuffInfo.ProtoReflect.Descriptor instead.
 func (*BuffInfo) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{20}
+	return file_btdemo_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *BuffInfo) GetName() string {
@@ -2076,7 +2227,7 @@ type SelfInfo struct {
 
 func (x *SelfInfo) Reset() {
 	*x = SelfInfo{}
-	mi := &file_btdemo_proto_msgTypes[21]
+	mi := &file_btdemo_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2088,7 +2239,7 @@ func (x *SelfInfo) String() string {
 func (*SelfInfo) ProtoMessage() {}
 
 func (x *SelfInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[21]
+	mi := &file_btdemo_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2101,7 +2252,7 @@ func (x *SelfInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SelfInfo.ProtoReflect.Descriptor instead.
 func (*SelfInfo) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{21}
+	return file_btdemo_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SelfInfo) GetLv() int32 {
@@ -2191,7 +2342,7 @@ type Sync struct {
 
 func (x *Sync) Reset() {
 	*x = Sync{}
-	mi := &file_btdemo_proto_msgTypes[22]
+	mi := &file_btdemo_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2203,7 +2354,7 @@ func (x *Sync) String() string {
 func (*Sync) ProtoMessage() {}
 
 func (x *Sync) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[22]
+	mi := &file_btdemo_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2216,7 +2367,7 @@ func (x *Sync) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Sync.ProtoReflect.Descriptor instead.
 func (*Sync) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{22}
+	return file_btdemo_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *Sync) GetTime() float32 {
@@ -2290,7 +2441,7 @@ type Zone struct {
 
 func (x *Zone) Reset() {
 	*x = Zone{}
-	mi := &file_btdemo_proto_msgTypes[23]
+	mi := &file_btdemo_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2302,7 +2453,7 @@ func (x *Zone) String() string {
 func (*Zone) ProtoMessage() {}
 
 func (x *Zone) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[23]
+	mi := &file_btdemo_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2315,7 +2466,7 @@ func (x *Zone) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Zone.ProtoReflect.Descriptor instead.
 func (*Zone) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{23}
+	return file_btdemo_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *Zone) GetId() int32 {
@@ -2420,7 +2571,7 @@ type AiNode struct {
 
 func (x *AiNode) Reset() {
 	*x = AiNode{}
-	mi := &file_btdemo_proto_msgTypes[24]
+	mi := &file_btdemo_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2432,7 +2583,7 @@ func (x *AiNode) String() string {
 func (*AiNode) ProtoMessage() {}
 
 func (x *AiNode) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[24]
+	mi := &file_btdemo_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2445,7 +2596,7 @@ func (x *AiNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AiNode.ProtoReflect.Descriptor instead.
 func (*AiNode) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{24}
+	return file_btdemo_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *AiNode) GetNode() int32 {
@@ -2523,7 +2674,7 @@ type AiCheck struct {
 
 func (x *AiCheck) Reset() {
 	*x = AiCheck{}
-	mi := &file_btdemo_proto_msgTypes[25]
+	mi := &file_btdemo_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2535,7 +2686,7 @@ func (x *AiCheck) String() string {
 func (*AiCheck) ProtoMessage() {}
 
 func (x *AiCheck) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[25]
+	mi := &file_btdemo_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2548,7 +2699,7 @@ func (x *AiCheck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AiCheck.ProtoReflect.Descriptor instead.
 func (*AiCheck) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{25}
+	return file_btdemo_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *AiCheck) GetNode() int32 {
@@ -2585,7 +2736,7 @@ type AiTreeDef struct {
 
 func (x *AiTreeDef) Reset() {
 	*x = AiTreeDef{}
-	mi := &file_btdemo_proto_msgTypes[26]
+	mi := &file_btdemo_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2597,7 +2748,7 @@ func (x *AiTreeDef) String() string {
 func (*AiTreeDef) ProtoMessage() {}
 
 func (x *AiTreeDef) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[26]
+	mi := &file_btdemo_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2610,7 +2761,7 @@ func (x *AiTreeDef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AiTreeDef.ProtoReflect.Descriptor instead.
 func (*AiTreeDef) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{26}
+	return file_btdemo_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *AiTreeDef) GetRoot() int32 {
@@ -2646,7 +2797,7 @@ type AiTreeNode struct {
 
 func (x *AiTreeNode) Reset() {
 	*x = AiTreeNode{}
-	mi := &file_btdemo_proto_msgTypes[27]
+	mi := &file_btdemo_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2658,7 +2809,7 @@ func (x *AiTreeNode) String() string {
 func (*AiTreeNode) ProtoMessage() {}
 
 func (x *AiTreeNode) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[27]
+	mi := &file_btdemo_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2671,7 +2822,7 @@ func (x *AiTreeNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AiTreeNode.ProtoReflect.Descriptor instead.
 func (*AiTreeNode) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{27}
+	return file_btdemo_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *AiTreeNode) GetId() int32 {
@@ -2761,7 +2912,7 @@ type AiTick struct {
 
 func (x *AiTick) Reset() {
 	*x = AiTick{}
-	mi := &file_btdemo_proto_msgTypes[28]
+	mi := &file_btdemo_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2773,7 +2924,7 @@ func (x *AiTick) String() string {
 func (*AiTick) ProtoMessage() {}
 
 func (x *AiTick) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[28]
+	mi := &file_btdemo_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2786,7 +2937,7 @@ func (x *AiTick) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AiTick.ProtoReflect.Descriptor instead.
 func (*AiTick) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{28}
+	return file_btdemo_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *AiTick) GetTime() float32 {
@@ -2813,7 +2964,7 @@ type KeyValue struct {
 
 func (x *KeyValue) Reset() {
 	*x = KeyValue{}
-	mi := &file_btdemo_proto_msgTypes[29]
+	mi := &file_btdemo_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2825,7 +2976,7 @@ func (x *KeyValue) String() string {
 func (*KeyValue) ProtoMessage() {}
 
 func (x *KeyValue) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[29]
+	mi := &file_btdemo_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2838,7 +2989,7 @@ func (x *KeyValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyValue.ProtoReflect.Descriptor instead.
 func (*KeyValue) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{29}
+	return file_btdemo_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *KeyValue) GetKey() string {
@@ -2870,7 +3021,7 @@ type AiTrace struct {
 
 func (x *AiTrace) Reset() {
 	*x = AiTrace{}
-	mi := &file_btdemo_proto_msgTypes[30]
+	mi := &file_btdemo_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2882,7 +3033,7 @@ func (x *AiTrace) String() string {
 func (*AiTrace) ProtoMessage() {}
 
 func (x *AiTrace) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[30]
+	mi := &file_btdemo_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2895,7 +3046,7 @@ func (x *AiTrace) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AiTrace.ProtoReflect.Descriptor instead.
 func (*AiTrace) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{30}
+	return file_btdemo_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *AiTrace) GetId() int32 {
@@ -2949,7 +3100,7 @@ type Toast struct {
 
 func (x *Toast) Reset() {
 	*x = Toast{}
-	mi := &file_btdemo_proto_msgTypes[31]
+	mi := &file_btdemo_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2961,7 +3112,7 @@ func (x *Toast) String() string {
 func (*Toast) ProtoMessage() {}
 
 func (x *Toast) ProtoReflect() protoreflect.Message {
-	mi := &file_btdemo_proto_msgTypes[31]
+	mi := &file_btdemo_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2974,7 +3125,7 @@ func (x *Toast) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Toast.ProtoReflect.Descriptor instead.
 func (*Toast) Descriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{31}
+	return file_btdemo_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *Toast) GetText() string {
@@ -2996,9 +3147,10 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x05watch\x18\x04 \x01(\v2\r.btdemo.WatchH\x00R\x05watch\x12%\n" +
 	"\x05block\x18\x05 \x01(\v2\r.btdemo.BlockH\x00R\x05block\x12+\n" +
 	"\aloadout\x18\x06 \x01(\v2\x0f.btdemo.LoadoutH\x00R\aloadoutB\x05\n" +
-	"\x03msg\"!\n" +
+	"\x03msg\"7\n" +
 	"\aLoadout\x12\x16\n" +
-	"\x06skills\x18\x01 \x03(\tR\x06skills\"\x17\n" +
+	"\x06skills\x18\x01 \x03(\tR\x06skills\x12\x14\n" +
+	"\x05class\x18\x02 \x01(\tR\x05class\"\x17\n" +
 	"\x05Block\x12\x0e\n" +
 	"\x02on\x18\x01 \x02(\bR\x02on\"&\n" +
 	"\x04Move\x12\x0e\n" +
@@ -3020,9 +3172,10 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x04sync\x18\x04 \x01(\v2\f.btdemo.SyncH\x00R\x04sync\x12%\n" +
 	"\x05toast\x18\x05 \x01(\v2\r.btdemo.ToastH\x00R\x05toast\x12/\n" +
 	"\tskill_bar\x18\x06 \x01(\v2\x10.btdemo.SkillBarH\x00R\bskillBarB\x05\n" +
-	"\x03msg\"5\n" +
+	"\x03msg\"K\n" +
 	"\bSkillBar\x12)\n" +
-	"\x06skills\x18\x01 \x03(\v2\x11.btdemo.SkillInfoR\x06skills\"\xdb\x01\n" +
+	"\x06skills\x18\x01 \x03(\v2\x11.btdemo.SkillInfoR\x06skills\x12\x14\n" +
+	"\x05class\x18\x02 \x01(\tR\x05class\"\xf7\x01\n" +
 	"\tSkillInfo\x12\x12\n" +
 	"\x04slot\x18\x01 \x02(\x05R\x04slot\x12\x0e\n" +
 	"\x02id\x18\x02 \x02(\tR\x02id\x12\x12\n" +
@@ -3034,7 +3187,18 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x05color\x18\b \x01(\tR\x05color\x12\x0e\n" +
 	"\x02fx\x18\t \x01(\tR\x02fx\x12\x12\n" +
 	"\x04desc\x18\n" +
-	" \x01(\tR\x04desc\"\xfa\x01\n" +
+	" \x01(\tR\x04desc\x12\x1a\n" +
+	"\bdistance\x18\v \x01(\x02R\bdistance\"\xf2\x01\n" +
+	"\tClassInfo\x12\x0e\n" +
+	"\x02id\x18\x01 \x02(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x02(\tR\x04name\x12\x12\n" +
+	"\x04desc\x18\x03 \x01(\tR\x04desc\x12\x14\n" +
+	"\x05model\x18\x04 \x01(\tR\x05model\x12\x14\n" +
+	"\x05color\x18\x05 \x01(\tR\x05color\x12)\n" +
+	"\x06skills\x18\x06 \x03(\v2\x11.btdemo.SkillInfoR\x06skills\x12%\n" +
+	"\x04pool\x18\a \x03(\v2\x11.btdemo.SkillInfoR\x04pool\x12\x12\n" +
+	"\x04pick\x18\b \x01(\x05R\x04pick\x12\x1b\n" +
+	"\tcan_block\x18\t \x01(\bR\bcanBlock\"\xbd\x02\n" +
 	"\aWelcome\x12\x0e\n" +
 	"\x02id\x18\x01 \x02(\x05R\x02id\x12\x13\n" +
 	"\x05map_w\x18\x02 \x02(\x02R\x04mapW\x12\x13\n" +
@@ -3043,7 +3207,10 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x06skills\x18\x05 \x03(\v2\x11.btdemo.SkillInfoR\x06skills\x12.\n" +
 	"\tobstacles\x18\a \x03(\v2\x10.btdemo.ObstacleR\tobstacles\x12%\n" +
 	"\x04pool\x18\b \x03(\v2\x11.btdemo.SkillInfoR\x04pool\x12\x12\n" +
-	"\x04pick\x18\t \x01(\x05R\x04pickJ\x04\b\x06\x10\a\"\x85\x01\n" +
+	"\x04pick\x18\t \x01(\x05R\x04pick\x12+\n" +
+	"\aclasses\x18\n" +
+	" \x03(\v2\x11.btdemo.ClassInfoR\aclasses\x12\x14\n" +
+	"\x05class\x18\v \x01(\tR\x05classJ\x04\b\x06\x10\a\"\x85\x01\n" +
 	"\bObstacle\x12+\n" +
 	"\x05shape\x18\x01 \x02(\x0e2\x15.btdemo.ObstacleShapeR\x05shape\x12\x0e\n" +
 	"\x02ax\x18\x02 \x02(\x02R\x02ax\x12\x0e\n" +
@@ -3251,7 +3418,7 @@ func file_btdemo_proto_rawDescGZIP() []byte {
 }
 
 var file_btdemo_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_btdemo_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
+var file_btdemo_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_btdemo_proto_goTypes = []any{
 	(ObstacleShape)(0),    // 0: btdemo.ObstacleShape
 	(EntityKind)(0),       // 1: btdemo.EntityKind
@@ -3267,28 +3434,29 @@ var file_btdemo_proto_goTypes = []any{
 	(*ServerMsg)(nil),     // 11: btdemo.ServerMsg
 	(*SkillBar)(nil),      // 12: btdemo.SkillBar
 	(*SkillInfo)(nil),     // 13: btdemo.SkillInfo
-	(*Welcome)(nil),       // 14: btdemo.Welcome
-	(*Obstacle)(nil),      // 15: btdemo.Obstacle
-	(*EntityInfo)(nil),    // 16: btdemo.EntityInfo
-	(*Enter)(nil),         // 17: btdemo.Enter
-	(*Leave)(nil),         // 18: btdemo.Leave
-	(*EntityState)(nil),   // 19: btdemo.EntityState
-	(*Event)(nil),         // 20: btdemo.Event
-	(*Attrs)(nil),         // 21: btdemo.Attrs
-	(*Derived)(nil),       // 22: btdemo.Derived
-	(*SkillCooldown)(nil), // 23: btdemo.SkillCooldown
-	(*BuffInfo)(nil),      // 24: btdemo.BuffInfo
-	(*SelfInfo)(nil),      // 25: btdemo.SelfInfo
-	(*Sync)(nil),          // 26: btdemo.Sync
-	(*Zone)(nil),          // 27: btdemo.Zone
-	(*AiNode)(nil),        // 28: btdemo.AiNode
-	(*AiCheck)(nil),       // 29: btdemo.AiCheck
-	(*AiTreeDef)(nil),     // 30: btdemo.AiTreeDef
-	(*AiTreeNode)(nil),    // 31: btdemo.AiTreeNode
-	(*AiTick)(nil),        // 32: btdemo.AiTick
-	(*KeyValue)(nil),      // 33: btdemo.KeyValue
-	(*AiTrace)(nil),       // 34: btdemo.AiTrace
-	(*Toast)(nil),         // 35: btdemo.Toast
+	(*ClassInfo)(nil),     // 14: btdemo.ClassInfo
+	(*Welcome)(nil),       // 15: btdemo.Welcome
+	(*Obstacle)(nil),      // 16: btdemo.Obstacle
+	(*EntityInfo)(nil),    // 17: btdemo.EntityInfo
+	(*Enter)(nil),         // 18: btdemo.Enter
+	(*Leave)(nil),         // 19: btdemo.Leave
+	(*EntityState)(nil),   // 20: btdemo.EntityState
+	(*Event)(nil),         // 21: btdemo.Event
+	(*Attrs)(nil),         // 22: btdemo.Attrs
+	(*Derived)(nil),       // 23: btdemo.Derived
+	(*SkillCooldown)(nil), // 24: btdemo.SkillCooldown
+	(*BuffInfo)(nil),      // 25: btdemo.BuffInfo
+	(*SelfInfo)(nil),      // 26: btdemo.SelfInfo
+	(*Sync)(nil),          // 27: btdemo.Sync
+	(*Zone)(nil),          // 28: btdemo.Zone
+	(*AiNode)(nil),        // 29: btdemo.AiNode
+	(*AiCheck)(nil),       // 30: btdemo.AiCheck
+	(*AiTreeDef)(nil),     // 31: btdemo.AiTreeDef
+	(*AiTreeNode)(nil),    // 32: btdemo.AiTreeNode
+	(*AiTick)(nil),        // 33: btdemo.AiTick
+	(*KeyValue)(nil),      // 34: btdemo.KeyValue
+	(*AiTrace)(nil),       // 35: btdemo.AiTrace
+	(*Toast)(nil),         // 36: btdemo.Toast
 }
 var file_btdemo_proto_depIdxs = []int32{
 	7,  // 0: btdemo.ClientMsg.move:type_name -> btdemo.Move
@@ -3297,42 +3465,45 @@ var file_btdemo_proto_depIdxs = []int32{
 	10, // 3: btdemo.ClientMsg.watch:type_name -> btdemo.Watch
 	6,  // 4: btdemo.ClientMsg.block:type_name -> btdemo.Block
 	5,  // 5: btdemo.ClientMsg.loadout:type_name -> btdemo.Loadout
-	14, // 6: btdemo.ServerMsg.welcome:type_name -> btdemo.Welcome
-	17, // 7: btdemo.ServerMsg.enter:type_name -> btdemo.Enter
-	18, // 8: btdemo.ServerMsg.leave:type_name -> btdemo.Leave
-	26, // 9: btdemo.ServerMsg.sync:type_name -> btdemo.Sync
-	35, // 10: btdemo.ServerMsg.toast:type_name -> btdemo.Toast
+	15, // 6: btdemo.ServerMsg.welcome:type_name -> btdemo.Welcome
+	18, // 7: btdemo.ServerMsg.enter:type_name -> btdemo.Enter
+	19, // 8: btdemo.ServerMsg.leave:type_name -> btdemo.Leave
+	27, // 9: btdemo.ServerMsg.sync:type_name -> btdemo.Sync
+	36, // 10: btdemo.ServerMsg.toast:type_name -> btdemo.Toast
 	12, // 11: btdemo.ServerMsg.skill_bar:type_name -> btdemo.SkillBar
 	13, // 12: btdemo.SkillBar.skills:type_name -> btdemo.SkillInfo
-	13, // 13: btdemo.Welcome.skills:type_name -> btdemo.SkillInfo
-	15, // 14: btdemo.Welcome.obstacles:type_name -> btdemo.Obstacle
-	13, // 15: btdemo.Welcome.pool:type_name -> btdemo.SkillInfo
-	0,  // 16: btdemo.Obstacle.shape:type_name -> btdemo.ObstacleShape
-	1,  // 17: btdemo.EntityInfo.kind:type_name -> btdemo.EntityKind
-	16, // 18: btdemo.Enter.ents:type_name -> btdemo.EntityInfo
-	2,  // 19: btdemo.Event.kind:type_name -> btdemo.EventKind
-	21, // 20: btdemo.SelfInfo.base:type_name -> btdemo.Attrs
-	22, // 21: btdemo.SelfInfo.attr:type_name -> btdemo.Derived
-	23, // 22: btdemo.SelfInfo.cds:type_name -> btdemo.SkillCooldown
-	24, // 23: btdemo.SelfInfo.buffs:type_name -> btdemo.BuffInfo
-	19, // 24: btdemo.Sync.ents:type_name -> btdemo.EntityState
-	20, // 25: btdemo.Sync.ev:type_name -> btdemo.Event
-	25, // 26: btdemo.Sync.self:type_name -> btdemo.SelfInfo
-	34, // 27: btdemo.Sync.ai:type_name -> btdemo.AiTrace
-	27, // 28: btdemo.Sync.zones:type_name -> btdemo.Zone
-	3,  // 29: btdemo.AiNode.status:type_name -> btdemo.AiStatus
-	29, // 30: btdemo.AiNode.checks:type_name -> btdemo.AiCheck
-	31, // 31: btdemo.AiTreeDef.nodes:type_name -> btdemo.AiTreeNode
-	33, // 32: btdemo.AiTreeNode.props:type_name -> btdemo.KeyValue
-	28, // 33: btdemo.AiTick.nodes:type_name -> btdemo.AiNode
-	32, // 34: btdemo.AiTrace.ticks:type_name -> btdemo.AiTick
-	33, // 35: btdemo.AiTrace.blackboard:type_name -> btdemo.KeyValue
-	30, // 36: btdemo.AiTrace.def:type_name -> btdemo.AiTreeDef
-	37, // [37:37] is the sub-list for method output_type
-	37, // [37:37] is the sub-list for method input_type
-	37, // [37:37] is the sub-list for extension type_name
-	37, // [37:37] is the sub-list for extension extendee
-	0,  // [0:37] is the sub-list for field type_name
+	13, // 13: btdemo.ClassInfo.skills:type_name -> btdemo.SkillInfo
+	13, // 14: btdemo.ClassInfo.pool:type_name -> btdemo.SkillInfo
+	13, // 15: btdemo.Welcome.skills:type_name -> btdemo.SkillInfo
+	16, // 16: btdemo.Welcome.obstacles:type_name -> btdemo.Obstacle
+	13, // 17: btdemo.Welcome.pool:type_name -> btdemo.SkillInfo
+	14, // 18: btdemo.Welcome.classes:type_name -> btdemo.ClassInfo
+	0,  // 19: btdemo.Obstacle.shape:type_name -> btdemo.ObstacleShape
+	1,  // 20: btdemo.EntityInfo.kind:type_name -> btdemo.EntityKind
+	17, // 21: btdemo.Enter.ents:type_name -> btdemo.EntityInfo
+	2,  // 22: btdemo.Event.kind:type_name -> btdemo.EventKind
+	22, // 23: btdemo.SelfInfo.base:type_name -> btdemo.Attrs
+	23, // 24: btdemo.SelfInfo.attr:type_name -> btdemo.Derived
+	24, // 25: btdemo.SelfInfo.cds:type_name -> btdemo.SkillCooldown
+	25, // 26: btdemo.SelfInfo.buffs:type_name -> btdemo.BuffInfo
+	20, // 27: btdemo.Sync.ents:type_name -> btdemo.EntityState
+	21, // 28: btdemo.Sync.ev:type_name -> btdemo.Event
+	26, // 29: btdemo.Sync.self:type_name -> btdemo.SelfInfo
+	35, // 30: btdemo.Sync.ai:type_name -> btdemo.AiTrace
+	28, // 31: btdemo.Sync.zones:type_name -> btdemo.Zone
+	3,  // 32: btdemo.AiNode.status:type_name -> btdemo.AiStatus
+	30, // 33: btdemo.AiNode.checks:type_name -> btdemo.AiCheck
+	32, // 34: btdemo.AiTreeDef.nodes:type_name -> btdemo.AiTreeNode
+	34, // 35: btdemo.AiTreeNode.props:type_name -> btdemo.KeyValue
+	29, // 36: btdemo.AiTick.nodes:type_name -> btdemo.AiNode
+	33, // 37: btdemo.AiTrace.ticks:type_name -> btdemo.AiTick
+	34, // 38: btdemo.AiTrace.blackboard:type_name -> btdemo.KeyValue
+	31, // 39: btdemo.AiTrace.def:type_name -> btdemo.AiTreeDef
+	40, // [40:40] is the sub-list for method output_type
+	40, // [40:40] is the sub-list for method input_type
+	40, // [40:40] is the sub-list for extension type_name
+	40, // [40:40] is the sub-list for extension extendee
+	0,  // [0:40] is the sub-list for field type_name
 }
 
 func init() { file_btdemo_proto_init() }
@@ -3362,7 +3533,7 @@ func file_btdemo_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_btdemo_proto_rawDesc), len(file_btdemo_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   32,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

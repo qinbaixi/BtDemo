@@ -69,7 +69,7 @@ export class ActorView {
    * xrayLayer 是画在所有角色和物件上面的渲染层（world.ts），剪影精灵挂到这一层去画，
    * 位置变换仍然跟着身体走。
    */
-  constructor(private model: string, private rim: string, parent: Container, private xrayLayer: RenderLayer | null = null) {
+  constructor(readonly model: string, private rim: string, parent: Container, private xrayLayer: RenderLayer | null = null) {
     this.sheet = art.characters.get(model) ?? null;
     this.body = this.sheet ? new Sprite() : (this.canvasBody = new CanvasSprite());
     this.sigil.scale.set(1, 0.42);

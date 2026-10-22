@@ -8,13 +8,27 @@ export interface SkillInfo {
   slot: number;
   id: string;
   name: string;
-  kind: 'target' | 'aoe' | 'self' | 'dash' | 'line' | 'zone' | string;
+  kind: 'target' | 'aoe' | 'self' | 'dash' | 'line' | 'zone' | 'rain' | string;
   range?: number;
   radius?: number;
+  distance?: number;   // dash 的距离；rain 没有目标时落点在前方多远
   cooldown?: number;
   color?: string;
   fx?: string;
   desc?: string;   // 选技能面板上的一句话说明
+}
+
+// ClassInfo 是选技能面板里可以选的一个职业。
+export interface ClassInfo {
+  id: string;
+  name: string;
+  desc: string;
+  model: string;
+  color: string;
+  skills: SkillInfo[];   // 默认技能栏（1 号位是固定的普攻）
+  pool: SkillInfo[];     // 可以挑的技能
+  pick: number;          // 要挑几个（放在第 2 格起）
+  canBlock: boolean;     // 右键格挡是否有效
 }
 
 export interface Obstacle {
@@ -175,6 +189,8 @@ export interface WelcomeMsg {
   obstacles: Obstacle[];
   pool: SkillInfo[];   // 可以挑的技能
   pick: number;        // 要挑几个（放在第 2 格起）
+  classes: ClassInfo[];   // 可选职业，第一个是默认
+  playerClass: string;    // 当前职业 id
 }
 export interface EnterMsg { t: 'enter'; ents: EntityInfo[] }
 export interface LeaveMsg { t: 'leave'; ids: number[] }
@@ -188,7 +204,7 @@ export interface SyncMsg {
   zones: ZoneInfo[] | null;   // 回血区有变化时是整份新列表，没变化时是 null
 }
 export interface ToastMsg { t: 'msg'; text: string }
-export interface SkillBarMsg { t: 'skills'; skills: SkillInfo[] }
+export interface SkillBarMsg { t: 'skills'; skills: SkillInfo[]; playerClass: string }   // playerClass 空 = 职业没变
 
 export type ServerMessage = WelcomeMsg | EnterMsg | LeaveMsg | SyncMsg | ToastMsg | SkillBarMsg;
 
@@ -196,6 +212,6 @@ export type ClientMessage =
   | { t: 'move'; dx: number; dy: number }
   | { t: 'target'; target: number }
   | { t: 'cast'; slot: number; target: number; dx?: number; dy?: number }
-  | { t: 'loadout'; skills: string[] }
+  | { t: 'loadout'; skills: string[]; cls?: string }   // cls 空 = 不换职业
   | { t: 'watch'; id: number }
   | { t: 'block'; on: boolean };

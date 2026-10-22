@@ -158,8 +158,9 @@ func TestLoadoutOnlyAtJoinAndDeath(t *testing.T) {
 		cfg.Skills[id] = &config.Skill{ID: id, Name: id, Kind: "self"}
 	}
 	cfg.Skills["slash"] = slashSkill()
-	cfg.World.Player.Skills = []string{"slash", "fireball", "heal"}
-	cfg.World.Player.SkillPool = []string{"fireball", "heal", "axe", "blink"}
+	knight := cfg.World.Player.DefaultClass()
+	knight.Skills = []string{"slash", "fireball", "heal"}
+	knight.SkillPool = []string{"fireball", "heal", "axe", "blink"}
 	cfg.World.Player.Respawn = 3
 	session := world.Join()
 	player := session.Player

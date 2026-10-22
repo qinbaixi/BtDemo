@@ -27,26 +27,50 @@ type Point struct {
 	Spread float64 `yaml:"spread"`
 }
 
-// Player 是每个新连接获得的模板。
+// Player 是每个新连接获得的模板：公共字段在这里，职业相关的字段在 Classes 里。
 type Player struct {
-	NamePrefix string   `yaml:"name_prefix"`
-	Spawn      Point    `yaml:"spawn"`
-	Level      int      `yaml:"level"`
-	Attrs      Attrs    `yaml:"attrs"`
-	Growth     Attrs    `yaml:"growth"`
-	Speed      float64  `yaml:"speed"`
-	Radius     float64  `yaml:"radius"`
-	Color      string   `yaml:"color"`
-	Model      string   `yaml:"model"`
-	Respawn    float64  `yaml:"respawn"`
-	Skills     []string `yaml:"skills"` // 默认技能：第 1 个是固定的普攻，其余是没选技能时的默认选择
-	// SkillPool 是玩家可以挑选的技能（进游戏和死亡时挑），挑 len(Skills)-1 个放到第 2 格起。
+	NamePrefix string  `yaml:"name_prefix"`
+	Spawn      Point   `yaml:"spawn"`
+	Level      int     `yaml:"level"`
+	Respawn    float64 `yaml:"respawn"`
+	Block      Block   `yaml:"block"`
+	// Classes 是玩家可以选的职业，第一个是新玩家的默认职业。
+	Classes []*Class `yaml:"classes"`
+}
+
+// Class 是一个玩家职业：外观、属性、成长、移速和技能。
+type Class struct {
+	ID       string  `yaml:"id"`
+	Name     string  `yaml:"name"`
+	Desc     string  `yaml:"desc"`  // 选职业时的一句话说明
+	Model    string  `yaml:"model"` // 客户端外观；默认为职业 id
+	Color    string  `yaml:"color"`
+	CanBlock bool    `yaml:"can_block"` // 能不能按住右键格挡
+	Attrs    Attrs   `yaml:"attrs"`
+	Growth   Attrs   `yaml:"growth"` // 每升一级增加的基础属性
+	Speed    float64 `yaml:"speed"`
+	Radius   float64 `yaml:"radius"`
+	// Skills 是默认技能：第 1 个是固定的普攻，其余是没选技能时的默认选择
+	Skills []string `yaml:"skills"`
+	// SkillPool 是玩家可以挑选的技能（进游戏和死亡时挑），挑 Pick() 个放到第 2 格起。
 	SkillPool []string `yaml:"skill_pool"`
-	Block     Block    `yaml:"block"`
 }
 
 // Pick 是玩家要挑几个技能（第 1 格普攻固定，不用挑）。
-func (player *Player) Pick() int { return len(player.Skills) - 1 }
+func (class *Class) Pick() int { return max(0, len(class.Skills)-1) }
+
+// DefaultClass 是新玩家的职业（列表里的第一个）。
+func (player *Player) DefaultClass() *Class { return player.Classes[0] }
+
+// Class 按 id 找职业，找不到返回 nil。
+func (player *Player) Class(id string) *Class {
+	for _, class := range player.Classes {
+		if class.ID == id {
+			return class
+		}
+	}
+	return nil
+}
 
 // Block 是玩家按住右键格挡时的效果。
 type Block struct {
@@ -117,7 +141,7 @@ type Skill struct {
 	ID       string  `yaml:"-"`
 	Name     string  `yaml:"name"`
 	Desc     string  `yaml:"desc"` // 选技能面板上的一句话说明
-	Kind     string  `yaml:"kind"` // target | aoe | self | dash 位移 | line 直线投掷 | zone 放回血区
+	Kind     string  `yaml:"kind"` // target | aoe | self | dash 位移 | line 直线投掷 | zone 放回血区 | rain 范围落箭
 	Range    float64 `yaml:"range"`
 	Radius   float64 `yaml:"radius"`
 	Cooldown float64 `yaml:"cooldown"`
@@ -125,7 +149,8 @@ type Skill struct {
 	Ratio    float64 `yaml:"ratio"`
 	Base     float64 `yaml:"base"`
 	Heal     float64 `yaml:"heal"`
-	Distance float64 `yaml:"distance"` // dash：位移距离
+	Distance float64 `yaml:"distance"` // dash：位移距离；rain：没有目标时落点在前方多远
+	Pierce   bool    `yaml:"pierce"`   // line：穿透，命中直线上的每个敌人
 	Buff     *Buff   `yaml:"buff"`
 	Debuff   *Buff   `yaml:"debuff"` // 命中时加在目标身上的效果（比如减速）
 	Zone     *Zone   `yaml:"zone"`   // zone：在脚下放的回血区
@@ -224,9 +249,6 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 	if world.Player.Level <= 0 {
 		world.Player.Level = 1
 	}
-	if world.Player.Model == "" {
-		world.Player.Model = "knight"
-	}
 	// 没配格挡时：减伤 80%、速度减半
 	if world.Player.Block.Reduce == 0 && world.Player.Block.Speed == 0 {
 		world.Player.Block = Block{Reduce: 0.8, Speed: 0.5}
@@ -251,7 +273,7 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 	for id, skill := range cfg.Skills {
 		skill.ID = id
 		switch skill.Kind {
-		case "target", "aoe", "self", "dash", "line", "zone":
+		case "target", "aoe", "self", "dash", "line", "zone", "rain":
 		default:
 			return fmt.Errorf("skills.yaml: skill %s has unknown kind %q", id, skill.Kind)
 		}
@@ -262,6 +284,12 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		}
 		if skill.Kind == "dash" && skill.Distance <= 0 {
 			return fmt.Errorf("skills.yaml: dash skill %s needs a distance", id)
+		}
+		if skill.Kind == "rain" && (skill.Range <= 0 || skill.Radius <= 0 || skill.Distance <= 0) {
+			return fmt.Errorf("skills.yaml: rain skill %s needs a range, radius and distance", id)
+		}
+		if skill.Pierce && skill.Kind != "line" {
+			return fmt.Errorf("skills.yaml: skill %s has pierce but is not a line skill", id)
 		}
 		if skill.Kind == "line" && skill.Range <= 0 {
 			return fmt.Errorf("skills.yaml: line skill %s needs a range", id)
@@ -303,18 +331,39 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		}
 		return nil
 	}
-	if err := checkSkills("world.yaml player", world.Player.Skills); err != nil {
-		return err
+	if len(world.Player.Classes) == 0 {
+		return fmt.Errorf("world.yaml: player needs at least one class")
 	}
-	if err := checkSkills("world.yaml player skill_pool", world.Player.SkillPool); err != nil {
-		return err
-	}
-	if len(world.Player.Skills) == 0 {
-		return fmt.Errorf("world.yaml: player needs at least one skill")
-	}
-	for _, id := range world.Player.Skills[1:] {
-		if !slices.Contains(world.Player.SkillPool, id) {
-			return fmt.Errorf("world.yaml: player default skill %q is not in skill_pool", id)
+	seenClasses := map[string]bool{}
+	for i, class := range world.Player.Classes {
+		owner := fmt.Sprintf("world.yaml player.classes[%d]", i)
+		if class.ID == "" {
+			return fmt.Errorf("%s: class needs an id", owner)
+		}
+		if seenClasses[class.ID] {
+			return fmt.Errorf("%s: duplicate class id %q", owner, class.ID)
+		}
+		seenClasses[class.ID] = true
+		owner = "world.yaml class " + class.ID
+		if class.Model == "" {
+			class.Model = class.ID
+		}
+		if class.Speed <= 0 || class.Radius <= 0 {
+			return fmt.Errorf("%s: speed and radius must be positive", owner)
+		}
+		if len(class.Skills) == 0 {
+			return fmt.Errorf("%s: needs at least one skill", owner)
+		}
+		if err := checkSkills(owner+" skills", class.Skills); err != nil {
+			return err
+		}
+		if err := checkSkills(owner+" skill_pool", class.SkillPool); err != nil {
+			return err
+		}
+		for _, id := range class.Skills[1:] {
+			if !slices.Contains(class.SkillPool, id) {
+				return fmt.Errorf("%s: default skill %q is not in skill_pool", owner, id)
+			}
 		}
 	}
 	for id, template := range cfg.Templates {
@@ -351,7 +400,7 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		}
 		// 行为树放技能时不给方向（combat.Cast），要瞄准的技能怪物用不了
 		for _, skillID := range template.Skills {
-			if kind := cfg.Skills[skillID].Kind; kind == "dash" || kind == "line" {
+			if kind := cfg.Skills[skillID].Kind; kind == "dash" || kind == "line" || kind == "rain" {
 				return fmt.Errorf("monsters.yaml: template %s cannot use %s skill %s", id, kind, skillID)
 			}
 		}

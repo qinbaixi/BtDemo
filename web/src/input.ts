@@ -3,9 +3,9 @@
 import { MOVE_DIR, SKILL_KEYS } from './game/config';
 import { clamp, hypot } from './game/math';
 import {
-  cdRemaining, headY, posOf, QUALITY_NAMES, setQuality, state, type ClientEntity, type Quality,
+  cdRemaining, headY, posOf, QUALITY_NAMES, setQuality, state, type ClientEntity, type Point, type Quality,
 } from './game/state';
-import type { ClientMessage } from './net/types';
+import type { ClientMessage, SkillInfo } from './net/types';
 import type { Debug } from './ui/debug';
 import { showToast } from './ui/hud';
 import { pickerKey } from './ui/picker';
@@ -57,18 +57,18 @@ export function castSlot(slot: number): void {
   const skill = state.skillBySlot[slot];
   if (!skill || state.pickerOpen) return;   // 挑技能时不放技能（放了就不能再换了）
   if (blocking) { showToast('格挡中不能出招'); return; }   // 服务端也会拒绝，这里省一次来回
-  const aim = skill.kind === 'dash' || skill.kind === 'line' ? aimFor(skill.kind) : { dx: 0, dy: 0 };
+  const aim = skill.kind === 'dash' || skill.kind === 'line' || skill.kind === 'rain' ? aimFor(skill.kind) : { dx: 0, dy: 0 };
   deps.send({ t: 'cast', slot, target: state.target || 0, ...aim });
 }
 
-// aimFor 给闪现和飞斧定方向：飞斧优先扔向当前目标；闪现和没有目标时朝按住的方向键，
-// 什么都没按就朝角色面向。
+// aimFor 给闪现、飞斧和箭雨定方向：飞斧优先扔向当前目标；箭雨有目标时落在目标上
+// （目标太远时服务端退回按方向落点，所以方向也朝目标发）；闪现和没有目标时朝按住的方向键，什么都没按就朝角色面向。
 function aimFor(kind: string): { dx: number; dy: number } {
   const now = performance.now();
   const me = state.ents.get(state.myId);
   if (!me) return { dx: 0, dy: 0 };
   const target = state.ents.get(state.target);
-  if (kind === 'line' && hostile(target)) {
+  if ((kind === 'line' || kind === 'rain') && hostile(target)) {
     const from = posOf(me, now);
     const to = posOf(target, now);
     if (hypot(from.x, from.y, to.x, to.y) > 1) return { dx: to.x - from.x, dy: to.y - from.y };
@@ -76,6 +76,26 @@ function aimFor(kind: string): { dx: number; dy: number } {
   const move = currentMove();
   if (move.dx !== 0 || move.dy !== 0) return move;
   return { dx: Math.cos(me.facing) < 0 ? -1 : 1, dy: 0 };
+}
+
+// rainCenter 预测箭雨会落在哪儿（和服务端一样：目标在射程内落在目标身上，否则沿瞄准方向落在 distance 处）。
+export function rainCenter(skill: SkillInfo, now: number): Point | null {
+  const me = state.ents.get(state.myId);
+  if (!me) return null;
+  const from = posOf(me, now);
+  const target = state.ents.get(state.target);
+  if (hostile(target)) {
+    const to = posOf(target, now);
+    if (hypot(from.x, from.y, to.x, to.y) <= (skill.range || 0) + (me.r || 14) + (target.r || 14)) return to;
+  }
+  const aim = aimFor('rain');
+  const len = Math.hypot(aim.dx, aim.dy) || 1;
+  const distance = skill.distance || 0;
+  // 和服务端一样，落点不出地图
+  return {
+    x: clamp(from.x + (aim.dx / len) * distance, 0, state.map.w),
+    y: clamp(from.y + (aim.dy / len) * distance, 0, state.map.h),
+  };
 }
 
 // 普攻：左键点怪就打它，点空地打当前目标或身边最近的怪；按住左键会一直打。
@@ -123,7 +143,14 @@ function tryAttack(): void {
   state.cds[sk.id] = (sk.cooldown || 0) + (now - state.cdsAt) / 1000;
 }
 
+// forgetBlock 在换成不能格挡的职业时丢掉本地的格挡状态（服务端那边已经取消了，不用再发）。
+export function forgetBlock(): void {
+  blocking = false;
+  state.blockHeld = false;
+}
+
 function setBlock(on: boolean): void {
+  if (on && !state.canBlock) return;   // 这个职业没有盾，右键不格挡
   if (blocking === on) return;
   blocking = on;
   state.blockHeld = on;

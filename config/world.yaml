@@ -23,16 +23,37 @@ player:
   name_prefix: 勇者
   spawn: { x: 520, y: 800, spread: 60 }
   level: 1
-  attrs: { str: 10, agi: 8, int: 8, vit: 12 }
-  growth: { str: 2, agi: 1.5, int: 1.5, vit: 2 }   # 每升一级增加的基础属性
-  speed: 170
-  radius: 16
-  color: "#4da3ff"
   respawn: 3
-  # 技能：第 1 个是固定的普攻（J / 左键），后面是默认选择；进游戏和死亡时可以从 skill_pool 里重新挑同样多个
-  skills: [slash, fireball, whirlwind, heal, warcry, shield]
-  skill_pool: [fireball, whirlwind, heal, warcry, shield, haste, holy_guard, blink, enchant, axe, frost_nova, healing_spring]
-  block: { reduce: 0.8, speed: 0.5 }   # 按住右键格挡：受到的伤害减少 80%，移动速度减半，不能放技能
+  block: { reduce: 0.8, speed: 0.5 }   # 按住右键格挡（只有 can_block 的职业能格挡）：受到的伤害减少 80%，移动速度减半，不能放技能
+  # 职业：第一个是新玩家的默认职业；进游戏和死亡时可以换职业（和挑技能一起，见 Loadout）
+  #   skills: 默认技能，第 1 个是固定的普攻（J / 左键），后面是默认选择
+  #   skill_pool: 可以挑的技能，挑 len(skills)-1 个放到第 2 格起
+  #   growth: 每升一级增加的基础属性；can_block: 能不能按住右键格挡
+  classes:
+    - id: knight
+      name: 骑士
+      desc: 持剑盾的近战，能格挡
+      model: knight
+      color: "#4da3ff"
+      can_block: true
+      attrs: { str: 10, agi: 8, int: 8, vit: 12 }
+      growth: { str: 2, agi: 1.5, int: 1.5, vit: 2 }
+      speed: 170
+      radius: 16
+      skills: [slash, fireball, whirlwind, heal, warcry, shield]
+      skill_pool: [fireball, whirlwind, heal, warcry, shield, haste, holy_guard, blink, enchant, axe, frost_nova, healing_spring]
+    - id: ranger
+      name: 游侠
+      desc: 弓箭手，远程输出，灵活走位
+      model: ranger
+      color: "#8fd17a"
+      can_block: false
+      attrs: { str: 6, agi: 14, int: 8, vit: 9 }
+      growth: { str: 1, agi: 2.4, int: 1.2, vit: 1.6 }
+      speed: 180
+      radius: 15
+      skills: [shot, pierce_shot, arrow_rain, roll, frost_arrow, focus]
+      skill_pool: [pierce_shot, arrow_rain, roll, frost_arrow, focus, haste, healing_spring]
 
 # 常驻回血区：站在里面的友方（和 faction 互不敌对的阵营）每隔 interval 秒回复 最大生命 × heal
 #   look: 客户端画法 spring 泉水 | rune 法阵

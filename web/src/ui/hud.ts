@@ -143,7 +143,8 @@ export function renderSelf(): void {
   if (!s) return;
   const me = state.ents.get(state.myId);
   setText(ui.selfName, me ? me.name : '我');
-  setText(ui.selfLv, `Lv ${fmt(s.lv)}`);
+  const cls = state.classes.find((c) => c.id === state.playerClass);
+  setText(ui.selfLv, `Lv ${fmt(s.lv)}${cls ? ' · ' + cls.name : ''}`);
 
   const maxHp = s.attr?.maxHp ?? me?.maxHp ?? 0;
   setBar(ui.selfHpFill, ui.selfHpText, s.hp ?? me?.hp ?? 0, maxHp);

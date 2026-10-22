@@ -22,11 +22,14 @@ message ClientMsg {
   }
 }
 
-// Loadout picks the player's skills for slots 2.. (slot 1, the basic attack,
-// is fixed). Allowed after joining and after dying, until the next cast; the
-// server answers with SkillBar, or a Toast when refused.
+// Loadout picks the player's class and skills for slots 2.. (slot 1, the
+// class's basic attack, is fixed). Allowed after joining and after dying,
+// until the next cast; the server answers with SkillBar, or a Toast when
+// refused. class empty = keep the current class; skills come from that
+// class's pool.
 message Loadout {
   repeated string skills = 1;
+  optional string class = 2;
 }
 
 // Block starts (on = true) or stops raising the guard: while blocking the
@@ -78,19 +81,34 @@ message ServerMsg {
 // SkillBar is the player's new skill bar after a Loadout was accepted.
 message SkillBar {
   repeated SkillInfo skills = 1;
+  optional string class = 2;   // the player's class after the change
 }
 
 message SkillInfo {
   required int32 slot = 1;
   required string id = 2;
   required string name = 3;
-  required string kind = 4;  // target | aoe | self | dash | line | zone
+  required string kind = 4;  // target | aoe | self | dash | line (pierce: hits everyone on the line) | zone | rain
   optional float range = 5;
   optional float radius = 6;
   optional float cooldown = 7;
   optional string color = 8;
   optional string fx = 9;    // melee | projectile | circle | heal | buff | shield | blink | axe | frost | ...
   optional string desc = 10; // one-line description for the skill picker
+  optional float distance = 11; // dash: how far; rain: how far ahead the centre lands when there is no target
+}
+
+// ClassInfo is one player class (knight, ranger, ...) offered in the picker.
+message ClassInfo {
+  required string id = 1;
+  required string name = 2;
+  optional string desc = 3;
+  optional string model = 4;
+  optional string color = 5;
+  repeated SkillInfo skills = 6;   // default skill bar (slot 1 is the fixed basic attack)
+  repeated SkillInfo pool = 7;     // skills to pick from (slot is 0)
+  optional int32 pick = 8;         // how many to pick (slots 2..pick+1)
+  optional bool can_block = 9;     // right-click block works (knight has a shield, ranger does not)
 }
 
 // Welcome is the first message after connecting: a new character was created.
@@ -104,6 +122,8 @@ message Welcome {
   repeated Obstacle obstacles = 7;    // collision shapes of the map props, for the debug overlay
   repeated SkillInfo pool = 8;        // skills the player may pick from (slot is 0)
   optional int32 pick = 9;            // how many to pick (slots 2..pick+1)
+  repeated ClassInfo classes = 10;    // classes to choose from; the first is the default
+  optional string class = 11;         // the player's current class (pool/pick above are for it)
 }
 
 enum ObstacleShape {

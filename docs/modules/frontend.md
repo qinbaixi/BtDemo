@@ -64,7 +64,7 @@ web/
         canvasSprite.ts 用 Canvas 2D 画内容的精灵（程序化模型、火焰、地面特效用它接进 Pixi）
         postFilter.ts   后期处理：泛光（亮部提取 + Kawase 模糊）+ LUT 调色，一个滤镜做完
       models.ts         角色模型和动作（程序化绘制，美术到位后替换）
-      knightActions.ts  骑士（玩家）每个技能的专属动作：关键帧、手脚 IK、出手时刻
+      knightActions.ts  玩家（骑士、游侠）每个技能的专属动作：关键帧、手脚 IK、出手时刻
       fx.ts             技能和战斗特效、粒子、屏幕震动（Canvas 2D）
       scenery.ts        地表、场景物件、环境光源（Canvas 2D 生成贴图）
     ui/
@@ -137,6 +137,22 @@ web/
 **瞄准**（`input.ts` 的 `aimFor`）：闪现（`dash`）和飞斧（`line`）发 `cast` 时带上方向 `dx`、`dy`。
 - 闪现：朝按住的方向键；什么都没按就朝角色面向（左或右）。
 - 飞斧：有当前目标（活着的怪）就朝它飞，否则同闪现。
+- 箭雨（`rain`）：和飞斧一样，有敌对目标就带上朝它的方向（服务端优先落在目标上，目标太远时退回按方向落点），否则同闪现。
+
+## 职业（骑士 / 游侠）
+
+- `Welcome.classes` 是可选职业（第一个是默认），`Welcome.class` 是当前职业；存进 `state.classes`、`state.playerClass`、`state.canBlock`。职业自带模型、颜色、默认技能栏、技能池（`pool`）和个数（`pick`）。
+- 选技能面板顶部是职业卡（职业少于 2 个时不显示），点卡或按数字键 `1` `2` 切换：技能池、个数、固定普攻、默认选择都换成该职业的。默认选择按职业分别记在 `localStorage` 的 `btdemo.loadout`（`{ cls, skills: { 职业: [技能] } }`）。
+- 确认时职业变了或技能变了就发 `loadout`，职业变了才带 `class`。服务端回 `skillBar`（带 `class`）后，`sync.ts` 更新 `playerClass`，并把技能池、个数、`canBlock` 换成新职业的。
+- 不能格挡的职业（`can_block` 为 false，如游侠）右键不发 `block`（`input.ts` 的 `setBlock`）。
+- 换职业后服务端会给所有人重发该实体的 `enter`；`sync.ts` 对已存在的实体更新 `model`、`name`、`color`、`r`，渲染层要在 `model` 变化时重建 ActorView。
+- 自己面板的等级后面显示职业名（`ui/hud.ts` 的 `renderSelf`）。
+- `render/world.ts` 发现实体的 `model` 和它的 ActorView 不一样时，销毁重建。
+
+**游侠模型**（`render/models.ts` 的 `drawRanger`）：玩家颜色的兜帽和叶边短披风、皮甲、背上斜挎箭袋，近侧手握反曲弓。
+弓身和箭的方向 `aim` 垂直；搭箭时（`nocked`）弦拉到远侧手，箭搭在弦上，穿云箭的箭头蓄力发金光、冰霜箭的箭头结冰。
+动作在 `knightActions.ts` 里以 `ranger:` 开头（`ranger:arrow` 普攻射击、`ranger:pierce`、`ranger:rain`、`ranger:frostarrow`、`ranger:roll`、`ranger:focus`，
+共用技能 `ranger:haste`、`ranger:zone`）；`events.ts` 按施法者模型拼动作名。翻滚的 `tumble` 让整个人绕身体中心转一圈。
 
 ## 技能特效和外观
 
@@ -148,6 +164,11 @@ web/
 - `axe` 飞斧：转着飞向终点（命中的敌人，或被墙挡住的地方）。
 - `frost` 冰霜新星：地上冰环往外扩，冰碴往外飞，飘几片雪。
 - `zone` 治愈之泉：手按到地上时一圈绿光贴地散开；法阵本身和出生点的泉水由 `render/zones.ts` 画（见 [zone](zone.md)）。站在回血区里回的血（`heal` 事件带 `zone`）是小号绿字加两三个小十字。
+- `arrow` / `frostarrow` 游侠的箭：比法球快，从弓上搭箭的位置（`muzzleOffset`）飞出；冰霜箭一路掉冰屑，命中炸一团冰花。
+- `pierce` 穿云箭：一支金箭沿直线飞到射程尽头（或墙），后面一道金光带，飞完整条光带淡掉；返回飞到第一个命中目标的时间，伤害数字按这个时间出。
+- `rain` 箭雨：先一箭射上天，落点亮出一圈虚线和准星，再 22 支箭陆续扎进圈里（落地扬土），插在地上一会儿再淡掉。悬停箭雨按钮时，脚下是射程虚线，预测落点（`input.ts` 的 `rainCenter`，和服务端规则一样）画实心圈。
+- `roll` 翻滚：起点扬土；服务端瞬间到位，客户端用 `slide`（`events.ts` 的 `rollTo`，`state.ts` 的 `posOf`）在动作前 3/4 里滑过去。
+- `focus` 鹰眼专注：脚下一圈金光，眼前金色星点往里收，眼睛闪金光（模型里画）。
 - 武器着火（`LOOK_FIRE`）时，物理技能（`melee`、`circle`、`axe`）的颜色换成火焰色（`events.ts`）。
 - 伤害事件带 `immune`：金色“免疫”飘字，不推不闪。
 

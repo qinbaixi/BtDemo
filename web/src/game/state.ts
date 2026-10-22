@@ -4,6 +4,7 @@
 import type { Aura, FX } from '../render/fx';
 import type { createScenery } from '../render/scenery';
 import type {
+  ClassInfo,
   EntityInfo, EntityKind, Obstacle, SelfInfo, SkillInfo, ZoneInfo,
 } from '../net/types';
 import { ATTACK_MS, KIND_COLOR, LERP_MS, MODEL_H, MODEL_SCALE } from './config';
@@ -36,6 +37,7 @@ export interface ClientEntity {
   blocking: boolean;  // 正在格挡
   looks: number;      // 身上 Buff 的外观（LOOK_* 位）
   blinkFrom: { x: number; y: number; at: number } | null;   // 最近一次闪现的起点（画残影）
+  slide: { x0: number; y0: number; x1: number; y1: number; at: number; ms: number } | null;   // 翻滚：从起点滑到终点
   model: string;
   // 动画状态
   facing: number;     // 0 朝右，PI 朝左
@@ -80,6 +82,9 @@ export interface State {
   skillBySlot: Record<number, SkillInfo>;
   skillPool: SkillInfo[];         // 可以挑的技能（welcome 里带的）
   skillPick: number;              // 要挑几个
+  classes: ClassInfo[];           // 可选职业（welcome 里带的，第一个是默认）
+  playerClass: string;            // 当前职业 id
+  canBlock: boolean;              // 当前职业能不能格挡（右键）
   pickerOpen: boolean;            // 选技能面板开着（这时不放技能）
   ents: Map<number, ClientEntity>;
   self: SelfInfo | null;          // 最近一次同步里的 self
@@ -147,6 +152,9 @@ export const state: State = {
   skillBySlot: {},
   skillPool: [],
   skillPick: 0,
+  classes: [],
+  playerClass: '',
+  canBlock: true,
   pickerOpen: false,
   ents: new Map(),
   self: null,
@@ -205,6 +213,7 @@ export function makeEntity(d: Partial<EntityInfo> & { id: number }, now: number)
     blocking: false,
     looks: 0,
     blinkFrom: null,
+    slide: null,
     model: d.model || '',
     facing: kind === 'player' ? 0 : (Math.random() < 0.5 ? 0 : Math.PI),
     walk: Math.random() * 6,
@@ -228,6 +237,16 @@ export function makeEntity(d: Partial<EntityInfo> & { id: number }, now: number)
 
 // posOf 是实体的绘制位置：从上一个位置插值到最近一次同步的位置。
 export function posOf(e: ClientEntity, now: number): Point {
+  const slide = e.slide;
+  if (slide) {
+    const k = (now - slide.at) / slide.ms;
+    // 滑动途中服务端又发来别的位置（被推开、继续走）时，以服务端为准
+    if (k >= 1 || e.x !== slide.x1 || e.y !== slide.y1) e.slide = null;
+    else {
+      const eased = 1 - (1 - Math.max(0, k)) * (1 - Math.max(0, k));
+      return { x: lerp(slide.x0, slide.x1, eased), y: lerp(slide.y0, slide.y1, eased) };
+    }
+  }
   const k = clamp((now - e.t0) / LERP_MS, 0, 1);
   return { x: lerp(e.px, e.x, k), y: lerp(e.py, e.y, k) };
 }

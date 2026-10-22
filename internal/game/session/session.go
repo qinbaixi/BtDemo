@@ -86,11 +86,14 @@ func (sys *System) Join() *Session {
 		AoiCell:   core.F32(sys.grid.Cell),
 		Obstacles: sys.obstacles,
 	}
+	class := cfg.Player.Class(session.Player.Class)
 	welcome.Skills = skillBar(session.Player.Skills)
-	for _, id := range cfg.Player.SkillPool {
-		welcome.Pool = append(welcome.Pool, skillInfo(0, sys.state.Cfg.Skills[id]))
+	welcome.Pool = skillPool(sys.state.Cfg, class)
+	welcome.Pick = core.I32(class.Pick())
+	welcome.Class = proto.String(class.ID)
+	for _, option := range cfg.Player.Classes {
+		welcome.Classes = append(welcome.Classes, classInfo(sys.state.Cfg, option))
 	}
-	welcome.Pick = core.I32(cfg.Player.Pick())
 	session.Player.CanPick = true // 刚进游戏，放第一个技能之前可以挑技能
 	sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Welcome{Welcome: welcome}})
 	return session
@@ -100,29 +103,52 @@ func (sys *System) Join() *Session {
 const (
 	reasonCannotPick = "只能在刚进游戏或死亡时更换技能"
 	reasonBadPick    = "技能选择无效"
+	reasonBadClass   = "职业无效"
 )
 
-// loadout 换上玩家挑的技能：第 1 格普攻不变，ids 依次放到第 2 格起。
-// 只能从技能池里挑、不能重复、数量要正好；不满足时返回给玩家看的原因。
-func (sys *System) loadout(entity *core.Entity, ids []string) string {
-	player := sys.state.Cfg.World.Player
+// loadout 换上玩家挑的职业和技能：classID 为空表示不换职业；换职业时先换成新职业
+// （外观、属性、技能栏都按新职业），再把 ids 依次放到第 2 格起，第 1 格是职业的普攻。
+// 只能从职业的技能池里挑、不能重复、数量要正好；不满足时返回给玩家看的原因，什么都不改。
+func (sys *System) loadout(entity *core.Entity, classID string, ids []string) string {
 	if !entity.CanPick {
 		return reasonCannotPick
 	}
-	if len(ids) != player.Pick() {
+	player := sys.state.Cfg.World.Player
+	if classID == "" {
+		classID = entity.Class
+	}
+	class := player.Class(classID)
+	if class == nil {
+		return reasonBadClass
+	}
+	if len(ids) != class.Pick() {
 		return reasonBadPick
 	}
-	skills := []*config.Skill{entity.Skills[0]}
 	seen := map[string]bool{}
 	for _, id := range ids {
-		if seen[id] || !slices.Contains(player.SkillPool, id) {
+		if seen[id] || !slices.Contains(class.SkillPool, id) {
 			return reasonBadPick
 		}
 		seen[id] = true
+	}
+	if class.ID != entity.Class {
+		sys.spawn.ApplyClass(entity, class)
+		sys.forgetEntity(entity)
+	}
+	skills := []*config.Skill{entity.Skills[0]}
+	for _, id := range ids {
 		skills = append(skills, sys.state.Cfg.Skills[id])
 	}
 	entity.Skills = skills
 	return ""
+}
+
+// forgetEntity 把 entity 从每个会话的可见集合里删掉，下次 Flush 会重新发它的 Enter，
+// 让其他玩家看到换了职业后的模型（客户端收到已存在实体的 Enter 时更新外观）。
+func (sys *System) forgetEntity(entity *core.Entity) {
+	for session := range sys.sessions {
+		delete(session.visible, entity.ID)
+	}
 }
 
 // Leave 移除会话的角色并关闭其输出。
@@ -148,19 +174,23 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 			entity.MoveX, entity.MoveY = 0, 0
 		}
 	case *pb.ClientMsg_Block:
-		entity.Blocking = body.Block.GetOn()
+		// 不能格挡的职业（游侠）忽略格挡消息；松开总是允许的
+		if on := body.Block.GetOn(); !on || sys.canBlock(entity) {
+			entity.Blocking = on
+		}
 	case *pb.ClientMsg_Target:
 		entity.Target = int(body.Target.GetId())
 	case *pb.ClientMsg_Watch:
 		session.Watch = int(body.Watch.GetId())
 		session.defSent = ""
 	case *pb.ClientMsg_Loadout:
-		if reason := sys.loadout(entity, body.Loadout.GetSkills()); reason != "" {
+		reason := sys.loadout(entity, body.Loadout.GetClass(), body.Loadout.GetSkills())
+		if reason != "" {
 			toast := &pb.Toast{Text: proto.String(reason)}
 			sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Toast{Toast: toast}})
 			return
 		}
-		bar := &pb.SkillBar{Skills: skillBar(entity.Skills)}
+		bar := &pb.SkillBar{Skills: skillBar(entity.Skills), Class: proto.String(entity.Class)}
 		sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_SkillBar{SkillBar: bar}})
 	case *pb.ClientMsg_Cast:
 		slot := int(body.Cast.GetSlot())
@@ -189,6 +219,12 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 			sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Toast{Toast: toast}})
 		}
 	}
+}
+
+// canBlock 报告 entity 的职业能不能格挡。
+func (sys *System) canBlock(entity *core.Entity) bool {
+	class := sys.state.Cfg.World.Player.Class(entity.Class)
+	return class != nil && class.CanBlock
 }
 
 // Watched 返回某些会话想要查看行为树跟踪的实体。

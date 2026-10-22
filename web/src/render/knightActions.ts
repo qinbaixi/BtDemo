@@ -1,4 +1,5 @@
-// 骑士（玩家模型）每个技能的专属动作：关键帧数据和插值。画法在 models.ts 的 drawKnight 里。
+// 玩家模型每个技能的专属动作：关键帧数据和插值。骑士的画法在 models.ts 的 drawKnight 里，
+// 游侠（键名 "ranger:技能fx"）的在 drawRanger 里。
 //
 // 每个动作是 0..1 时间轴上的一串关键帧，帧与帧之间按缓动插值。关键帧里写：
 //   near / far   近侧、远侧手的位置，用“躯干坐标”写：原点在两肩关节连线的中点，x 朝前、y 朝下。
@@ -15,19 +16,29 @@
 //   jitter       发力时的颤动幅度
 //   stretch      闪现到达时的横向拉伸（0..1）
 //   ease         到达这一帧的缓动：out 先快后慢（出招）、in 先慢后快（砸下去）、smooth（默认）
+// 游侠专用：
+//   near         近侧手握弓的位置（弓在近侧手上，朝向我们）
+//   far: 'string' 远侧手搭在弦上：位置由握弓的手、aim 和 draw 算出来（拉弦的手在脸的另一侧）
+//   aim          箭指向的角度（躯干坐标，从正下方算，往前为正；水平向前是 π/2），弓身和它垂直
+//   draw         拉弦的程度 0..1（1 = 拉满，弦拉到下巴）
+//   tumble       整个人绕身体中心翻滚的角度（翻滚）
 //
 // 动作的“出手”时刻（release）决定特效什么时候放：game/events.ts 把特效推迟 ms × release 毫秒，
 // 让火球从剑尖飞出、飞斧离手、冰霜在跺脚时炸开。
 
 type Vec2 = [number, number];
 type ArmSpec = Vec2 | { upper: number; elbow: number };
+type FarSpec = ArmSpec | 'string';
 type Ease = 'out' | 'in' | 'smooth';
 
 interface KeySpec {
   t: number;
   near: ArmSpec;
-  far: ArmSpec;
+  far: FarSpec;
   blade?: number;
+  aim?: number;
+  draw?: number;
+  tumble?: number;
   lean?: number;
   drop?: number;
   feet?: [Vec2, Vec2];
@@ -43,7 +54,7 @@ interface ActionSpec {
   swap: boolean;     // true：剑在远侧手、盾在近侧手（和站立时一样）；false：近侧手持剑
   slung?: boolean;   // 盾背到背上，空出近侧手（swap 时）
   spin?: [number, number];   // 原地转一圈的起止时刻
-  muzzle?: 'tip' | 'hand';   // 飞行道具从哪儿飞出去：剑尖（火球）或空着的近侧手（飞斧）
+  muzzle?: 'tip' | 'hand' | 'arrow';   // 飞行道具从哪儿飞出去：剑尖（火球）、空着的近侧手（飞斧）、弓上的箭（游侠）
   keys: KeySpec[];
 }
 
@@ -64,6 +75,11 @@ export interface ActionPose {
   feet: [Vec2, Vec2] | null;
   feetWeight: number; // 0..1：站姿 IK 腿和平常步态之间的混合
   spin: number;       // 转身角度（弧度），0 不转
+  aim: number;        // 游侠：箭指向的角度
+  draw: number;       // 游侠：拉弦的程度
+  tumble: number;     // 游侠：翻滚的角度
+  nocked: boolean;    // 游侠：弦上搭着箭（搭箭之后、出手之前）
+  release: number;    // 出手时刻（0..1）
 }
 
 interface Key {
@@ -78,6 +94,9 @@ interface Key {
   stretch: number;
   feet: [Vec2, Vec2] | null;
   ease: Ease;
+  aim: number;
+  draw: number;
+  tumble: number;
 }
 
 // 和 models.ts 里骑士的尺寸一致
@@ -85,6 +104,8 @@ export const SHOULDER_X = 6.5;   // 肩关节离身体中线的距离
 const HIP_Y = -17;               // 站着时胯的高度（脚底在 y = 0）
 const SHOULDER_BELOW_HIP = -12;  // 肩关节在胯上面多少
 const SWORD_LENGTH = 20;
+export const BOW_REST = 4;     // 弦不拉时，搭箭点在握弓的手后面多远
+export const BOW_PULL = 12;    // 拉满时再往后拉多远
 const UPPER = 7.2;
 const FORE = 6.8;
 
@@ -112,6 +133,12 @@ export function legIK(dx: number, dy: number, thigh: number, shin: number): Vec2
   const atHip = Math.acos((thigh * thigh + distance * distance - shin * shin) / (2 * thigh * distance));
   const atFoot = Math.acos((shin * shin + distance * distance - thigh * thigh) / (2 * shin * distance));
   return [base + atHip, base - atFoot];
+}
+
+// stringHand 是游侠拉弦的手在躯干坐标里的位置：从握弓的手沿箭的反方向退 BOW_REST + BOW_PULL × draw。
+export function stringHand(grip: Vec2, aim: number, draw: number): Vec2 {
+  const back = BOW_REST + BOW_PULL * draw;
+  return [grip[0] - Math.sin(aim) * back, grip[1] - Math.cos(aim) * back];
 }
 
 // armAngles 把关键帧里的手写法换成角度：[x, y] 是躯干坐标里手的位置。
@@ -264,11 +291,118 @@ const SPECS: Record<string, ActionSpec> = {
   },
 };
 
+// 游侠站着时：近侧手把弓斜提在身前，远侧手自然垂着
+const R_IDLE_NEAR = { upper: 0.5, elbow: 0.5 };
+const R_IDLE_FAR = { upper: 0.1, elbow: 0.35 };
+const R_IDLE = { near: R_IDLE_NEAR, far: R_IDLE_FAR, aim: 1.15 };
+const LEVEL = Math.PI / 2;   // 水平向前
+
+const RANGER_SPECS: Record<string, ActionSpec> = {
+  // 射击（普攻）：两脚分开站稳，搭箭、举弓拉满到下巴，松弦；拉弦的手顺势往后甩开
+  'ranger:arrow': {
+    ms: 520, release: 0.5, swap: false, muzzle: 'arrow',
+    keys: [
+      { t: 0, ...R_IDLE },
+      { t: 0.16, near: [14, 3], far: 'string', aim: 1.4, draw: 0.1, feet: [[-5, 0], [5, 0]], ease: 'out' },
+      { t: 0.46, near: [19, -1.5], far: 'string', aim: LEVEL, draw: 1, lean: 0.04, feet: [[-6, 0], [6, 0]] },
+      { t: 0.52, near: [19.5, -1.5], far: [-4, -3], aim: LEVEL, draw: 0, lean: -0.04, feet: [[-6, 0], [6, 0]], ease: 'out' },
+      { t: 0.74, near: [18.5, -1], far: [-3, -1], aim: LEVEL, lean: -0.02, feet: [[-6, 0], [6, 0]] },
+      { t: 1, ...R_IDLE },
+    ],
+  },
+  // 穿云箭：压低成弓步，拉满后多憋一会儿（手在发抖、箭头发光），松手时被后坐力推得往后一仰
+  'ranger:pierce': {
+    ms: 820, release: 0.62, swap: false, muzzle: 'arrow',
+    keys: [
+      { t: 0, ...R_IDLE },
+      { t: 0.16, near: [14, 4], far: 'string', aim: 1.45, draw: 0.2, feet: [[-7, 0], [7, 0]], drop: 2, ease: 'out' },
+      { t: 0.46, near: [19, 0], far: 'string', aim: LEVEL, draw: 1.1, lean: 0.14, feet: [[-11, 0], [9, 0]], drop: 5, jitter: 0.35, ease: 'out' },
+      { t: 0.6, near: [19, 0], far: 'string', aim: LEVEL, draw: 1.15, lean: 0.16, feet: [[-11, 0], [9, 0]], drop: 5, jitter: 0.7 },
+      { t: 0.66, near: [17, 0.5], far: [-5, -2], aim: LEVEL, draw: 0, lean: -0.16, feet: [[-11, 0], [9, 0]], drop: 4, ease: 'out' },
+      { t: 0.86, near: [17.5, 0.5], far: [-4, -1], aim: LEVEL, lean: -0.08, feet: [[-11, 0], [9, 0]], drop: 4 },
+      { t: 1, ...R_IDLE },
+    ],
+  },
+  // 箭雨：身子后仰，弓朝斜上方拉满，一箭射上天（箭在空中分成一片落下来）
+  'ranger:rain': {
+    ms: 700, release: 0.5, swap: false, muzzle: 'arrow',
+    keys: [
+      { t: 0, ...R_IDLE },
+      { t: 0.16, near: [12, -4], far: 'string', aim: 2.1, draw: 0.2, lean: -0.05, feet: [[-4, 0], [5, 0]], ease: 'out' },
+      { t: 0.46, near: [13.5, -9], far: 'string', aim: 2.5, draw: 1, lean: -0.2, feet: [[-6, 0], [6, 0]], drop: 1 },
+      { t: 0.52, near: [14, -9.5], far: [-5, -7], aim: 2.5, draw: 0, lean: -0.24, feet: [[-6, 0], [6, 0]], drop: 1, ease: 'out' },
+      { t: 0.76, near: [13.5, -9], far: [-4, -5], aim: 2.45, lean: -0.18, feet: [[-6, 0], [6, 0]], drop: 1 },
+      { t: 1, ...R_IDLE },
+    ],
+  },
+  // 冰霜箭：半蹲着拉弓，弦上的箭头结冰，松弦
+  'ranger:frostarrow': {
+    ms: 600, release: 0.52, swap: false, muzzle: 'arrow',
+    keys: [
+      { t: 0, ...R_IDLE },
+      { t: 0.18, near: [14, 3], far: 'string', aim: 1.45, draw: 0.15, feet: [[-6, 0], [7, 0]], drop: 2, ease: 'out' },
+      { t: 0.48, near: [18.5, -0.5], far: 'string', aim: LEVEL, draw: 1, lean: 0.08, feet: [[-8, 0], [8, 0]], drop: 4 },
+      { t: 0.54, near: [19, -0.5], far: [-4, -2], aim: LEVEL, draw: 0, lean: -0.04, feet: [[-8, 0], [8, 0]], drop: 4, ease: 'out' },
+      { t: 0.78, near: [18, 0], far: [-3, 0], aim: LEVEL, feet: [[-8, 0], [8, 0]], drop: 3 },
+      { t: 1, ...R_IDLE },
+    ],
+  },
+  // 翻滚：往前一扑，抱成一团滚一圈，起身
+  'ranger:roll': {
+    ms: 440, release: 0, swap: false,
+    keys: [
+      { t: 0, near: [12, 4], far: [4, 6], aim: 0.9, lean: 0.4, feet: [[-6, 0], [5, 0]], drop: 6 },
+      { t: 0.12, near: [10, 8], far: [4, 8], aim: 0.6, lean: 0.7, feet: [[-3, -5], [4, -7]], drop: 9, tumble: 0.8, ease: 'out' },
+      { t: 0.7, near: [10, 8], far: [4, 8], aim: 0.6, lean: 0.7, feet: [[-3, -5], [4, -7]], drop: 9, tumble: Math.PI * 2 },
+      { t: 0.82, near: [13, 3], far: [3, 6], aim: 1.0, lean: 0.25, feet: [[-6, 0], [6, 0]], drop: 5, tumble: Math.PI * 2 },
+      { t: 1, ...R_IDLE, tumble: Math.PI * 2 },
+    ],
+  },
+  // 鹰眼专注：把弓竖着举到眼前瞄一下，眼睛闪起金光
+  'ranger:focus': {
+    ms: 760, release: 0.3, swap: false,
+    keys: [
+      { t: 0, ...R_IDLE },
+      { t: 0.24, near: [13, -5], far: [2, 4], aim: LEVEL, lean: -0.04, feet: [[-4, 0], [4, 0]], lift: 1, ease: 'out' },
+      { t: 0.78, near: [13, -5.5], far: [2, 4], aim: LEVEL, lean: -0.06, feet: [[-4, 0], [4, 0]], lift: 1 },
+      { t: 1, ...R_IDLE },
+    ],
+  },
+  // 疾风步：伏低起跑，弓压在身前，一蹬冲出去
+  'ranger:haste': {
+    ms: 460, release: 0.16, swap: false,
+    keys: [
+      { t: 0, ...R_IDLE },
+      { t: 0.16, near: [12, 6], far: [-11, 4], aim: 0.8, lean: 0.55, feet: [[-12, 0], [7, 0]], drop: 7, ease: 'out' },
+      { t: 0.42, near: [12, 6.5], far: [-11, 4.5], aim: 0.8, lean: 0.6, feet: [[-12, 0], [7, 0]], drop: 8 },
+      { t: 0.6, near: [12, 3], far: [-10, 5], aim: 0.9, lean: 0.3, feet: [[-7, -1], [6, -6]], drop: 1, lift: 3, ease: 'out' },
+      { t: 1, ...R_IDLE },
+    ],
+  },
+  // 治愈之泉：弓举向天空，弓臂间聚起一团绿光，再单膝跪下把弓梢点进地里，法阵从那里铺开
+  'ranger:zone': {
+    ms: 820, release: 0.56, swap: false,
+    keys: [
+      { t: 0, ...R_IDLE },
+      { t: 0.2, near: [10, -13], far: [-2, 6], aim: 2.9, lean: -0.12, feet: [[-3, 0], [3, 0]], lift: 1.5, ease: 'out' },
+      { t: 0.4, near: [10.5, -13.5], far: [-2, 6], aim: 2.95, lean: -0.14, feet: [[-3, 0], [3, 0]], lift: 2, jitter: 0.25 },
+      { t: 0.56, near: [14, 8], far: [2, 8], aim: LEVEL - 0.25, lean: 0.4, feet: [[-10, 0], [8, 0]], drop: 10, ease: 'in' },
+      { t: 0.84, near: [14, 8.3], far: [2, 8], aim: LEVEL - 0.25, lean: 0.38, feet: [[-10, 0], [8, 0]], drop: 10 },
+      { t: 1, ...R_IDLE },
+    ],
+  },
+};
+Object.assign(SPECS, RANGER_SPECS);
+
 // compile 把关键帧的手位置换成角度，补上默认值，并让相邻帧的角度连续。
 function compile(spec: ActionSpec): Key[] {
   const keys: Key[] = [];
   for (const k of spec.keys) {
-    const far = armAngles(k.far, -1);
+    const aim = k.aim ?? LEVEL;
+    const draw = k.draw ?? 0;
+    // 搭在弦上的手：位置跟着握弓的手和拉弦的程度走
+    const farSpec = k.far === 'string' ? stringHand(k.near as Vec2, aim, draw) : k.far;
+    const far = armAngles(farSpec, -1);
     const near = armAngles(k.near, 1);
     const prev = keys[keys.length - 1];
     if (prev) {
@@ -290,6 +424,9 @@ function compile(spec: ActionSpec): Key[] {
       stretch: k.stretch ?? 0,
       feet: k.feet ?? null,
       ease: k.ease ?? 'smooth',
+      aim,
+      draw,
+      tumble: k.tumble ?? 0,
     });
   }
   return keys;
@@ -342,6 +479,8 @@ export function actionPose(name: string | undefined, k: number): ActionPose | nu
     spin = easeOf.smooth(sk) * Math.PI * 2;
   }
 
+  // 弦上有箭：从第一次搭弦到出手
+  const nockAt = spec.keys.find((key) => key.far === 'string')?.t ?? 2;
   return {
     name,
     k,
@@ -358,6 +497,11 @@ export function actionPose(name: string | undefined, k: number): ActionPose | nu
     feet,
     feetWeight,
     spin,
+    aim: lerp(from.aim, to.aim, eased),
+    draw: lerp(from.draw, to.draw, eased),
+    tumble: lerp(from.tumble, to.tumble, eased),
+    nocked: k >= nockAt && k < spec.release,
+    release: spec.release,
   };
 }
 
@@ -376,6 +520,11 @@ export function muzzleOffset(name: string): { x: number; y: number } | null {
   if (spec.muzzle === 'tip') {
     x += Math.sin(pose.blade) * SWORD_LENGTH;
     y += Math.cos(pose.blade) * SWORD_LENGTH;
+  }
+  if (spec.muzzle === 'arrow') {
+    // 箭从弓前面一点飞出去
+    x += Math.sin(pose.aim) * 3;
+    y += Math.cos(pose.aim) * 3;
   }
   // 换到模型坐标：上半身绕胯前倾 lean（和 canvas 的 rotate 一样，正数往前），再整体抬起 lift
   const hipY = HIP_Y + pose.drop;

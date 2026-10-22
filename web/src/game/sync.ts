@@ -3,6 +3,7 @@
 import type { Debug } from '../ui/debug';
 import { buildSkillBar, renderSelf, setConn, showToast } from '../ui/hud';
 import { closePicker, openPicker } from '../ui/picker';
+import { forgetBlock } from '../input';
 import { createScenery } from '../render/scenery';
 import { loadMap } from './map';
 import type { ClientMessage, ServerMessage, SkillInfo, SyncMsg, WelcomeMsg, ZoneInfo } from '../net/types';
@@ -25,7 +26,16 @@ export function handleMessage(m: ServerMessage, deps: SyncDeps): void {
     case 'welcome': onWelcome(m, deps); break;
     case 'enter':
       for (const d of m.ents || []) {
-        if (!state.ents.has(d.id)) state.ents.set(d.id, makeEntity(d, now));
+        const old = state.ents.get(d.id);
+        if (!old) {
+          state.ents.set(d.id, makeEntity(d, now));
+        } else {
+          // 已存在的实体再收到 Enter：对方换了职业，更新模型、名字、颜色和半径
+          if (d.model !== undefined) old.model = d.model;
+          if (d.name) old.name = d.name;
+          if (d.color) old.color = d.color;
+          if (d.r) old.r = d.r;
+        }
       }
       break;
     case 'leave':
@@ -43,6 +53,8 @@ export function handleMessage(m: ServerMessage, deps: SyncDeps): void {
     case 'msg': showToast(m.text); break;
     case 'skills':
       setSkills(m.skills);
+      if (m.playerClass) setPlayerClass(m.playerClass);
+      if (!state.canBlock) forgetBlock();
       buildSkillBar();
       showToast('技能已更换');
       break;
@@ -54,6 +66,16 @@ function setSkills(skills: SkillInfo[]): void {
   state.skills = (skills || []).slice().sort((a, b) => a.slot - b.slot);
   state.skillBySlot = {};
   for (const sk of state.skills) state.skillBySlot[sk.slot] = sk;
+}
+
+// setPlayerClass 记下当前职业，并把技能池、要挑的个数、能否格挡换成该职业的。
+function setPlayerClass(id: string): void {
+  state.playerClass = id;
+  const cls = state.classes.find((c) => c.id === id);
+  if (!cls) return;
+  state.skillPool = cls.pool;
+  state.skillPick = cls.pick;
+  state.canBlock = cls.canBlock;
 }
 
 // setZones 换上服务端发来的整份回血区列表。新出现的技能法阵从施法动作按地的那一刻开始铺开；
@@ -104,6 +126,12 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   state.map = m.map || state.map;
   state.cell = (m.aoi && m.aoi.cell) || state.cell;
   setSkills(m.skills);
+  state.skillPool = m.pool || [];
+  state.skillPick = m.pick || 0;
+  state.classes = m.classes || [];
+  state.canBlock = true;
+  setPlayerClass(m.playerClass || '');
+  // welcome 里的 pool / pick 就是当前职业的，以它们为准
   state.skillPool = m.pool || [];
   state.skillPick = m.pick || 0;
 

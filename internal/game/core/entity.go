@@ -41,6 +41,7 @@ type Identity struct {
 	Faction string
 	Color   string
 	Model   string           // 客户端外观，例如 knight、slime
+	Class   string           // 玩家职业 id（config.Class.ID）；怪物和 NPC 为空
 	Tmpl    *config.Template // 玩家为 nil
 }
 

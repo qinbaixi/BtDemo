@@ -27,7 +27,7 @@ const TAU = Math.PI * 2;
 const PI = Math.PI;
 const OUTLINE = '#0b0710';
 
-export const MODELS = ['knight', 'slime', 'wolf', 'skeleton_archer', 'ogre_chief', 'guard', 'villager'];
+export const MODELS = ['knight', 'ranger', 'slime', 'wolf', 'skeleton_archer', 'ogre_chief', 'guard', 'villager'];
 
 /* ------------------------------ colour ------------------------------ */
 
@@ -1078,6 +1078,247 @@ function drawKnightBody(ctx, q) {
   });
 }
 
+/* ------------------------------ ranger ------------------------------ */
+// 远程职业游侠：玩家颜色的兜帽和短披风，皮甲、亚麻袖子，背上斜挎箭袋，
+// 近侧手（朝向我们的那只）握一把反曲长弓。动作见 knightActions.ts 里 "ranger:" 开头的那些。
+
+const RANGER_BOW = 13;      // 弓臂从握把到弓梢的长度
+const RANGER_ARROW = 22;    // 箭长
+const RANGER_IDLE_AIM = 1.15;
+const LEATHER = '#7b5434';
+
+// rangerArms 返回 [远侧, 近侧] 手臂角度：技能动作给的，或站立 / 走路时把弓斜提在身前。
+function rangerArms(q, g) {
+  if (q.act) return [q.act.far, q.act.near];
+  if (q.dead >= 0) return g.arms;
+  const sw = q.moving ? Math.sin(q.walk || 0) * 0.1 : g.breathe * 0.03;
+  return [g.arms[0], [0.5 - sw, 0.5]];
+}
+
+// farHand 是远侧手在模型坐标（上半身已旋转）里的位置，和 humanoid 里的算法一样。
+function farHand(B, arm) {
+  return joint(-B.sw + 2.5, B.sy + 2, arm[0], 7.2, arm[0] + arm[1], 6.8);
+}
+
+function drawRanger(ctx, q) {
+  // 没有专属动作的攻击（比如别的代码路径触发的普通攻击）也按射击来画
+  const name = q.action || (q.attack >= 0 ? 'ranger:arrow' : '');
+  const act = q.dead >= 0 ? null : actionPose(name, q.attack);
+  if (act) q = { ...q, ph: null, act };
+  ctx.save();
+  if (act) {
+    const shake = act.jitter ? Math.sin(q.time * 0.09) * act.jitter * 0.7 : 0;
+    ctx.translate(shake, -act.lift);
+    if (act.tumble) {
+      // 翻滚：绕抱成一团的身体中心往前转
+      // 倒过来时头离地最远，整团往上抬一点，不让头扎进地里
+      const pivotY = -13 - Math.sin(act.tumble / 2) * 3;
+      ctx.translate(0, pivotY);
+      ctx.rotate(act.tumble);
+      ctx.translate(0, -pivotY);
+    }
+  }
+  drawRangerBody(ctx, q);
+  ctx.restore();
+}
+
+function drawRangerBody(ctx, q) {
+  const color = safeColor(q.color, '#8fd17a');
+  const hood = shade(color, -0.28);
+  const act = q.act;
+  const kind = act ? act.name.slice(7) : '';   // 去掉 "ranger:"
+  humanoid(ctx, q, {
+    legs: '#4d4232', boots: '#3a2616', body: LEATHER, sleeve: '#cdbb8e', forearm: '#6a4428', hand: '#e0b48c',
+    skin: '#ecc39c', shoulder: 9, waist: 5.6, headR: 7.1, stride: 0.66,
+    lean: (q) => (act ? act.lean + (act.jitter ? Math.sin(q.time * 0.07) * act.jitter * 0.03 : 0) : 0),
+    arms: rangerArms,
+    adjust: knightStance,
+    back(ctx, q, B) {
+      // 箭袋：从近侧肩斜挎到远侧胯后面，口朝上，露出一把箭羽
+      const qx = -B.sw - 0.5;
+      const qy = B.sy + 1;
+      ctx.save();
+      ctx.translate(qx, qy);
+      ctx.rotate(-0.42);
+      for (const [x, col] of [[-1.6, '#e8e0c8'], [0, '#c8402c'], [1.6, '#e8e0c8'], [0.8, '#2f6a3a']] as [number, string][]) {
+        inkLine(ctx, [x, 0, x + 0.3, -5.5], '#9a7a50', 0.9);
+        flat(ctx, (c) => pPoly(c, [x - 1, -4, x + 0.3, -8.4, x + 1.5, -4]), col, 0.9);
+      }
+      cel(ctx, (c) => pRrect(c, -3, -1.5, 6, 15, 2), '#5e3a1e', { sd: 1.4 });
+      line(ctx, [-3, 1.5, 3, 1.5], '#c79a4a', 1);
+      line(ctx, [-3, 10.5, 3, 10.5], '#c79a4a', 1);
+      ctx.restore();
+      // 短披风：在身后飘，下摆剪成叶子的形状
+      const sway = Math.sin(q.time / 210 + (q.walk || 0)) * 1.8;
+      const flare = act && (act.tumble > 0 || kind === 'haste');
+      const run = q.moving || flare ? 6 : 0;
+      cel(ctx, (c) => {
+        c.moveTo(-B.sw + 2, B.sy - 1);
+        c.quadraticCurveTo(-B.sw - 5 - run, B.sy + 6, -B.sw - 6 - run - sway, B.sy + 13);
+        c.lineTo(-B.sw - 3 - run * 0.7 - sway * 0.6, B.sy + 11);
+        c.lineTo(-B.sw - 2.5 - run * 0.5 - sway * 0.5, B.sy + 15);
+        c.lineTo(-B.sw + 0.5 - run * 0.3, B.sy + 12);
+        c.lineTo(-B.sw + 2 - run * 0.2, B.sy + 15.5);
+        c.quadraticCurveTo(-1, B.sy + 9, B.sw - 4, B.sy + 1);
+        c.closePath();
+      }, hood, { dark: shade(color, -0.55), lit: shade(color, -0.08), sd: 2.6 });
+      folds(ctx, [[-B.sw, B.sy + 3, -B.sw - 3 - run * 0.5, B.sy + 8, -B.sw - 4 - run * 0.8 - sway, B.sy + 12]], 'rgba(10,20,6,0.45)', 0.8);
+    },
+    torsoDetail(ctx, q, B) {
+      // 皮甲的缝线、箭袋的斜挎带、腰带和小皮囊
+      folds(ctx, [[0.5, B.sy + 3, 0.8, B.hipY - 2]], 'rgba(40,20,8,0.55)', 0.8);
+      ctx.save();
+      ctx.setLineDash([0.8, 1.2]);
+      line(ctx, [-B.ww + 1, B.sy + 5, -B.ww + 1.4, B.hipY - 2.5], 'rgba(240,210,160,0.55)', 0.5);
+      ctx.restore();
+      inkLine(ctx, [B.sw - 3, B.sy + 0.5, -B.ww + 0.5, B.hipY - 2], '#4a2c16', 1.6);
+      flat(ctx, (c) => pRrect(c, -1.4, B.sy + 6, 2.6, 2.2, 0.6), '#c79a4a', 0.9);
+      // 皮甲下摆
+      cel(ctx, (c) => pPoly(c, [-B.ww - 0.5, B.hipY - 1, B.ww + 0.5, B.hipY - 1, B.ww + 2.2, B.hipY + 5, 1, B.hipY + 4, -B.ww - 1.8, B.hipY + 5.4]), shade(LEATHER, -0.1), { sd: 1.4 });
+      flat(ctx, (c) => pRrect(c, -B.ww - 0.8, B.hipY - 2.6, B.ww * 2 + 1.6, 2.8, 1), '#3c2412', 1.1);
+      flat(ctx, (c) => pRrect(c, -0.8, B.hipY - 2.9, 2.6, 3.4, 0.7), '#c79a4a', 1);
+      cel(ctx, (c) => pRrect(c, B.ww - 1.2, B.hipY - 1.2, 3.6, 4, 1.2), '#5e3a1e', { sd: 1, lw: 1.1 });
+      // 兜帽连着的披肩：盖住两肩，边上剪成叶尖
+      cel(ctx, (c) => {
+        c.moveTo(-B.sw - 0.5, B.sy + 1);
+        c.quadraticCurveTo(0, B.sy - 3.4, B.sw + 1, B.sy + 0.5);
+        c.lineTo(B.sw + 1.6, B.sy + 4.5);
+        c.lineTo(B.sw - 1.2, B.sy + 3.6);
+        c.lineTo(B.sw - 2.6, B.sy + 6.6);
+        c.lineTo(B.sw - 4.6, B.sy + 4);
+        c.lineTo(B.sw - 7, B.sy + 7);
+        c.lineTo(B.sw - 8.6, B.sy + 4);
+        c.lineTo(-B.sw + 2, B.sy + 6);
+        c.lineTo(-B.sw + 0.5, B.sy + 3.6);
+        c.closePath();
+      }, color, { dark: shade(color, -0.4), sd: 1.8 });
+      line(ctx, [B.sw - 1.2, B.sy + 3.6, B.sw - 2.6, B.sy + 6.6, B.sw - 4.6, B.sy + 4, B.sw - 7, B.sy + 7], shade(color, 0.35), 0.6);
+    },
+    head(ctx, q, B) {
+      const { hx, hy, hr } = B;
+      // 额前一绺头发、眼睛；鹰眼专注时眼里闪金光
+      flat(ctx, (c) => pPoly(c, [hx - 1, hy - 4, hx + hr - 0.5, hy - 3.6, hx + 4.5, hy - 1.6, hx + 2.2, hy - 2.6, hx + 0.6, hy - 1]), '#6a3f22', 0.9);
+      eyes(ctx, hx + 2.8, hy + 1, '#16101c', 1.6);
+      flat(ctx, (c) => pPoly(c, [hx + 1.4, hy - 1.4, hx + 4.4, hy - 1.8, hx + 4.2, hy - 1.2]), '#4a2a14');
+      if (kind === 'focus') {
+        const eye = envelope(act.k, 0.2, 0.32, 0.7, 0.9);
+        if (eye > 0) {
+          flat(ctx, (c) => pEll(c, hx + 6.6, hy + 1, 1.1, 1.6), '#ffe27a');
+          sparkle(ctx, hx + 6.8, hy + 0.6, 4.5 * eye, '#fff6c8');
+        }
+      }
+      // 兜帽：罩住头顶和后脑，帽尖垂在脑后
+      const sway = Math.sin(q.time / 260) * 0.8 + (q.moving ? -1.2 : 0);
+      cel(ctx, (c) => {
+        c.moveTo(hx + hr + 0.4, hy - 0.8);
+        c.quadraticCurveTo(hx + hr + 0.6, hy - hr - 2.2, hx - 0.5, hy - hr - 1.4);
+        c.quadraticCurveTo(hx - hr - 3, hy - hr + 0.5, hx - hr - 5 + sway, hy - 1.5);
+        c.lineTo(hx - hr - 1.5 + sway * 0.4, hy + 0.2);
+        c.quadraticCurveTo(hx - hr - 1.6, hy + 4, hx - hr + 0.4, hy + 6.5);
+        c.lineTo(hx - 2.8, hy + 6.2);
+        c.quadraticCurveTo(hx - 1, hy + 1, hx - 0.6, hy - 2.6);
+        c.quadraticCurveTo(hx + 3, hy - hr + 0.6, hx + hr - 1.2, hy - 1.6);
+        c.closePath();
+      }, color, { dark: shade(color, -0.42), sd: 2 });
+      folds(ctx, [[hx + 1, hy - hr - 0.6, hx - 3, hy - hr - 0.2, hx - hr - 3 + sway, hy - 1.2]], shade(color, -0.45), 0.7);
+      line(ctx, [hx + hr - 1, hy - 1.4, hx - 0.4, hy - 2.4], shade(color, 0.3), 0.6);
+    },
+    weaponBehindHand: true,
+    weapon(ctx, q, B, h) {
+      drawBow(ctx, q, B, h, act, kind);
+    },
+  });
+}
+
+// drawBow 画近侧手里的弓、弦、搭在弦上的箭和拉弦的手指。弓身和箭的方向 aim 垂直。
+function drawBow(ctx, q, B, h, act, kind) {
+  const aim = act ? act.aim : q.dead >= 0 ? h.a + 0.6 : RANGER_IDLE_AIM;
+  const draw = act ? act.draw : 0;
+  const dx = Math.sin(aim);
+  const dy = Math.cos(aim);
+  // 弓梢方向：aim 水平向前时朝正上方
+  const ux = dy;
+  const uy = -dx;
+  const at = (along, side) => [h.x + ux * along + dx * side, h.y + uy * along + dy * side];
+  const back = -draw * 2.6;   // 拉满时弓梢往后弯
+  const [tx, ty] = at(RANGER_BOW, back - 0.6);
+  const [bx, by] = at(-RANGER_BOW, back - 0.6);
+  const [c1x, c1y] = at(7.5, 4.6 + draw * 0.8);
+  const [c2x, c2y] = at(-7.5, 4.6 + draw * 0.8);
+  const [gx, gy] = at(0, 1.4);
+  // 弦：搭箭时拉到远侧手，否则绷直；刚松手时弦还在抖
+  let nock = null;
+  if (act && act.nocked) {
+    const hand = farHand(B, act.far);
+    nock = [hand.ex, hand.ey];
+  }
+  const pluck = act && act.release > 0 && act.k >= act.release ? Math.max(0, 1 - (act.k - act.release) * 7) : 0;
+  const mid = nock || (() => {
+    const wobble = pluck * Math.sin(q.time * 0.6) * 1.6;
+    return [(tx + bx) / 2 + dx * wobble, (ty + by) / 2 + dy * wobble];
+  })();
+  line(ctx, [tx, ty, mid[0], mid[1], bx, by], 'rgba(238,232,210,0.95)', 0.7);
+
+  // 搭在弦上的箭
+  if (nock) {
+    const [nx, ny] = nock;
+    const ex = nx + dx * RANGER_ARROW;
+    const ey = ny + dy * RANGER_ARROW;
+    inkLine(ctx, [nx, ny, ex - dx * 2, ey - dy * 2], '#c9a46a', 1.1);
+    // 箭羽
+    for (const side of [-1, 1]) {
+      flat(ctx, (c) => pPoly(c, [nx + dx * 0.5, ny + dy * 0.5, nx + dx * 4.5, ny + dy * 4.5,
+        nx + dx * 1.5 + ux * side * 2, ny + dy * 1.5 + uy * side * 2]), side > 0 ? '#c8402c' : '#efe6cc', 0.8);
+    }
+    const head = kind === 'frostarrow' ? '#bfeaff' : kind === 'pierce' ? '#fff3c4' : '#d6dde6';
+    const P = (f, s) => [ex + dx * f + ux * s, ey + dy * f + uy * s];
+    if (kind === 'pierce') {
+      // 憋住的那一下箭头越来越亮，箭身上缠一圈金光
+      const charge = clamp01((act.k - 0.2) / 0.4);
+      flat(ctx, (c) => pPoly(c, [...P(-4, 2.8 + charge * 1.4), ...P(4 + charge * 2, 0), ...P(-4, -2.8 - charge * 1.4), ...P(-2, 0)]), '#ffd45a', 0.9);
+      glint(ctx, ex + dx * 1, ey + dy * 1, 6 + charge * 6, 'rgba(255,220,120,0.7)', charge);
+      line(ctx, [nx + dx * 6, ny + dy * 6, ex - dx * 3, ey - dy * 3], `rgba(255,240,180,${0.8 * charge})`, 0.6);
+    }
+    if (kind === 'frostarrow') {
+      // 冰晶包住箭头
+      flat(ctx, (c) => pPoly(c, [...P(-5, 2.6), ...P(-1, 3.6), ...P(3.5, 0), ...P(-1, -3.6), ...P(-5, -2.6)]), '#8fd8ff', 0.9);
+      glint(ctx, ex, ey, 6, 'rgba(160,230,255,0.6)');
+    }
+    flat(ctx, (c) => pPoly(c, [...P(-3, 1.8), ...P(2.4, 0), ...P(-3, -1.8), ...P(-1.6, 0)]), head, 1);
+    // 拉弦的两根手指
+    flat(ctx, (c) => { pEll(c, nx + 0.3, ny - 0.9, 1.5, 1.1); pEll(c, nx + 0.3, ny + 1, 1.5, 1.1); }, '#d8a880', 1);
+  }
+
+  // 弓身：两段往前鼓、弓梢往回翘的反曲弓，握把缠着皮
+  const bow = (c) => {
+    c.moveTo(tx, ty);
+    c.quadraticCurveTo(c1x, c1y, gx, gy);
+    c.quadraticCurveTo(c2x, c2y, bx, by);
+  };
+  ctx.lineCap = 'round';
+  ctx.beginPath(); bow(ctx);
+  ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3.8; ctx.stroke();
+  ctx.beginPath(); bow(ctx);
+  ctx.strokeStyle = '#8a5a2e'; ctx.lineWidth = 2.1; ctx.stroke();
+  ctx.beginPath(); bow(ctx);
+  ctx.strokeStyle = 'rgba(255,220,160,0.45)'; ctx.lineWidth = 0.6; ctx.stroke();
+  // 弓梢的骨片
+  flat(ctx, (c) => { pEll(c, tx, ty, 1.2, 1.2); pEll(c, bx, by, 1.2, 1.2); }, '#efe6cc', 0.9);
+  inkLine(ctx, [...at(-2.2, 1.3), ...at(2.2, 1.3)], '#3c2412', 2.4);
+
+  // 治愈之泉：举起的弓臂间聚起一团绿光，跪下时顺着下弓梢落进地里
+  if (kind === 'zone') {
+    const orb = envelope(act.k, 0.12, 0.3, 0.5, 0.6);
+    if (orb > 0) {
+      const [ox, oy] = at(0, 5);
+      flat(ctx, (c) => pEll(c, ox, oy, 2.8 * orb, 2.8 * orb), '#a8ffb8', 0.8);
+      sparkle(ctx, ox, oy, 6 * orb, '#e8fff0');
+    }
+    const land = envelope(act.k, 0.54, 0.58, 0.66, 0.84);
+    if (land > 0) sparkle(ctx, bx, by, 7 * land, '#c8ffd4');
+  }
+}
+
 /* ------------------------------ guard ------------------------------- */
 // A hoplite: crested bronze helm, big round aspis, spear thrust from the
 // shoulder.
@@ -1982,6 +2223,7 @@ function drawBlob(ctx, q) {
 // direction it topples: -1 backward, +1 forward, 0 handles death itself).
 const SPECS = {
   knight: { draw: drawKnight, fall: -1 },
+  ranger: { draw: drawRanger, fall: -1 },
   guard: { draw: drawGuard, fall: -1 },
   villager: { draw: drawVillager, fall: -1 },
   slime: { draw: drawSlime, fall: 0 },

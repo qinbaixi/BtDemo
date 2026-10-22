@@ -59,7 +59,7 @@ func skillInfo(slot int, skill *config.Skill) *pb.SkillInfo {
 	if skill.Zone != nil {
 		radius = skill.Zone.Radius // 放回血区的技能：悬停时显示区域多大
 	}
-	return &pb.SkillInfo{
+	info := &pb.SkillInfo{
 		Slot:     core.I32(slot),
 		Id:       proto.String(skill.ID),
 		Name:     proto.String(skill.Name),
@@ -70,6 +70,38 @@ func skillInfo(slot int, skill *config.Skill) *pb.SkillInfo {
 		Color:    proto.String(skill.Color),
 		Fx:       proto.String(skill.FX),
 		Desc:     proto.String(skill.Desc),
+	}
+	if skill.Kind == "dash" || skill.Kind == "rain" {
+		info.Distance = core.F32(skill.Distance) // 位移距离 / 箭雨没有目标时的落点距离
+	}
+	return info
+}
+
+// skillPool 是职业 class 可以挑的技能（slot 为 0）。
+func skillPool(cfg *config.Config, class *config.Class) []*pb.SkillInfo {
+	pool := make([]*pb.SkillInfo, 0, len(class.SkillPool))
+	for _, id := range class.SkillPool {
+		pool = append(pool, skillInfo(0, cfg.Skills[id]))
+	}
+	return pool
+}
+
+// classInfo 是选职业时客户端看到的职业：默认技能栏、技能池、要挑几个、能不能格挡。
+func classInfo(cfg *config.Config, class *config.Class) *pb.ClassInfo {
+	defaults := make([]*config.Skill, 0, len(class.Skills))
+	for _, id := range class.Skills {
+		defaults = append(defaults, cfg.Skills[id])
+	}
+	return &pb.ClassInfo{
+		Id:       proto.String(class.ID),
+		Name:     proto.String(class.Name),
+		Desc:     proto.String(class.Desc),
+		Model:    proto.String(class.Model),
+		Color:    proto.String(class.Color),
+		Skills:   skillBar(defaults),
+		Pool:     skillPool(cfg, class),
+		Pick:     core.I32(class.Pick()),
+		CanBlock: proto.Bool(class.CanBlock),
 	}
 }
 

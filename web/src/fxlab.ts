@@ -51,7 +51,9 @@ export async function startFxLab(): Promise<void> {
 
   const now = performance.now();
   state.myId = ME;
-  const me = makeEntity({ id: ME, kind: 'player', name: '我', model: 'knight', r: 16, lv: 10, x: center.x, y: center.y, hp: 500, maxHp: 500 }, now);
+  // ?fxlab&ranger 一开始就是游侠
+  const ranger = new URLSearchParams(location.search).has('ranger');
+  const me = makeEntity({ id: ME, kind: 'player', name: '我', model: ranger ? 'ranger' : 'knight', r: 16, lv: 10, x: center.x, y: center.y, hp: 500, maxHp: 500 }, now);
   state.ents.set(ME, me);
   for (const d of DUMMIES) {
     const e = makeEntity({
@@ -237,7 +239,7 @@ const ACTIONS: [string, () => void][] = [
     emit({ k: 'cast', src: ME, fx: 'zone', skill: 'healing_spring', name: '治愈之泉', color: '#7dffb0', radius: 110, x: p.x, y: p.y });
     const now = performance.now();
     addZone({ x: p.x, y: p.y, radius: 110, name: '治愈之泉', color: '#7dffb0', look: 'rune', owner: ME,
-      dur: 60, interval: 1, heal: 0.03, born: now + KNIGHT_ACTIONS.zone.lead, endsAt: now + KNIGHT_ACTIONS.zone.lead + 60000 });
+      dur: 60, interval: 1, heal: 0.03, born: now + leadOf('zone'), endsAt: now + leadOf('zone') + 60000 });
     me.hp = Math.min(me.hp, me.maxHp * 0.5);   // 先掉点血，看得到回血
   }],
   ['生命之泉', () => {
@@ -249,6 +251,80 @@ const ACTIONS: [string, () => void][] = [
       owner: 0, dur: 0, interval: 1, heal: 0.05, born: now, endsAt: 0 });
   }],
 ];
+
+// leadOf 是自己放技能 fx 时动作出手前的那段时间（游侠的动作名前面加 "ranger:"）。
+function leadOf(fx: string): number {
+  const me = state.ents.get(ME);
+  const name = me?.model === 'ranger' ? `ranger:${fx}` : fx;
+  return KNIGHT_ACTIONS[name]?.lead ?? 0;
+}
+
+// 游侠的技能按钮：先切成游侠再放
+function asRanger(fn: () => void): () => void {
+  return () => {
+    const me = state.ents.get(ME)!;
+    if (me.model !== 'ranger') { me.model = 'ranger'; me.color = '#8fd17a'; }
+    fn();
+  };
+}
+
+// shoot 是游侠朝目标射一箭（fx: arrow / frostarrow）。
+function shoot(fx: string, skill: string, name: string, color: string, v: number): void {
+  const t = target();
+  if (!t) return;
+  emit({ k: 'cast', src: ME, dst: t.id, fx, skill, name: fx === 'arrow' ? undefined : name, color });
+  emit({ k: 'dmg', src: ME, dst: t.id, v, crit: Math.random() < 0.25 });
+  damage(t, v);
+  if (t.hp <= 0) kill(t); else if (fx === 'frostarrow') addLook(t.id, LOOK_FROST, 3);
+}
+
+ACTIONS.push(
+  ['骑士', () => { const me = state.ents.get(ME)!; me.model = 'knight'; me.color = '#4da3ff'; }],
+  ['游侠', asRanger(() => {})],
+  ['射击', asRanger(() => shoot('arrow', 'shot', '射击', '#f0e2b6', 26))],
+  ['穿云箭', asRanger(() => {
+    // 朝目标方向射穿到 380 外，沿线的敌人按远近挨个挨打
+    const me = state.ents.get(ME)!;
+    const from = posOf(me, performance.now());
+    const t = target();
+    const dir = t ? Math.atan2(posOf(t, performance.now()).y - from.y, posOf(t, performance.now()).x - from.x) : (Math.cos(me.facing) < 0 ? Math.PI : 0);
+    const range = 380 + 16;
+    const hits = [...state.ents.values()].filter((e) => {
+      if (e.id === ME || e.dead) return false;
+      const p = posOf(e, performance.now());
+      const along = (p.x - from.x) * Math.cos(dir) + (p.y - from.y) * Math.sin(dir);
+      const across = Math.abs(-(p.x - from.x) * Math.sin(dir) + (p.y - from.y) * Math.cos(dir));
+      return along > 0 && along < range && across < (e.r || 14) + 10;
+    }).sort((a, b) => Math.hypot(a.x - from.x, a.y - from.y) - Math.hypot(b.x - from.x, b.y - from.y));
+    emit({ k: 'cast', src: ME, dst: hits[0]?.id, fx: 'pierce', skill: 'pierce_shot', name: '穿云箭', color: '#ffe08a',
+      x: from.x, y: from.y, tx: from.x + Math.cos(dir) * range, ty: from.y + Math.sin(dir) * range });
+    for (const e of hits) { emit({ k: 'dmg', src: ME, dst: e.id, v: 64 }); damage(e, 64); if (e.hp <= 0) kill(e); }
+  })],
+  ['箭雨', asRanger(() => {
+    const t = target();
+    const me = state.ents.get(ME)!;
+    const from = posOf(me, performance.now());
+    const dir = Math.cos(me.facing) < 0 ? -1 : 1;
+    const c = t ? posOf(t, performance.now()) : { x: from.x + dir * 180, y: from.y };
+    emit({ k: 'cast', src: ME, dst: t?.id, fx: 'rain', skill: 'arrow_rain', name: '箭雨', color: '#cfe6ff', radius: 90, x: c.x, y: c.y });
+    for (const e of state.ents.values()) {
+      if (e.id === ME || e.dead || Math.hypot(e.x - c.x, e.y - c.y) > 90 + (e.r || 14)) continue;
+      emit({ k: 'dmg', src: ME, dst: e.id, v: 34 });
+      damage(e, 34);
+      if (e.hp <= 0) kill(e);
+    }
+  })],
+  ['冰霜箭', asRanger(() => shoot('frostarrow', 'frost_arrow', '冰霜箭', '#8fd8ff', 30))],
+  ['翻滚', asRanger(() => {
+    const me = state.ents.get(ME)!;
+    const from = posOf(me, performance.now());
+    const dir = Math.cos(me.facing) < 0 ? -1 : 1;
+    emit({ k: 'cast', src: ME, fx: 'roll', skill: 'roll', name: '翻滚', color: '#c8f0c0', x: from.x, y: from.y, tx: from.x + dir * 130, ty: from.y });
+    // 滚完转回来，下一次往回滚
+    setTimeout(() => { me.facing = dir < 0 ? 0 : Math.PI; }, 500);
+  })],
+  ['鹰眼专注', asRanger(() => emit({ k: 'cast', src: ME, fx: 'focus', skill: 'focus', name: '鹰眼专注', color: '#ffd27a' }))],
+);
 
 // 滑条：[标签, FEEL 字段, 最小, 最大, 步长]
 const SLIDERS: [string, keyof typeof FEEL, number, number, number][] = [

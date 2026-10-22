@@ -10,7 +10,7 @@
 
 | 文件 | Go 类型 | 内容 |
 | --- | --- | --- |
-| `world.yaml` | `World` | `addr` 监听地址、`map` 尺寸、`aoi.cell`、`tick_rate`、`sync_rate`、`hostile` 阵营敌对表、`player` 玩家模板 |
+| `world.yaml` | `World` | `addr` 监听地址、`map` 尺寸、`aoi.cell`、`tick_rate`、`sync_rate`、`hostile` 阵营敌对表、`player` 玩家模板（公共字段 + `classes` 职业列表） |
 | `skills.yaml` | `map[string]*Skill` | 技能，key 是技能 id |
 | `monsters.yaml` | `map[string]*Template` + `[]Spawn` | 怪物 / NPC 模板和刷怪点 |
 | `map.tmj` | `Layout` | Tiled 地图：物件摆放和碰撞形状（JSON，不是 YAML；详见 [地图](map.md)） |
@@ -37,29 +37,31 @@ cfg, err := config.Load("config", game.TreeNames())
 2. `validate` 补默认值并检查：
    - 地图尺寸、AOI 格子为正；`tick_rate` 默认 20、`sync_rate` 默认 10、`addr` 默认 `:8080`（只写端口时补冒号）。
    - 敌对表里引用的阵营都存在，且必须有 `player`。
-   - 技能的 `kind` 是 target、aoe、self、dash、line、zone 之一，`damage` 是 physical、magic 或空；`zone` 技能要有 `zone` 且 `duration` 大于 0。
+   - 技能的 `kind` 是 target、aoe、self、dash、line、zone、rain 之一；`rain` 要有 `range`、`radius`、`distance`；`pierce: true` 只能用在 `line` 上；`damage` 是 physical、magic 或空；`zone` 技能要有 `zone` 且 `duration` 大于 0。
    - `heal_zones` 的阵营在敌对表里、不写 `duration`；回血区的 `radius`、`heal` 为正，`interval` 默认 1，`look` 默认 `rune`（见 [zone](zone.md)）。
    - 技能的 `buff` 和 `debuff` 里，`look` 为空或者是 haste、holy、fire、frost 之一。
-   - 玩家的默认技能（`player.skills`）至少有一个；第 2 个起的默认技能都在 `skill_pool` 里；`skill_pool` 里的技能都存在。
-   - 玩家和模板引用的技能都存在；模板的 `kind` 是 monster 或 npc；`tree` 是编译进程序的行为树（由调用方传入 `knownTrees`）；`faction` 在敌对表里。
+   - `player.classes` 至少一个职业：`id` 非空且不重复，`speed`、`radius` 为正，`model` 不写时默认用 `id`；每个职业的 `skills` 至少一个，第 2 个起的默认技能都在 `skill_pool` 里，`skills` 和 `skill_pool` 里的技能都存在。
+   - 模板引用的技能都存在，且怪物不能用 `dash`、`line`、`rain`（行为树放技能不给方向）；模板的 `kind` 是 monster 或 npc；`tree` 是编译进程序的行为树（由调用方传入 `knownTrees`）；`faction` 在敌对表里。
    - 刷怪点引用的模板存在。
    - `map.tmj` 的尺寸和 `world.yaml` 的 `map` 一致，地图物件都在地图范围内。
 3. `loadLayout` 检查 `map.tmj`：每个 `shape.*` 属性格式正确、数值合法；`props` 里每个物件的种类都有 `shape.*`（`none` 表示不挡路的装饰）；缩放为正；物件是点或两点折线，墙必须是折线；不允许 NaN、无穷大。
 
 还有一项检查放在 ai 包里，因为它需要行为树：模板的技能数量要覆盖树里 `cast_skill` 用到的所有槽位。
 
-## 技能和技能池
+## 职业、技能和技能池
 
-`world.yaml` 的 `player` 里有两组技能：
+`world.yaml` 的 `player` 保留公共字段（`name_prefix`、`spawn`、`level`、`respawn`、`block`），职业相关的都在 `player.classes` 里。它是有序列表，**第一个是新玩家的默认职业**（`Player.DefaultClass()`，`Player.Class(id)` 按 id 查）。每个职业（`config.Class`）有：`id`、`name`、`desc`、`model`、`color`、`can_block`（能不能右键格挡）、`attrs`、`growth`（每级增长）、`speed`、`radius`、`skills`、`skill_pool`。现在有 `knight`（骑士，能格挡）和 `ranger`（游侠，不能格挡）。
+
+每个职业有两组技能：
 
 - `skills`：默认技能。第 1 个固定是普攻（J 键 / 左键），不用挑；其余是没选技能时的默认选择，放在第 2 格起。
 - `skill_pool`：玩家进游戏和死亡时可以挑的技能。
 
-挑的数量由 `Player.Pick()` 决定：`len(skills) - 1`，也就是默认技能数减一（第 1 格普攻不算）。例如默认 6 个、挑 5 个。挑出来的依次放到第 2 格起，覆盖默认选择。默认的技能（第 2 个起）必须同时在 `skill_pool` 里，否则启动失败。
+挑的数量由 `Class.Pick()` 决定：`len(skills) - 1`，也就是默认技能数减一（第 1 格普攻不算）。例如默认 6 个、挑 5 个。挑出来的依次放到第 2 格起，覆盖默认选择。默认的技能（第 2 个起）必须同时在 `skill_pool` 里，否则启动失败。
 
 ## skills.yaml 的字段
 
-- `kind`：`target` 单体、`aoe` 范围、`self` 自身、`dash` 位移（用 `distance`）、`line` 直线投掷（用 `range`）、`zone` 在脚下放回血区（用 `zone`，见 [zone](zone.md)）。
+- `kind`：`target` 单体、`aoe` 范围、`self` 自身、`dash` 位移（用 `distance`）、`line` 直线投掷（用 `range`；`pierce: true` 时穿透，命中直线上所有敌人）、`rain` 箭雨（用 `range`、`radius`、`distance`）、`zone` 在脚下放回血区（用 `zone`，见 [zone](zone.md)）。
 - `desc`：选技能面板上的一句话说明。
 - `debuff`：命中时加在目标身上的效果，格式同 `buff`。没被免疫、也没被打死才会加上。
 - `buff` 的新字段：`invulnerable`（期间不受任何伤害）、`bonus_magic`（物理技能每次命中额外造成法术伤害）、`look`（客户端外观）。`look` 只能是 `haste`、`holy`、`fire`、`frost`，对应 `config.Looks` 里的位。
@@ -68,7 +70,7 @@ cfg, err := config.Load("config", game.TreeNames())
 
 ## 默认值和约定
 
-- 模板不写 `model` 时默认用模板 id 作为前端模型名；玩家默认 `knight`。
+- 模板不写 `model` 时默认用模板 id 作为前端模型名；职业默认用职业 id。
 - 模板和玩家等级不写时为 1。
 - 物件缩放 `s` 不写时为 1。
 

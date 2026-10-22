@@ -7,6 +7,8 @@ import { ATTACK_MS, FEEL, LOOK_FIRE, MODEL_SCALE } from './config';
 import { hypot } from './math';
 import { faceToward, headY, posOf, state, type ClientEntity, type FloatOpts } from './state';
 
+const ROLL_SLIDE = 0.75;   // 翻滚动作里身体在地上滑动的那一段（占动作时长的比例）
+
 export function onEvent(ev: GameEvent, now: number): void {
   const fx = state.fx!;
   switch (ev.k) {
@@ -16,9 +18,10 @@ export function onEvent(ev: GameEvent, now: number): void {
       let origin: { x: number; y: number } | null = null;
       if (src) {
         src.attackAt = now;
-        // 玩家的每个技能有自己的动作（见 render/knightActions.ts），怪物都是普通攻击动作
-        const action = src.kind === 'player' && ev.fx ? ACTIONS[ev.fx] : undefined;
-        src.action = action ? ev.fx! : '';
+        // 玩家的每个技能有自己的动作（见 render/knightActions.ts，游侠的动作名前面加 "ranger:"），怪物都是普通攻击动作
+        const actionName = src.model === 'ranger' ? `ranger:${ev.fx}` : ev.fx;
+        const action = src.kind === 'player' && ev.fx ? ACTIONS[actionName!] : undefined;
+        src.action = action ? actionName! : '';
         src.attackMs = action ? action.ms : ATTACK_MS;
         lead = action ? action.lead : 0;
         const dst = ev.dst && ev.dst !== ev.src ? state.ents.get(ev.dst) : null;
@@ -27,6 +30,7 @@ export function onEvent(ev: GameEvent, now: number): void {
           faceToward(src, ev.tx, ev.ty ?? src.y, now);   // 闪现、没打中的飞斧：朝飞出去的方向
         }
         if (ev.fx === 'blink' && typeof ev.tx === 'number') blinkTo(src, ev, now);
+        if (ev.fx === 'roll' && typeof ev.tx === 'number') rollTo(src, ev, now, action ? action.ms : 400);
         // 火球从剑尖、飞斧从手里飞出去：动作出手那一刻的位置（相对脚底的世界坐标偏移）
         const muzzle = action ? muzzleOffset(src.action) : null;
         if (muzzle) {
@@ -196,6 +200,15 @@ export function addFloat(
     drift: opts.drift ?? 0,
     crit: !!opts.crit,
   });
+}
+
+// rollTo 让翻滚的人在翻滚动作的前大半段里从起点滑到终点（服务端是瞬间到位的）。
+function rollTo(e: ClientEntity, ev: GameEvent, now: number, ms: number): void {
+  const from = posOf(e, now);
+  e.slide = { x0: from.x, y0: from.y, x1: ev.tx!, y1: ev.ty ?? e.y, at: now, ms: ms * ROLL_SLIDE };
+  e.x = e.px = ev.tx!;
+  e.y = e.py = ev.ty ?? e.y;
+  e.t0 = now;
 }
 
 // blinkTo 让闪现的人直接出现在终点（不做插值滑过去），并记下起点画残影。

@@ -6,7 +6,7 @@
 
 import { btdemo } from './pb';
 import type {
-  AiTrace, AiTreeDef, AiTreeNode, ClientMessage, EntityInfo, GameEvent, Obstacle, SelfInfo, ServerMessage,
+  AiTrace, ClassInfo, AiTreeDef, AiTreeNode, ClientMessage, EntityInfo, GameEvent, Obstacle, SelfInfo, ServerMessage,
 } from './types';
 
 const EVENT_KIND: Record<string, GameEvent['k']> = {
@@ -78,6 +78,13 @@ function treeDef(d: any): AiTreeDef {
   return { root: d.root, nodes };
 }
 
+function classInfo(c: any): ClassInfo {
+  return {
+    id: c.id, name: c.name, desc: c.desc || '', model: c.model || '', color: c.color || '#e8b65a',
+    skills: c.skills || [], pool: c.pool || [], pick: c.pick || 0, canBlock: !!c.canBlock,
+  };
+}
+
 function self(s: any): SelfInfo {
   const cds: Record<string, number> = {};
   for (const c of s.cds || []) cds[c.skill] = c.left;
@@ -100,6 +107,8 @@ export function createProtocol(): Protocol {
           skills: w.skills || [],
           pool: w.pool || [],
           pick: w.pick || 0,
+          classes: (w.classes || []).map(classInfo),
+          playerClass: w.class || '',
           obstacles: (w.obstacles || []).map((o: any): Obstacle => ({ ...o, shape: String(o.shape).toLowerCase() })),
         };
       }
@@ -115,7 +124,7 @@ export function createProtocol(): Protocol {
         };
       }
       case 'toast': return { t: 'msg', text: m.toast.text };
-      case 'skillBar': return { t: 'skills', skills: m.skillBar.skills || [] };
+      case 'skillBar': return { t: 'skills', skills: m.skillBar.skills || [], playerClass: m.skillBar.class || '' };
     }
     return null;
   }
@@ -126,7 +135,7 @@ export function createProtocol(): Protocol {
       case 'move': body = { move: { dx: o.dx, dy: o.dy } }; break;
       case 'target': body = { target: { id: o.target || 0 } }; break;
       case 'cast': body = { cast: { slot: o.slot, target: o.target || 0, dx: o.dx || 0, dy: o.dy || 0 } }; break;
-      case 'loadout': body = { loadout: { skills: o.skills } }; break;
+      case 'loadout': body = { loadout: { skills: o.skills, class: o.cls || undefined } }; break;
       case 'watch': body = { watch: { id: o.id || 0 } }; break;
       case 'block': body = { block: { on: o.on } }; break;
       default: return null;

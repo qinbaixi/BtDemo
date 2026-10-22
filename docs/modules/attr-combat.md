@@ -51,11 +51,12 @@ warcry:   { kind: self,   cooldown: 15, buff: { duration: 6, atk_pct: 0.4, speed
 - `aoe`：以自己为中心，半径内所有敌对单位。
 - `self`：作用于自己，治疗（`heal` = 最大生命的百分比）和 / 或 Buff。
 - `dash`：闪现，朝瞄准方向位移 `distance` 像素，撞墙就停在墙前，不伤害任何人。
-- `line`：投掷物（飞斧），朝瞄准方向飞 `range` 像素，打中直线上第一个敌人，被墙挡住就停在墙前。伤害按 `damage`、`ratio`、`base` 算。
+- `line`：投掷物（飞斧），朝瞄准方向飞 `range` 像素，打中直线上第一个敌人，被墙挡住就停在墙前。伤害按 `damage`、`ratio`、`base` 算。带 `pierce: true`（穿云箭）时不因命中停下：直线上的每个敌人都挨一下，飞到射程尽头或墙前。
+- `rain`：箭雨。落点是选中的目标（存活、敌对、边缘距离不超过 `range`）所在的位置；没有这样的目标，就是施法者沿瞄准方向 `distance` 处（夹在地图内）。对落点 `radius` 内（边缘距离）的所有敌人造成伤害。
 
 - `zone`：在自己脚下放一块回血区（`zone` 字段），同一个人再放时旧的消失；回血由 zone 系统做，见 [zone](zone.md)。
 
-`dash` 和 `line` 需要方向，玩家的方向从 `Cast` 消息的 `dx`、`dy` 来；没有方向就返回 `ErrNoAim`。
+`dash` 和 `line` 需要方向，`rain` 在没有目标时需要方向；玩家的方向从 `Cast` 消息的 `dx`、`dy` 来，没有方向就返回 `ErrNoAim`。怪物放技能不给方向，所以配置校验不让怪物用 `dash`、`line`、`rain`。
 
 `debuff` 是命中时加在目标身上的 Buff（比如冰霜新星的减速），格式和 `buff` 一样，见下面的 Buff 字段。
 
@@ -79,8 +80,11 @@ CastAimed(e, skill, targetID, aimX, aimY)
   ├─ dash：  没有方向 → ErrNoAim；nav.Reach 沿方向走到最远（最多 distance，撞墙停住）；
   │          一步都走不了 → ErrNoRoom；移动到终点，发 CAST（x、y 是起点，tx、ty 是终点）；不伤害
   ├─ line：  没有方向 → ErrNoAim；从身体边缘出发，nav.Reach 算出飞行距离（最多 range + 自身半径，
-  │          墙前就是最远）；firstOnLine 找飞行线上第一个敌人；发 CAST（终点是命中点或墙前），
-  │          命中就 CalcDamage → applyDamage
+  │          墙前就是最远）；hostilesOnLine 按先后顺序找出飞行线上的所有敌人；
+  │          普通：只取第一个，CAST 终点是命中点；穿透（pierce）：CAST 终点是射程尽头或墙前，
+  │          dst 是第一个命中的（可空）；CAST 之后按沿线顺序给每个命中的敌人 CalcDamage → applyDamage
+  ├─ rain：  选定落点（目标位置，或瞄准方向 distance 处；都没有 → ErrNoAim）；
+  │          发 CAST（fx rain，x、y 是落点，radius，dst 是目标或空），再按 id 顺序给落点 radius 内的敌人结算
   ├─ self：  发 CAST 事件 → 治疗（HEAL 事件）/ 加 Buff（BUFF 事件，重放刷新不叠加；
   │          Buff 有 shield_pct 时带一个护盾，能吸收 最大生命 × shield_pct 的伤害）
   └─ 成功后：Cooldowns[技能] = 现在 + cooldown；CanPick = false（放过技能就不能再换技能了）

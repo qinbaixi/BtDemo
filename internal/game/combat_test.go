@@ -27,6 +27,14 @@ func testWorld(obstacles ...nav.Shape) *World {
 	cfg.World.Map.Width, cfg.World.Map.Height, cfg.World.AOI.Cell = 1000, 1000, 200
 	cfg.World.TickRate, cfg.World.SyncRate = 20, 10
 	cfg.World.Hostile = map[string][]string{"player": {"monster"}, "monster": {"player"}}
+	cfg.World.Player.Classes = []*config.Class{{
+		ID:       "knight",
+		Name:     "骑士",
+		Model:    "knight",
+		CanBlock: true,
+		Speed:    100,
+		Radius:   16,
+	}}
 	world, err := newWorld(cfg, 1, obstacles)
 	if err != nil {
 		panic(err)
