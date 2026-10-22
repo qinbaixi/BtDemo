@@ -20,24 +20,8 @@ function textureOf(image: HTMLCanvasElement | HTMLImageElement): Texture {
   return texture;
 }
 
-// 白色小图：火花的线段（两头圆）、实心圆，着色后用
-let streakTexture: Texture | null = null;
+// 白色实心圆，着色后用
 let discTexture: Texture | null = null;
-
-function makeStreak(): Texture {
-  const c = document.createElement('canvas');
-  c.width = 64;
-  c.height = 16;
-  const g = c.getContext('2d')!;
-  g.fillStyle = '#ffffff';
-  g.beginPath();
-  g.arc(8, 8, 8, Math.PI / 2, Math.PI * 1.5);
-  g.lineTo(56, 0);
-  g.arc(56, 8, 8, -Math.PI / 2, Math.PI / 2);
-  g.closePath();
-  g.fill();
-  return Texture.from(c);
-}
 
 function makeDisc(): Texture {
   const c = document.createElement('canvas');
@@ -100,18 +84,15 @@ export class SpriteCtx {
     sprite.height = h;
   }
 
-  // streak 画一段两头圆的线（火花的拖尾），width 是线宽。
+  // streak 画一段线（火花的拖尾），width 是线宽。火花都很细，直接用旋转的细长矩形。
   streak(x0: number, y0: number, x1: number, y1: number, width: number, color: string): void {
-    if (this.globalAlpha <= 0.004) return;
-    streakTexture ??= makeStreak();
     const len = Math.hypot(x1 - x0, y1 - y0);
-    const sprite = this.next(streakTexture, color);
-    // 总长 = 线段长 + 两个半圆头；锚点放在起点那个圆头的圆心
-    const total = len + width;
-    sprite.anchor.set(width / 2 / total, 0.5);
+    if (this.globalAlpha <= 0.004 || width <= 0) return;
+    const sprite = this.next(Texture.WHITE, color);
+    sprite.anchor.set(0, 0.5);
     sprite.position.set(x0, y0);
     sprite.rotation = Math.atan2(y1 - y0, x1 - x0);
-    sprite.width = total;
+    sprite.width = Math.max(len, width);
     sprite.height = width;
   }
 

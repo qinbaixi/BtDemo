@@ -40,18 +40,26 @@ function makeTrailTexture(soft: boolean): Texture {
 export type RibbonStyle = 'glow' | 'ink';
 
 export class RibbonPool {
-  private pool: MeshSimple[] = [];
-  private used = 0;
+  private pools: Record<RibbonStyle, { meshes: MeshSimple[]; used: number }> = {
+    glow: { meshes: [], used: 0 },
+    ink: { meshes: [], used: 0 },
+  };
   private xs = new Float32Array(POINTS);
   private ys = new Float32Array(POINTS);
   private ws = new Float32Array(POINTS);
 
-  constructor(readonly layer: Container) {}
+  // inkLayer 放墨色衬底，glowLayer 放发光丝带（墨色层要在下面）
+  constructor(readonly inkLayer: Container, readonly glowLayer: Container) {}
 
-  begin(): void { this.used = 0; }
+  begin(): void {
+    this.pools.glow.used = 0;
+    this.pools.ink.used = 0;
+  }
 
   end(): void {
-    for (let i = this.used; i < this.pool.length; i++) this.pool[i].visible = false;
+    for (const pool of Object.values(this.pools)) {
+      for (let i = pool.used; i < pool.meshes.length; i++) pool.meshes[i].visible = false;
+    }
   }
 
   /**
@@ -93,9 +101,10 @@ export class RibbonPool {
   }
 
   private next(style: RibbonStyle): MeshSimple {
-    let mesh = this.pool[this.used];
+    const pool = this.pools[style];
+    let mesh = pool.meshes[pool.used];
     if (!mesh) {
-      glowTexture ??= makeTrailTexture(true);
+      const texture = style === 'ink' ? (inkTexture ??= makeTrailTexture(false)) : (glowTexture ??= makeTrailTexture(true));
       const uvs = new Float32Array(POINTS * 4);
       const indices = new Uint32Array(SEGMENTS * 6);
       for (let i = 0; i < POINTS; i++) {
@@ -105,20 +114,13 @@ export class RibbonPool {
         const p = i * 2;
         indices.set([p, p + 1, p + 2, p + 1, p + 3, p + 2], i * 6);
       }
-      mesh = new MeshSimple({ texture: glowTexture, vertices: new Float32Array(POINTS * 4), uvs, indices });
-      this.layer.addChild(mesh);
-      this.pool.push(mesh);
+      mesh = new MeshSimple({ texture, vertices: new Float32Array(POINTS * 4), uvs, indices });
+      mesh.blendMode = style === 'ink' ? 'normal' : 'add';
+      (style === 'ink' ? this.inkLayer : this.glowLayer).addChild(mesh);
+      pool.meshes.push(mesh);
     }
-    this.used++;
+    pool.used++;
     mesh.visible = true;
-    if (style === 'ink') {
-      inkTexture ??= makeTrailTexture(false);
-      mesh.texture = inkTexture;
-      if (mesh.blendMode !== 'normal') mesh.blendMode = 'normal';
-    } else {
-      mesh.texture = glowTexture!;
-      if (mesh.blendMode !== 'add') mesh.blendMode = 'add';
-    }
     return mesh;
   }
 }

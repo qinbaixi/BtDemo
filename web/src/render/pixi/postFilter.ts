@@ -65,6 +65,7 @@ uniform float uBloomAmt;
 uniform float uGradeAmt;
 uniform float uLutMix;
 uniform vec2 uBloomScale;            // 泛光纹理和画面纹理的底图大小不同：画面 uv × 这个比例 = 泛光 uv
+uniform vec2 uBloomClamp;            // 泛光纹理里有内容的范围（池里的纹理比画面大，外面是旧内容）
 uniform float uTime;
 uniform vec4 uWaves[${MAX_WAVES}];   // 屏幕坐标 x, y（CSS 像素）、半径、推开的距离
 uniform float uWaveCount;
@@ -93,7 +94,8 @@ vec2 distortion(vec2 pos) {
         float dist = length(d);
         float width = 10.0 + w.z * 0.12;
         float ring = exp(-pow((dist - w.z) / width, 2.0));
-        off -= d / max(dist, 1.0) * ring * w.w;        // 圈上的像素从外面采样：画面像被往外推
+        vec2 normal = normalize(vec2(d.x, d.y * 1.6) + 1e-4);   // 椭圆的法线方向（d.y 已经乘过一次 1.6）
+        off -= normal * ring * w.w;                    // 圈上的像素从外面采样：画面像被往外推
     }
     for (int i = 0; i < ${MAX_HEAT}; i++) {
         if (float(i) >= uHeatCount) break;
@@ -114,7 +116,7 @@ void main() {
     vec2 pos = vTextureCoord * uInputSize.xy;
     vec2 uv = clamp(vTextureCoord + distortion(pos) * uInputSize.zw, uInputClamp.xy, uInputClamp.zw);
     vec3 c = texture(uTexture, uv).rgb;
-    vec3 bloom = texture(uBloom, uv * uBloomScale).rgb;
+    vec3 bloom = texture(uBloom, min(uv * uBloomScale, uBloomClamp)).rgb;
     // 加上泛光后超过 1 的部分柔和地压回去，不会一片死白
     c += bloom * uBloomAmt * 0.6;   // 金字塔几级叠起来比单张模糊亮，压回到原来的亮度附近
     c = c / (1.0 + max(c - 0.8, 0.0) * 0.6);
@@ -164,6 +166,7 @@ export class PostFilter extends Filter {
       uGradeAmt: { value: opts.grade, type: 'f32' },
       uLutMix: { value: 0, type: 'f32' },
       uBloomScale: { value: new Float32Array([1, 1]), type: 'vec2<f32>' },
+      uBloomClamp: { value: new Float32Array([1, 1]), type: 'vec2<f32>' },
       uTime: { value: 0, type: 'f32' },
       uWaves: { value: new Float32Array(MAX_WAVES * 4), type: 'vec4<f32>', size: MAX_WAVES },
       uWaveCount: { value: 0, type: 'f32' },
@@ -248,6 +251,9 @@ export class PostFilter extends Filter {
     const scale = this.u.uniforms.uBloomScale as Float32Array;
     scale[0] = input.source.width / bloom.source.width;
     scale[1] = input.source.height / bloom.source.height;
+    const clampTo = this.u.uniforms.uBloomClamp as Float32Array;
+    clampTo[0] = (bloom.frame.width - 1) / bloom.source.width;
+    clampTo[1] = (bloom.frame.height - 1) / bloom.source.height;
     fm.applyFilter(this, input, output, clearMode);
     for (const t of temps) TexturePool.returnTexture(t);
   }

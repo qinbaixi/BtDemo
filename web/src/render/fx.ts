@@ -1,6 +1,6 @@
-// Skill and combat effects. Everything lives in world coordinates and is
-// drawn in two passes: drawUnder() for ground decals below the characters and
-// drawOver() for slashes, projectiles and particles above them.
+// Skill and combat effects. Everything lives in world coordinates.
+// 每帧先 step()，然后分几块画：drawUnder() 是角色脚下的地面特效；角色上方的特效里，
+// drawTrails() 画刀光和尾迹（GPU 丝带），particles() 画粒子（GPU 精灵），drawShapes() 画其余有形状的特效（Canvas 2D）。
 //
 // Glows use cached radial-gradient sprites blended with 'lighter' instead of
 // shadowBlur, which keeps a busy fight cheap.
@@ -415,6 +415,18 @@ export class FX {
       }
     }
     this.effects = this.effects.filter((f) => now - f.born < f.life);
+    // 法球飞行中一路掉火星
+    for (const f of this.effects) {
+      if (f.kind !== 'orb' || now - f.trailAt <= 14) continue;
+      const t = (now - f.born) / f.life;
+      if (t < 0) continue;
+      f.trailAt = now;
+      const { x, y } = this.projectilePath(f, clamp01(t), 40);
+      for (let i = 0; i < 2; i++) {
+        this.spawn({ x: x + rand(-3, 3), y: y + rand(-3, 3), vx: rand(-0.02, 0.02), vy: -rand(0.01, 0.04),
+          life: rand(200, 380), size: rand(3, 6), color: f.color, kind: 'glow', born: now });
+      }
+    }
   }
 
   // drawShapes 用 Canvas 2D 画有形状的特效（刀光、弹道、旋风、护盾泡泡……），画在 shapeBounds 的范围里。
@@ -462,16 +474,21 @@ export class FX {
         case 'flare': add(f.x, f.y, f.size * 2.5, f.size * 2.5, f.size * 2.5); break;
         case 'gash': add(f.x, f.y, f.len + 10, f.len + 10, f.len + 10); break;
         case 'pillar': { const p = this.pos(f.anchor, f); add(p.x, p.y, 50, (f.height || 120) + 50, 20); break; }
-        case 'buff':
-        case 'shieldForm': { const p = this.pos(f.src, { x: f.sx, y: f.sy }); add(p.x, p.y, 90, 150, 40); break; }
+        case 'buff': { const p = this.pos(f.src, { x: f.sx, y: f.sy }); add(p.x, p.y, 90, 150, 40); break; }
+        case 'shieldForm': {
+          // 外圈是泡泡的 2.2 倍，大体型的泡泡更大
+          const p = this.pos(f.src, { x: f.sx, y: f.sy, r: f.sr });
+          const r = p.r || f.sr || 14;
+          const b = this.bubbleShape(p.x, p.y, r, (p as any).h || r * 2.6);
+          add(b.cx, b.cy, b.rx * 2.4 + 10, b.ry * 2.4 + 10, b.ry * 2.4 + 10);
+          break;
+        }
         case 'parry': add(f.x, f.y, f.r * 3 + 10, f.r * 3 + 10, f.r * 3 + 10); break;
       }
     }
     for (const a of this.auras()) add(a.x, a.y, a.r * 2.6 + 20, a.h * 1.8 + 30, a.r + 20);
     return x1 > x0 ? [x0, y0, x1, y1] : null;
   }
-
-  /* --------------------------- effect kinds -------------------------- */
 
   /* ------------------------ 拖尾（GPU 丝带） ------------------------ */
 
@@ -583,14 +600,6 @@ export class FX {
   orb(ribbons, sprites, f, t, now) {
     const k = clamp01(t);
     const { x, y } = this.projectilePath(f, k, 40);
-    // trail embers
-    if (now - f.trailAt > 14) {
-      f.trailAt = now;
-      for (let i = 0; i < 2; i++) {
-        this.spawn({ x: x + rand(-3, 3), y: y + rand(-3, 3), vx: rand(-0.02, 0.02), vy: -rand(0.01, 0.04),
-          life: rand(200, 380), size: rand(3, 6), color: f.color, kind: 'glow', born: now });
-      }
-    }
     const trail = this.trailPoints(f, k, 0.35, 40, 22);
     ribbons.stroke(trail.pts, trail.ws, f.color, 0.7, 'glow');
     ribbons.stroke(trail.pts, trail.ws.map((w) => w * 0.35), 0xffffff, 0.8, 'glow');

@@ -1,11 +1,12 @@
-// 画世界：Pixi（WebGL）负责地表、物件、角色、光照，叠加层（overlay.ts）负责特效和文字。
+// 画世界：Pixi（WebGL）负责地表、物件、角色、光照、特效，叠加层（overlay.ts）负责文字和调试线条。
 //
 // 显示层次（从下到上）：
-//   scene        整个画面，高画质时加后期处理（泛光 + 调色，见 pixi/postFilter.ts）
+//   scene        整个画面，高画质时加后期处理（扭曲 + 泛光 + 区域调色，见 pixi/postFilter.ts）
 //     world      跟随镜头：地表 → 地面标记（AOI、射程、目标圈）→ 地面特效 → 角色和物件（按脚底 y 排序）
 //     darkness   光照的暗色层（屏幕空间）
 //     glow       光源的彩色叠加（跟随镜头）
-//     fx         技能特效和环境粒子（暂时用 Canvas 2D 画，整屏一张画布；不开后期处理时改画在 overlay 上）
+//     fx         技能特效和环境粒子：刀光和尾迹是 GPU 丝带（pixi/trail.ts），粒子和光晕是 GPU 精灵
+//                （pixi/spriteCtx.ts），护盾泡泡等有形状的特效画在只覆盖特效范围的小画布上
 //   overlay      另一块 2D 画布：头顶文字、调试线条、暗角（不参与泛光和调色，保持清晰）
 
 import { Application, Container, Graphics, type TextureSource } from 'pixi.js';
@@ -88,9 +89,11 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
   shapeFx = new CanvasSprite();
   const sparkLayer = new Container();
   sparkFx = new SpriteCtx(sparkLayer);
+  // 墨色衬底和发光丝带分两层：墨色总在下面，不会压暗别的特效的光
+  const inkLayer = new Container();
   const trailLayer = new Container();
-  trails = new RibbonPool(trailLayer);
-  fxWorld.addChild(trailLayer, shapeFx, sparkLayer);
+  trails = new RibbonPool(inkLayer, trailLayer);
+  fxWorld.addChild(inkLayer, trailLayer, shapeFx, sparkLayer);
   scene = new Container();
   zoomer = new Container();
   zoomer.addChild(world, darkness, glowWorld, fxWorld);
@@ -138,6 +141,9 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
     sceneView?.destroy();
     sceneView = state.scenery ? new SceneView(state.scenery, groundLayer, depth, state.dpr) : null;
     sceneFor = state.scenery;
+    // 换了地图：区域调色从新地图的位置重新算，并先把各区域的 LUT 生成好，免得第一次走进去时卡一下
+    zoneWeights.clear();
+    if (state.scenery && !art.lut) for (const kind of Object.keys(ZONE_GRADES)) zoneLut(kind);
     sceneRes = state.dpr;
   }
   sceneView?.update(view, now, mp);
@@ -384,8 +390,11 @@ function updatePost(now: number, dt: number, mp: Point | null, shake: Point, zoo
     const old = zoneWeights.get(kind) ?? target;
     zoneWeights.set(kind, old + (target - old) * ease);
   }
-  // 默认调色也算一个固定权重的“区域”：离所有区域都远时用它。取权重最大的两个混合
-  const ranked: [string, number][] = [['', 0.12], ...zoneWeights.entries()];
+  // 默认调色也算一个“区域”：离所有区域都远时用它，走进某个区域时它的权重降到 0（区域调色能到 100%）。
+  // 取权重最大的两个混合
+  let strongest = 0;
+  for (const weight of zoneWeights.values()) strongest = Math.max(strongest, weight);
+  const ranked: [string, number][] = [['', Math.max(0, 0.25 - strongest)], ...zoneWeights.entries()];
   ranked.sort((a, b) => b[1] - a[1]);
   const [firstKind, firstWeight] = ranked[0];
   const [secondKind, secondWeight] = ranked[1];
