@@ -9,10 +9,10 @@
 //                （pixi/spriteCtx.ts），护盾泡泡等有形状的特效画在只覆盖特效范围的小画布上
 //   overlay      另一块 2D 画布：头顶文字、调试线条、暗角（不参与泛光和调色，保持清晰）
 
-import { Application, Container, Graphics, type TextureSource } from 'pixi.js';
+import { Application, Container, Graphics, RenderLayer, type TextureSource } from 'pixi.js';
 import { ATTACK_MS, DEATH_MS, FEEL, HIT_MS, MODEL_SCALE, RIM } from '../game/config';
 import { clamp, hypot } from '../game/math';
-import { posOf, state, type ClientEntity, type Point, type Scenery } from '../game/state';
+import { posOf, state, type ClientEntity, type Point, type Quality, type Scenery } from '../game/state';
 import { art } from './art';
 import { makeGrade, makeLut, ZONE_GRADES } from './grade';
 import { createLighting, type Lighting } from './lighting';
@@ -20,7 +20,7 @@ import { drawOverlay, initOverlay, resizeOverlay } from './overlay';
 import { ActorView, type Pose } from './pixi/actorView';
 import { CanvasSprite } from './pixi/canvasSprite';
 import { PostFilter, type Distort } from './pixi/postFilter';
-import { SceneView } from './pixi/sceneView';
+import { SceneView, type Mover } from './pixi/sceneView';
 import { SpriteCtx } from './pixi/spriteCtx';
 import { RibbonPool } from './pixi/trail';
 
@@ -40,6 +40,7 @@ let targetRing: Container;     // 目标脚下的旋转圈
 let targetRingArcs: Graphics;
 let underFx: CanvasSprite;     // 地面特效（暂时用 Canvas 2D 画）
 let depth: Container;          // 角色和物件，按 zIndex（脚底 y）排序
+let xrayLayer: RenderLayer;    // 角色剪影：被高物件挡住时画在所有物件上面
 let lighting: Lighting;
 let sceneView: SceneView | null = null;
 let sceneFor: Scenery | null = null;
@@ -54,7 +55,7 @@ const POST = { bloom: 0.8, threshold: 0.68, grade: 1 };
 
 // initWorld 创建 Pixi 应用（异步：要等 WebGL 初始化完）。
 export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasElement): Promise<void> {
-  state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+  state.dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR[state.quality]);
   app = new Application();
   await app.init({
     canvas,
@@ -81,6 +82,7 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
   underFx.blendMode = 'normal';
   depth = new Container();
   depth.sortableChildren = true;
+  xrayLayer = new RenderLayer();
   world.addChild(groundLayer, marks, targetRing, underFx, depth);
 
   const darkness = new Container();
@@ -96,7 +98,8 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
   fxWorld.addChild(inkLayer, trailLayer, shapeFx, sparkLayer);
   scene = new Container();
   zoomer = new Container();
-  zoomer.addChild(world, darkness, glowWorld, fxWorld);
+  // 剪影层放在暗部遮罩上面：夜里没光的地方剪影也要看得清（挂上去的精灵仍然用世界坐标）
+  zoomer.addChild(world, darkness, xrayLayer, glowWorld, fxWorld);
   scene.addChild(zoomer);
   scene.filterArea = app.screen;   // 后期处理整屏做，不用每帧算整个世界的包围盒
   app.stage.addChild(scene);
@@ -114,9 +117,22 @@ export function setPostOptions(opts: Partial<typeof POST>): void {
   post?.set(opts);
 }
 
+// 各档画质的像素密度上限：高清屏上中、低档少画一些像素，后期处理的开销跟着降
+const MAX_DPR: Record<Quality, number> = { high: 2, medium: 1.5, low: 1.5 };
+let appliedQuality: Quality | null = null;
+
+// applyQuality 把画质档位落实到渲染上：像素密度、泛光级数、粒子密度。画质变了才调用。
+function applyQuality(): void {
+  appliedQuality = state.quality;
+  const medium = state.quality === 'medium';
+  post.setLevels(medium ? 2 : 4);
+  state.fx.density = medium ? 0.5 : 1;
+  resize();
+}
+
 // resize 让画布跟窗口和设备像素比一致。
 export function resize(): void {
-  state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+  state.dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR[state.quality]);
   if (!app) return;
   app.renderer.resolution = state.dpr;
   app.renderer.resize(window.innerWidth, window.innerHeight);
@@ -125,6 +141,7 @@ export function resize(): void {
 
 // drawWorld 画一帧。debugOpen 时额外画被观察实体的 AI 路径。
 export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
+  if (state.quality !== appliedQuality) applyQuality();
   const view = state.cam;
   const shake = state.camShake;
   for (const c of [world, glowWorld, fxWorld]) c.position.set(-view.x + shake.x, -view.y + shake.y);
@@ -146,7 +163,12 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
     if (state.scenery && !art.lut) for (const kind of Object.keys(ZONE_GRADES)) zoneLut(kind);
     sceneRes = state.dpr;
   }
-  sceneView?.update(view, now, mp);
+  // 正在走动的角色：会碰得灌木和树晃一下
+  const movers: Mover[] = [];
+  for (const e of state.ents.values()) {
+    if (now < e.moveUntil && !e.dead) movers.push(posOf(e, now));
+  }
+  const occluded = sceneView?.update(view, now, dt, mp, movers) ?? false;
 
   drawMarks(mp, now);
   drawUnderFx(now);
@@ -160,10 +182,12 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
     ents.push({ e, p });
     let v = actors.get(e.id);
     if (!v) {
-      v = new ActorView(e.model, RIM[e.kind], depth);
+      v = new ActorView(e.model, RIM[e.kind], depth, xrayLayer);
       actors.set(e.id, v);
     }
     const pose = poseOf(e, p, now, dt);
+    pose.onScreen = p.x > view.x - 150 && p.x < view.x + view.w + 150 && p.y > view.y - 200 && p.y < view.y + view.h + 150;
+    pose.xray = occluded && e.id === state.myId;
     if (state.hq && !e.dead) pose.light = lighting.dominant(p.x, p.y - 20);
     // 开始溶解时冒出一阵灰烬
     if ((pose.dissolve ?? -1) >= 0 && !v.dissolving) state.fx.ashes(e.id, pose.burn!, now);
@@ -199,10 +223,22 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
   // 走路循环按这一帧实际画出来的移动距离推进
   const moved = hypot(e.rx, e.ry, p.x, p.y);
   // 往背对的方向走（举盾倒退）时腿反着迈，不然看起来像在原地滑步
-  const back = (p.x - e.rx) * Math.cos(e.facing) < -0.05;
+  const stepX = p.x - e.rx;
+  const back = stepX * Math.cos(e.facing) < -0.05;
   e.rx = p.x;
   e.ry = p.y;
+  const stepBefore = Math.floor(e.walk / Math.PI);
   if (moved < 40 && !frozen) e.walk += (back ? -1 : 1) * moved * 0.16 * (16 / (e.r || 14));
+  // 每迈一步（走路相位过半圈）脚下扬一小团土
+  if (Math.floor(e.walk / Math.PI) !== stepBefore && now < e.moveUntil && !e.dead && e.kind !== 'npc') {
+    // 土往移动的反方向扬（倒退时也对）
+    state.fx.footDust(p.x, p.y, stepX < 0 ? -1 : 1, now);
+  }
+  // 转身：朝向一变，身体横向收窄一下再展开
+  if (Math.cos(e.facing) * Math.cos(e.shownFacing) < 0) e.turnAt = now;
+  e.shownFacing = e.facing;
+  const turnT = (now - e.turnAt) / 140;
+  const turn = turnT >= 0 && turnT < 1 ? Math.sin(turnT * Math.PI) : 0;
   const atk = (now - e.attackAt) / ATTACK_MS;
   const hit = (now - e.hitAt) / HIT_MS;
   const hitting = hit >= 0 && hit < 1;
@@ -240,6 +276,9 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
     knockY: e.knockY * knock * 0.6,
     squash,
     dissolve,
+    turn,
+    // 待机时轻微呼吸（每个角色相位不同）
+    breath: dead < 0 && !(now < e.moveUntil) && !(atk >= 0 && atk < 1) ? 0.012 * Math.sin((now + e.id * 397) / 520) : 0,
     burn: BURN[e.kind],
   };
 }
@@ -362,13 +401,15 @@ function updatePost(now: number, dt: number, mp: Point | null, shake: Point, zoo
     x: (view.w / 2) * (1 - zoom) + (x - view.x + shake.x) * zoom,
     y: (view.h / 2) * (1 - zoom) + (y - view.y + shake.y) * zoom,
   });
+  // 中画质不做扭曲：热浪和冲击波都要整屏多采样，省下来
+  const distort = state.quality === 'high';
   const waves: Distort[] = [];
-  state.fx.waves((x: number, y: number, radius: number, strength: number) => {
+  if (distort) state.fx.waves((x: number, y: number, radius: number, strength: number) => {
     const p = toScreen(x, y);
     waves.push({ x: p.x, y: p.y, radius: radius * zoom, strength: strength * FEEL.distort });
   }, now);
   const heat: Distort[] = [];
-  state.scenery?.heat((x: number, y: number, radius: number, strength: number) => {
+  if (distort) state.scenery?.heat((x: number, y: number, radius: number, strength: number) => {
     const p = toScreen(x, y);
     heat.push({ x: p.x, y: p.y, radius: radius * zoom, strength: strength * FEEL.distort });
   }, view);

@@ -99,7 +99,7 @@ export function createLighting(renderer: Renderer, screen: Container, world: Con
     },
 
     // render 更新光照层。view 是镜头矩形（世界坐标，已经算上屏幕震动）。
-    // enabled 为 false（简化画质）时整层隐藏。
+    // enabled 为 false（低画质）时整层隐藏。
     render(view: { x: number; y: number; w: number; h: number }, enabled: boolean): void {
       darkSprite.visible = enabled;
       glowLayer.visible = enabled;

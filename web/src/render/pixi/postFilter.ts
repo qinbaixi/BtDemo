@@ -159,6 +159,7 @@ export class PostFilter extends Filter {
   private upU: UniformGroup;
   private u: UniformGroup;
   private opts: PostOptions;
+  private levelCount = LEVELS.length;   // 泛光金字塔用几级（中画质只用前两级）
 
   constructor(lut: TextureSource, opts: PostOptions) {
     const u = new UniformGroup({
@@ -201,6 +202,11 @@ export class PostFilter extends Filter {
     this.brightU.uniforms.uThreshold = this.opts.threshold;
   }
 
+  // setLevels 设置泛光金字塔的级数（2..4）：级数少光晕范围小，但省掉几次整屏模糊。
+  setLevels(count: number): void {
+    this.levelCount = Math.max(2, Math.min(LEVELS.length, count));
+  }
+
   // setLuts 设置调色：两张 LUT（见 grade.ts）按 mix（0..1，0 全用第一张）混合。
   setLuts(first: TextureSource, second: TextureSource, mix: number): void {
     this.resources.uLut = first;
@@ -227,7 +233,7 @@ export class PostFilter extends Filter {
     if (this.opts.bloom > 0) {
       const res = input.source._resolution;
       // 金字塔每级都和画面一样大（CSS 像素），只是分辨率更低：Pixi 的滤镜坐标都按 CSS 像素算，这样最省事
-      const levels = LEVELS.map((scale) => {
+      const levels = LEVELS.slice(0, this.levelCount).map((scale) => {
         const texture = TexturePool.getOptimalTexture({ width: input.width, height: input.height, resolution: res * scale });
         temps.push(texture);
         return texture;

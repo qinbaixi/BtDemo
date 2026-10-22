@@ -2,7 +2,16 @@
 
 import { MOVE_DIR } from './game/config';
 import { clamp, hypot } from './game/math';
-import { cdRemaining, headY, posOf, state, type ClientEntity } from './game/state';
+import {
+  cdRemaining, headY, posOf, QUALITY_NAMES, setQuality, state, type ClientEntity, type Quality,
+} from './game/state';
+
+// 切换画质时提示每一档有什么
+const QUALITY_DETAIL: Record<Quality, string> = {
+  high: '描边 + 光照 + 完整泛光调色 + 热浪扭曲',
+  medium: '描边 + 光照 + 简化泛光调色，粒子减半',
+  low: '无着色器和动态光照',
+};
 import type { ClientMessage } from './net/types';
 import type { Debug } from './ui/debug';
 import { showToast } from './ui/hud';
@@ -151,15 +160,17 @@ function onKeyDown(e: KeyboardEvent): void {
     return;
   }
   if (e.code === 'KeyQ') {
-    state.hq = !state.hq;
+    // 高 → 中 → 低 → 高
+    const next: Quality = state.quality === 'high' ? 'medium' : state.quality === 'medium' ? 'low' : 'high';
+    setQuality(next);
     state.slowFrames = 0;
-    state.slowGraceUntil = performance.now() + 10000;   // 给完整画质 10 秒，再重新评判帧率
-    showToast(state.hq ? '画质：完整（描边 + 光照 + 泛光调色）' : '画质：简化');
+    state.slowGraceUntil = performance.now() + 10000;   // 给新画质 10 秒，再重新评判帧率
+    showToast(`画质：${QUALITY_NAMES[next]}（${QUALITY_DETAIL[next]}）`);
     return;
   }
   if (e.code === 'KeyB') {
     state.post = !state.post;
-    showToast((state.post ? '泛光和调色：开' : '泛光和调色：关') + (state.hq ? '' : '（简化画质下不生效，按 Q 切回完整画质）'));
+    showToast((state.post ? '泛光和调色：开' : '泛光和调色：关') + (state.hq ? '' : '（低画质下不生效，按 Q 切到中或高画质）'));
     return;
   }
   if (e.code === 'Backquote') {

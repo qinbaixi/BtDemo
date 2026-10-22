@@ -11,7 +11,7 @@ import './styles/debug.css';
 import './styles/debug-proto.css';
 
 import { ATTACK_MS } from './game/config';
-import { faceToward, fxAuras, fxResolve, posOf, state } from './game/state';
+import { faceToward, fxAuras, fxResolve, posOf, QUALITY_NAMES, setQuality, state } from './game/state';
 import { handleMessage, resetOnClose } from './game/sync';
 import { castSlot, initInput, resendMove } from './input';
 import { createConnection } from './net/connection';
@@ -69,13 +69,16 @@ function frame(): void {
   renderDeath(now);
 }
 
-// watchFrameRate 在约 3 秒低于约 30fps 后切到简化画质。
+// watchFrameRate 在约 3 秒低于约 30fps 后降一档画质（高 → 中 → 低），降完给 5 秒再评判。
 function watchFrameRate(dt: number): void {
-  if (!state.hq || document.hidden || performance.now() < state.slowGraceUntil) return;
+  if (state.quality === 'low' || document.hidden || performance.now() < state.slowGraceUntil) return;
   state.slowFrames = dt > 34 && dt < 500 ? state.slowFrames + 1 : Math.max(0, state.slowFrames - 2);
   if (state.slowFrames > 90) {
-    state.hq = false;
-    showToast('帧率偏低，已切换为简化画质（按 Q 切回）');
+    const lower = state.quality === 'high' ? 'medium' : 'low';
+    setQuality(lower);
+    state.slowFrames = 0;
+    state.slowGraceUntil = performance.now() + 5000;
+    showToast(`帧率偏低，已降到${QUALITY_NAMES[lower]}画质（按 Q 切换）`);
   }
 }
 

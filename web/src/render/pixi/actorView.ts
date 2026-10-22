@@ -2,16 +2,18 @@
 // 身体有美术图（art.ts 的清单里有这个模型）就播放图片动画，否则用程序化模型画到画布上；
 // 阴影、印记、着色器两种情况都一样。
 
-import { Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { Container, Graphics, Sprite, Texture, type RenderLayer } from 'pixi.js';
 import { MODEL_SCALE, modelBox } from '../../game/config';
 import { art, type LoadedCharacter } from '../art';
 import { drawModel } from '../models';
 import { CanvasSprite } from './canvasSprite';
 import { InkFilter } from './inkFilter';
+import { XrayFilter } from './xrayFilter';
 
 // 模型每秒最多重画 24 次，中间复用上一张；位置每帧仍然跟随插值，所以移动是平滑的。
 // 手绘动画也大致是这个节奏。
 const REDRAW_MS = 1000 / 24;
+const IDLE_REDRAW_MS = 1000 / 12;   // 站着不动时动作很慢，每秒重画 12 次就够
 const HIT_FLASH = 0.35;          // 受击动作里白闪占的比例
 
 // Pose 是模型的一帧姿势（见 models.ts 的 drawModel）。
@@ -25,6 +27,10 @@ export interface Pose {
   dissolve?: number;    // 尸体溶解进度 0..1，-1 或不填表示不溶解
   burn?: string;        // 溶解边缘的火光颜色
   light?: ActorLight | null;   // 附近最亮的光源（给身体加一道那个颜色的轮廓光）
+  breath?: number;      // 待机呼吸：身体纵向多拉长的比例
+  turn?: number;        // 转身：身体横向收窄的比例（0..1）
+  xray?: boolean;       // 被高物件挡住：在物件上面再画一层剪影
+  onScreen?: boolean;   // 在镜头里（不在时程序模型不重画，省 CPU 和上传）
 }
 
 // ActorLight 是照在角色身上的主光源：(dx, dy) 是从光源指向角色的单位向量，amt 是强度 0..1。
@@ -48,7 +54,14 @@ export class ActorView {
   private drawnDead = false;
   private shadowR = 0;
 
-  constructor(private model: string, private rim: string, parent: Container) {
+  private xray: Sprite | null = null;   // 剪影：挂在身体旁边、但画在剪影层（物件上面）
+  private xrayFilter: XrayFilter | null = null;
+
+  /**
+   * xrayLayer 是画在所有角色和物件上面的渲染层（world.ts），剪影精灵挂到这一层去画，
+   * 位置变换仍然跟着身体走。
+   */
+  constructor(private model: string, private rim: string, parent: Container, private xrayLayer: RenderLayer | null = null) {
     this.sheet = art.characters.get(model) ?? null;
     this.body = this.sheet ? new Sprite() : (this.canvasBody = new CanvasSprite());
     this.sigil.scale.set(1, 0.42);
@@ -76,7 +89,8 @@ export class ActorView {
     this.figure.position.set(corpse ? 0 : Math.round(knockX * res) / res, corpse ? 0 : Math.round(knockY * res) / res);
     this.root.zIndex = zIndex;
     const squash = pose.squash || 0;
-    this.figure.scale.set(1 + squash, 1 - squash * 0.8);
+    const narrow = 1 - (pose.turn || 0) * 0.22;
+    this.figure.scale.set((1 + squash) * narrow, (1 - squash * 0.8) * (1 + (pose.breath || 0)));
     const dissolve = pose.dissolve ?? -1;
     // 溶解完了就整个藏起来，等复活
     this.root.visible = dissolve < 1;
@@ -95,7 +109,10 @@ export class ActorView {
     const dead = pose.dead >= 0;
     if (this.sheet) {
       this.showFrame(pose);
-    } else if (now - this.drawnAt >= REDRAW_MS || r !== this.drawnR || res !== this.drawnRes || dead !== this.drawnDead) {
+    } else if (
+      (pose.onScreen !== false && now - this.drawnAt >= (this.isIdle(pose) ? IDLE_REDRAW_MS : REDRAW_MS))
+      || r !== this.drawnR || res !== this.drawnRes || dead !== this.drawnDead
+    ) {
       // 范围要容得下武器和倒地的姿势
       const box = modelBox(this.model, r);
       this.canvasBody!.paint(box, res, (g) => drawModel(g, this.model, { ...pose, x: 0, y: 0, bare: true }));
@@ -116,9 +133,9 @@ export class ActorView {
       this.flash.visible = false;
     } else {
       if (this.body.filters) this.body.filters = null;
-      // 简化画质没有溶解着色器：直接淡出
+      // 低画质没有溶解着色器：直接淡出
       this.body.alpha = dissolve > 0 ? 1 - dissolve : 1;
-      // 简化画质的受击：同一张图用加法混合再叠一次
+      // 低画质的受击：同一张图用加法混合再叠一次
       this.flash.visible = flash > 0;
       if (flash > 0) {
         this.flash.texture = this.body.texture;
@@ -127,6 +144,41 @@ export class ActorView {
         this.flash.anchor.copyFrom(this.body.anchor);
         this.flash.alpha = 0.5 * flash;
       }
+    }
+    this.updateXray(!!pose.xray && !dead, hq, res);
+  }
+
+  private isIdle(pose: Pose): boolean {
+    return !pose.moving && pose.attack < 0 && pose.hit < 0 && pose.dead < 0 && !pose.blocking;
+  }
+
+  // updateXray 显示或隐藏剪影：和身体用同一张图、同样的变换，画在剪影层里。
+  private updateXray(on: boolean, hq: boolean, res: number): void {
+    if (!this.xrayLayer) return;
+    if (!this.xray) {
+      if (!on) return;
+      this.xray = new Sprite();
+      this.figure.addChild(this.xray);
+      this.xrayLayer.attach(this.xray);
+    }
+    const xraySprite = this.xray;
+    xraySprite.visible = on;
+    if (!on) return;
+    xraySprite.texture = this.body.texture;
+    xraySprite.scale.copyFrom(this.body.scale);
+    xraySprite.pivot.copyFrom(this.body.pivot);
+    xraySprite.anchor.copyFrom(this.body.anchor);
+    if (hq) {
+      this.xrayFilter ??= new XrayFilter();
+      this.xrayFilter.setResolution(res);
+      if (xraySprite.filters?.[0] !== this.xrayFilter) xraySprite.filters = [this.xrayFilter];
+      xraySprite.tint = 0xffffff;
+      xraySprite.alpha = 1;
+    } else {
+      // 低画质没有着色器：金色半透明的身体
+      if (xraySprite.filters) xraySprite.filters = null;
+      xraySprite.tint = 0xffcf6a;
+      xraySprite.alpha = 0.4;
     }
   }
 
@@ -168,6 +220,12 @@ export class ActorView {
   }
 
   destroy(): void {
+    if (this.xray) {
+      this.xrayLayer?.detach(this.xray);
+      this.xray.filters = null;
+      this.xray.texture = Texture.EMPTY;   // 和身体共用贴图
+    }
+    this.xrayFilter?.destroy();
     this.body.filters = null;
     this.ink?.destroy();
     this.flash.texture = Texture.EMPTY;   // 和身体共用贴图，由身体负责销毁

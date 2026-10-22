@@ -49,6 +49,8 @@ export interface ClientEntity {
   knockX: number;     // 最近一次被打的方向（单位向量，从攻击者指向自己）
   knockY: number;
   knockAmp: number;   // 这次受击被推开的距离（像素），暴击更远
+  shownFacing: number; // 上一帧画出来的朝向，用来发现转身
+  turnAt: number;     // 最近一次转身的时间（转身时身体收窄一下）
   fresh: boolean;     // 还没收到过同步：一进视野就是死的，直接显示倒地
 }
 
@@ -89,9 +91,11 @@ export interface State {
   lands: Map<number, { at: number; color?: string }>;   // 施法者 id -> 最近一次施法命中的时间和颜色
   pending: { at: number; fn: () => void }[];             // 等弹道飞到再播的受击
   lastFrame: number;
-  // 完整画质：描边、轮廓光和动态光照。URL 带 ?low 时一开始就关掉，
-  // Q 键切换，机器太慢时也会自动关掉。
-  hq: boolean;
+  // 画质三档（见 setQuality）：高 = 全部效果；中 = 保留描边、光照和泛光调色，
+  // 泛光少两级、不做热浪和冲击波扭曲、粒子减半；低 = 不用着色器和动态光照。
+  // URL 带 ?mid / ?low 时从中档 / 低档开始，Q 键循环切换，帧率太低时自动往下降一档。
+  quality: Quality;
+  hq: boolean;                    // 不是低档（描边、轮廓光和动态光照都开着），由 setQuality 维护
   post: boolean;                  // 高画质下是否开后期处理（泛光、调色）；URL 带 ?nopost 时关掉，B 键切换
   slowFrames: number;
   slowGraceUntil: number;         // 手动按 Q 之后，到这个时间前不评判帧率
@@ -103,6 +107,17 @@ export interface State {
   combo: { n: number; at: number };   // 自己的连击数和最近一次命中的时间
   hurtAt: number;                 // 自己最近一次掉血的时间（屏幕边缘闪红）
   dpr: number;
+}
+
+export type Quality = 'high' | 'medium' | 'low';
+
+export const QUALITY_NAMES: Record<Quality, string> = { high: '高', medium: '中', low: '低' };
+
+function initialQuality(): Quality {
+  const query = new URLSearchParams(location.search);
+  if (query.has('low')) return 'low';
+  if (query.has('mid')) return 'medium';
+  return 'high';
 }
 
 export const state: State = {
@@ -130,7 +145,8 @@ export const state: State = {
   lands: new Map(),
   pending: [],
   lastFrame: 0,
-  hq: !new URLSearchParams(location.search).has('low'),
+  quality: initialQuality(),
+  hq: initialQuality() !== 'low',
   post: !new URLSearchParams(location.search).has('nopost'),
   slowFrames: 0,
   slowGraceUntil: 0,
@@ -179,6 +195,8 @@ export function makeEntity(d: Partial<EntityInfo> & { id: number }, now: number)
     knockX: 0,
     knockY: 0,
     knockAmp: 0,
+    shownFacing: NaN,   // 还没画过：第一帧不算转身
+    turnAt: -1e9,
     fresh: true,
   };
 }
@@ -223,4 +241,10 @@ export function fxAuras(): Aura[] {
 
 export function cdRemaining(skillId: string, now: number): number {
   return Math.max(0, (state.cds[skillId] || 0) - (now - state.cdsAt) / 1000);
+}
+
+// setQuality 切换画质档位，同时维护 hq（不是低档）。
+export function setQuality(quality: Quality): void {
+  state.quality = quality;
+  state.hq = quality !== 'low';
 }

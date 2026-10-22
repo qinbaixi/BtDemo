@@ -80,6 +80,7 @@ export class FX {
   effects: any[];   // 正在播放的技能特效
   parts: any[];     // 粒子
   shake: number;
+  density: number;   // 粒子密度 0..1
 
   // resolve(id) returns the live {x, y, r} of an entity, or null.
   auras: () => Aura[];   // 每帧要画护盾泡泡的实体
@@ -90,6 +91,7 @@ export class FX {
     this.effects = [];
     this.parts = [];
     this.shake = 0;          // 大范围技能的震动强度（像素），由 camera.ts 衰减
+    this.density = 1;        // 粒子密度 0..1：中画质下随机丢掉一部分粒子（world.ts 按画质设置）
   }
 
   clear() {
@@ -234,6 +236,14 @@ export class FX {
     this.effects.push({ kind: 'ring', x: b.cx, y: b.cy + b.ry * 0.6, color: '#7fd8ff', rgb: rgbOf('#7fd8ff'), radius: b.rx * 1.6, born: now, life: 420 });
   }
 
+  // footDust 是跑动时脚下扬起的一小团土（浅土黄，暗色地面上看得出来）。dir 是移动方向（-1 左，1 右）。
+  footDust(x, y, dir, now) {
+    for (let i = 0; i < 4; i++) {
+      this.spawn({ x: x - dir * rand(0, 8), y: y - rand(0, 3), vx: -dir * rand(0.015, 0.05), vy: -rand(0.008, 0.025),
+        life: rand(380, 600), size: rand(3.5, 6), color: '#b3a48e', kind: 'dust', drag: 0.99, born: now });
+    }
+  }
+
   // ashes 是尸体开始溶解：一阵余烬和灰从身上升起来。
   ashes(id, color, now) {
     const p = this.pos(id, null);
@@ -288,6 +298,7 @@ export class FX {
   }
 
   spawn(p) {
+    if (this.density < 1 && Math.random() > this.density) return;
     if (this.parts.length >= MAX_PARTICLES) this.parts.shift();
     p.ax = 0; p.ay = 0;        // accumulated offset for anchored particles
     p.drag = p.drag ?? 1;
