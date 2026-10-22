@@ -16,24 +16,25 @@ func TestWorldWithShippedConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, err := NewWorld(cfg, 1)
+	world, err := NewWorld(cfg, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := w.Join()
-	p := s.Player
-	p.X, p.Y = 1000, 900 // 史莱姆出生点的中央
-	w.Grid.Moved(p)
-	for i := 0; i < 20*20 && p.LastAttacker == 0; i++ {
-		w.Step()
+	session := world.Join()
+	player := session.Player
+	player.X, player.Y = 1000, 900 // 史莱姆出生点的中央
+	world.Grid.Moved(player)
+	for i := 0; i < 20*20 && player.LastAttacker == 0; i++ {
+		world.Step()
 	}
-	if p.LastAttacker == 0 {
+	if player.LastAttacker == 0 {
 		t.Fatal("no monster attacked the player within 20s")
 	}
-	if a := w.Get(p.LastAttacker); a == nil || a.Kind != core.KindMonster {
-		t.Fatalf("attacker %v is not a monster", a)
+	if attacker := world.Get(player.LastAttacker); attacker == nil ||
+		attacker.Kind != core.KindMonster {
+		t.Fatalf("attacker %v is not a monster", attacker)
 	}
-	if len(s.Out) == 0 {
+	if len(session.Out) == 0 {
 		t.Fatal("no messages sent to the session")
 	}
 }
@@ -45,46 +46,52 @@ func TestWatchSendsAITrace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, err := NewWorld(cfg, 1)
+	world, err := NewWorld(cfg, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := w.Join()
-	p := s.Player
-	p.X, p.Y = 1000, 900
-	w.Grid.Moved(p)
-	m := w.Combat.NearestMonster(p, 400)
-	if m == nil {
+	session := world.Join()
+	player := session.Player
+	player.X, player.Y = 1000, 900
+	world.Grid.Moved(player)
+	monster := world.Combat.NearestMonster(player, 400)
+	if monster == nil {
 		t.Fatal("no monster near the slime spawn")
 	}
 	drain := func() *pb.AiTrace {
 		var last *pb.AiTrace
-		for len(s.Out) > 0 {
+		for len(session.Out) > 0 {
 			var msg pb.ServerMsg
-			if err := proto.Unmarshal(<-s.Out, &msg); err != nil {
+			if err := proto.Unmarshal(<-session.Out, &msg); err != nil {
 				t.Fatal(err)
 			}
-			if sy := msg.GetSync(); sy != nil && sy.Ai != nil {
-				last = sy.Ai
+			if syncMsg := msg.GetSync(); syncMsg != nil && syncMsg.Ai != nil {
+				last = syncMsg.Ai
 			}
 		}
 		return last
 	}
 	for i := 0; i < 4; i++ {
-		w.Step()
+		world.Step()
 	}
-	if tr := drain(); tr != nil {
+	if trace := drain(); trace != nil {
 		t.Fatal("trace sent without watching")
 	}
-	w.Input(s, &pb.ClientMsg{Msg: &pb.ClientMsg_Watch{Watch: &pb.Watch{Id: proto.Int32(int32(m.ID))}}})
+	world.Input(
+		session,
+		&pb.ClientMsg{
+			Msg: &pb.ClientMsg_Watch{Watch: &pb.Watch{Id: proto.Int32(int32(monster.ID))}},
+		},
+	)
 	for i := 0; i < 4; i++ {
-		w.Step()
+		world.Step()
 	}
-	tr := drain()
-	if tr == nil || tr.GetId() != int32(m.ID) || len(tr.Ticks) == 0 || len(tr.Ticks[0].Nodes) == 0 {
-		t.Fatalf("bad trace %v", tr)
+	trace := drain()
+	if trace == nil || trace.GetId() != int32(monster.ID) || len(trace.Ticks) == 0 ||
+		len(trace.Ticks[0].Nodes) == 0 {
+		t.Fatalf("bad trace %v", trace)
 	}
-	if tr.Ticks[0].Nodes[0].GetDepth() != 0 || tr.GetTree() == "" {
-		t.Fatalf("root step %v tree %q", tr.Ticks[0].Nodes[0], tr.GetTree())
+	if trace.Ticks[0].Nodes[0].GetDepth() != 0 || trace.GetTree() == "" {
+		t.Fatalf("root step %v tree %q", trace.Ticks[0].Nodes[0], trace.GetTree())
 	}
 }

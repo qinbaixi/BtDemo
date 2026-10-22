@@ -130,8 +130,8 @@ type Config struct {
 // Load 从 dir 读取 world.yaml、skills.yaml、monsters.yaml 和 map.tmj，并检查每个引用都能解析。
 // knownTrees 列出编译进二进制文件的行为树。
 func Load(dir string, knownTrees map[string]bool) (*Config, error) {
-	c := &Config{}
-	if err := readYAML(filepath.Join(dir, "world.yaml"), &c.World); err != nil {
+	cfg := &Config{}
+	if err := readYAML(filepath.Join(dir, "world.yaml"), &cfg.World); err != nil {
 		return nil, err
 	}
 	var skills struct {
@@ -140,7 +140,7 @@ func Load(dir string, knownTrees map[string]bool) (*Config, error) {
 	if err := readYAML(filepath.Join(dir, "skills.yaml"), &skills); err != nil {
 		return nil, err
 	}
-	c.Skills = skills.Skills
+	cfg.Skills = skills.Skills
 	var monsters struct {
 		Templates map[string]*Template `yaml:"templates"`
 		Spawns    []Spawn              `yaml:"spawns"`
@@ -148,12 +148,12 @@ func Load(dir string, knownTrees map[string]bool) (*Config, error) {
 	if err := readYAML(filepath.Join(dir, "monsters.yaml"), &monsters); err != nil {
 		return nil, err
 	}
-	c.Templates, c.Spawns = monsters.Templates, monsters.Spawns
+	cfg.Templates, cfg.Spawns = monsters.Templates, monsters.Spawns
 	var err error
-	if c.Layout, err = loadLayout(dir); err != nil {
+	if cfg.Layout, err = loadLayout(dir); err != nil {
 		return nil, err
 	}
-	return c, c.validate(knownTrees)
+	return cfg, cfg.validate(knownTrees)
 }
 
 func readYAML(path string, out any) error {
@@ -167,106 +167,142 @@ func readYAML(path string, out any) error {
 	return nil
 }
 
-func (c *Config) validate(knownTrees map[string]bool) error {
-	w := &c.World
-	if w.Map.Width <= 0 || w.Map.Height <= 0 || w.AOI.Cell <= 0 {
+func (cfg *Config) validate(knownTrees map[string]bool) error {
+	world := &cfg.World
+	if world.Map.Width <= 0 || world.Map.Height <= 0 || world.AOI.Cell <= 0 {
 		return fmt.Errorf("world.yaml: map size and aoi.cell must be positive")
 	}
-	if w.TickRate <= 0 {
-		w.TickRate = 20
+	if world.TickRate <= 0 {
+		world.TickRate = 20
 	}
-	w.Addr = NormalizeAddr(w.Addr)
-	if w.SyncRate <= 0 {
-		w.SyncRate = 10
+	world.Addr = NormalizeAddr(world.Addr)
+	if world.SyncRate <= 0 {
+		world.SyncRate = 10
 	}
-	if w.Player.Level <= 0 {
-		w.Player.Level = 1
+	if world.Player.Level <= 0 {
+		world.Player.Level = 1
 	}
-	if w.Player.Model == "" {
-		w.Player.Model = "knight"
+	if world.Player.Model == "" {
+		world.Player.Model = "knight"
 	}
 	// 没配格挡时：减伤 80%、速度减半
-	if w.Player.Block.Reduce == 0 && w.Player.Block.Speed == 0 {
-		w.Player.Block = Block{Reduce: 0.8, Speed: 0.5}
+	if world.Player.Block.Reduce == 0 && world.Player.Block.Speed == 0 {
+		world.Player.Block = Block{Reduce: 0.8, Speed: 0.5}
 	}
-	if b := w.Player.Block; b.Reduce < 0 || b.Reduce > 1 || b.Speed < 0 {
+	if block := world.Player.Block; block.Reduce < 0 || block.Reduce > 1 || block.Speed < 0 {
 		return fmt.Errorf("world.yaml: player.block.reduce must be 0..1 and speed >= 0")
 	}
-	for f, targets := range w.Hostile {
-		for _, t := range targets {
-			if _, ok := w.Hostile[t]; !ok {
-				return fmt.Errorf("world.yaml: hostile.%s lists unknown faction %q", f, t)
+	for faction, targets := range world.Hostile {
+		for _, target := range targets {
+			if _, ok := world.Hostile[target]; !ok {
+				return fmt.Errorf(
+					"world.yaml: hostile.%s lists unknown faction %q",
+					faction,
+					target,
+				)
 			}
 		}
 	}
-	if _, ok := w.Hostile["player"]; !ok {
+	if _, ok := world.Hostile["player"]; !ok {
 		return fmt.Errorf("world.yaml: hostile must have a player entry")
 	}
-	for id, s := range c.Skills {
-		s.ID = id
-		switch s.Kind {
+	for id, skill := range cfg.Skills {
+		skill.ID = id
+		switch skill.Kind {
 		case "target", "aoe", "self":
 		default:
-			return fmt.Errorf("skills.yaml: skill %s has unknown kind %q", id, s.Kind)
+			return fmt.Errorf("skills.yaml: skill %s has unknown kind %q", id, skill.Kind)
 		}
-		switch s.Damage {
+		switch skill.Damage {
 		case "", "physical", "magic":
 		default:
-			return fmt.Errorf("skills.yaml: skill %s has unknown damage %q", id, s.Damage)
+			return fmt.Errorf("skills.yaml: skill %s has unknown damage %q", id, skill.Damage)
 		}
 	}
 	checkSkills := func(owner string, ids []string) error {
 		for _, id := range ids {
-			if c.Skills[id] == nil {
+			if cfg.Skills[id] == nil {
 				return fmt.Errorf("%s: unknown skill %q", owner, id)
 			}
 		}
 		return nil
 	}
-	if err := checkSkills("world.yaml player", w.Player.Skills); err != nil {
+	if err := checkSkills("world.yaml player", world.Player.Skills); err != nil {
 		return err
 	}
-	for id, t := range c.Templates {
-		t.ID = id
-		if t.Level <= 0 {
-			t.Level = 1
+	for id, template := range cfg.Templates {
+		template.ID = id
+		if template.Level <= 0 {
+			template.Level = 1
 		}
-		if t.Model == "" {
-			t.Model = id
+		if template.Model == "" {
+			template.Model = id
 		}
-		if t.Kind != "monster" && t.Kind != "npc" {
-			return fmt.Errorf("monsters.yaml: template %s has kind %q, want monster or npc", id, t.Kind)
+		if template.Kind != "monster" && template.Kind != "npc" {
+			return fmt.Errorf(
+				"monsters.yaml: template %s has kind %q, want monster or npc",
+				id,
+				template.Kind,
+			)
 		}
-		if !knownTrees[t.Tree] {
-			return fmt.Errorf("monsters.yaml: template %s uses unknown behavior tree %q", id, t.Tree)
+		if !knownTrees[template.Tree] {
+			return fmt.Errorf(
+				"monsters.yaml: template %s uses unknown behavior tree %q",
+				id,
+				template.Tree,
+			)
 		}
-		if _, ok := w.Hostile[t.Faction]; !ok {
-			return fmt.Errorf("monsters.yaml: template %s has faction %q missing from world.yaml hostile", id, t.Faction)
+		if _, ok := world.Hostile[template.Faction]; !ok {
+			return fmt.Errorf(
+				"monsters.yaml: template %s has faction %q missing from world.yaml hostile",
+				id,
+				template.Faction,
+			)
 		}
-		if err := checkSkills("monsters.yaml template "+id, t.Skills); err != nil {
+		if err := checkSkills("monsters.yaml template "+id, template.Skills); err != nil {
 			return err
 		}
 	}
-	if l := c.Layout; l.Source != nil && (l.Width != w.Map.Width || l.Height != w.Map.Height) {
-		return fmt.Errorf("%s is %gx%g but world.yaml map is %gx%g; change one to match", MapFile, l.Width, l.Height, w.Map.Width, w.Map.Height)
+	if layout := cfg.Layout; layout.Source != nil &&
+		(layout.Width != world.Map.Width || layout.Height != world.Map.Height) {
+		return fmt.Errorf(
+			"%s is %gx%g but world.yaml map is %gx%g; change one to match",
+			MapFile,
+			layout.Width,
+			layout.Height,
+			world.Map.Width,
+			world.Map.Height,
+		)
 	}
-	for _, p := range c.Layout.Props {
-		if p.X < 0 || p.Y < 0 || p.X > w.Map.Width || p.Y > w.Map.Height {
-			return fmt.Errorf("%s: prop %s at (%g, %g) is off the %gx%g map", MapFile, p.Kind, p.X, p.Y, w.Map.Width, w.Map.Height)
+	for _, prop := range cfg.Layout.Props {
+		if prop.X < 0 || prop.Y < 0 || prop.X > world.Map.Width || prop.Y > world.Map.Height {
+			return fmt.Errorf(
+				"%s: prop %s at (%g, %g) is off the %gx%g map",
+				MapFile,
+				prop.Kind,
+				prop.X,
+				prop.Y,
+				world.Map.Width,
+				world.Map.Height,
+			)
 		}
 	}
-	for i, s := range c.Spawns {
-		if c.Templates[s.Template] == nil {
-			return fmt.Errorf("monsters.yaml: spawn %d uses unknown template %q", i, s.Template)
+	for i, spawnCfg := range cfg.Spawns {
+		if cfg.Templates[spawnCfg.Template] == nil {
+			return fmt.Errorf(
+				"monsters.yaml: spawn %d uses unknown template %q",
+				i,
+				spawnCfg.Template,
+			)
 		}
 	}
 	return nil
 }
 
 // Hostile 报告阵营 a 是否会攻击阵营 b。
-func (c *Config) Hostile(a, b string) bool {
-	for _, f := range c.World.Hostile[a] {
-		if f == b {
+func (cfg *Config) Hostile(attacker, target string) bool {
+	for _, faction := range cfg.World.Hostile[attacker] {
+		if faction == target {
 			return true
 		}
 	}

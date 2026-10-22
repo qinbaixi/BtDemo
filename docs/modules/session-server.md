@@ -59,9 +59,9 @@
 
 在世界 goroutine 里执行，所以可以直接改实体：
 
-- `Move`：归一化方向写进 `e.MoveX/MoveY`，下一帧 `move.Tick` 才真正移动（输入和移动解耦，移动速度只由服务端决定）。
+- `Move`：归一化方向写进 `entity.MoveX/MoveY`，下一帧 `move.Tick` 才真正移动（输入和移动解耦，移动速度只由服务端决定）。
 - `Cast`：选中的目标无效时自动找最近的怪，然后 `combat.Cast`，失败就回一个 `Toast`。
-- `Block`：写进 `e.Blocking`，伤害结算和移动会读它。
+- `Block`：写进 `entity.Blocking`，伤害结算和移动会读它。
 - `SetTarget`、`Watch`：记下来。
 
 ### Flush：同步

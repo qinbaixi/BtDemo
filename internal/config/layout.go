@@ -38,7 +38,7 @@ type Prop struct {
 	Kind    string
 	X       float64
 	Y       float64
-	S       float64
+	Scale   float64
 	Variant int
 	Flip    bool
 	DX      float64
@@ -95,12 +95,12 @@ func loadLayout(dir string) (Layout, error) {
 	if err != nil {
 		return Layout{}, err
 	}
-	l, err := parseLayout(data)
+	layout, err := parseLayout(data)
 	if err != nil {
 		return Layout{}, fmt.Errorf("%s: %w", MapFile, err)
 	}
-	l.Source = data
-	return l, nil
+	layout.Source = data
+	return layout, nil
 }
 
 // parseLayout 解析 Tiled 地图：
@@ -109,55 +109,65 @@ func loadLayout(dir string) (Layout, error) {
 //     点对象放在脚下的位置；折线对象（两个点）是一段墙，从第一点到第二点。
 //     自定义属性 s 缩放（默认 1）、v 外观变体（默认 0）、flip 水平翻转。
 func parseLayout(data []byte) (Layout, error) {
-	var m tmjMap
-	if err := json.Unmarshal(data, &m); err != nil {
+	var mapData tmjMap
+	if err := json.Unmarshal(data, &mapData); err != nil {
 		return Layout{}, err
 	}
-	if m.Orientation != "orthogonal" || m.Infinite {
+	if mapData.Orientation != "orthogonal" || mapData.Infinite {
 		return Layout{}, errors.New("map must be orthogonal and not infinite")
 	}
-	if m.Width <= 0 || m.Height <= 0 || m.TileWidth <= 0 || m.TileHeight <= 0 {
+	if mapData.Width <= 0 || mapData.Height <= 0 || mapData.TileWidth <= 0 ||
+		mapData.TileHeight <= 0 {
 		return Layout{}, errors.New("map width, height, tilewidth and tileheight must be positive")
 	}
-	l := Layout{
-		Width:  float64(m.Width * m.TileWidth),
-		Height: float64(m.Height * m.TileHeight),
+	layout := Layout{
+		Width:  float64(mapData.Width * mapData.TileWidth),
+		Height: float64(mapData.Height * mapData.TileHeight),
 		Shapes: map[string]Shape{},
 	}
-	for _, p := range m.Properties {
-		kind, ok := strings.CutPrefix(p.Name, "shape.")
+	for _, raw := range mapData.Properties {
+		kind, ok := strings.CutPrefix(raw.Name, "shape.")
 		if !ok {
 			continue
 		}
-		var s string
-		if err := json.Unmarshal(p.Value, &s); err != nil {
-			return l, fmt.Errorf("map property %s must be a string", p.Name)
+		var text string
+		if err := json.Unmarshal(raw.Value, &text); err != nil {
+			return layout, fmt.Errorf("map property %s must be a string", raw.Name)
 		}
-		sh, err := parseShape(s)
+		shape, err := parseShape(text)
 		if err != nil {
-			return l, fmt.Errorf("map property %s: %w", p.Name, err)
+			return layout, fmt.Errorf("map property %s: %w", raw.Name, err)
 		}
-		l.Shapes[kind] = sh
+		layout.Shapes[kind] = shape
 	}
-	layer := findLayer(m.Layers, "props")
+	layer := findLayer(mapData.Layers, "props")
 	if layer == nil {
-		return l, nil
+		return layout, nil
 	}
-	for _, o := range layer.Objects {
-		p, err := parseProp(o)
+	for _, obj := range layer.Objects {
+		prop, err := parseProp(obj)
 		if err != nil {
-			return l, fmt.Errorf("props object %d: %w", o.ID, err)
+			return layout, fmt.Errorf("props object %d: %w", obj.ID, err)
 		}
-		sh, ok := l.Shapes[p.Kind]
+		shape, ok := layout.Shapes[prop.Kind]
 		if !ok {
-			return l, fmt.Errorf("props object %d has class %q without a shape.%s map property (use \"none\" for decor that does not block)", o.ID, p.Kind, p.Kind)
+			return layout, fmt.Errorf(
+				"props object %d has class %q without a shape.%s map property (use \"none\" for decor that does not block)",
+				obj.ID,
+				prop.Kind,
+				prop.Kind,
+			)
 		}
-		if sh.Capsule != 0 && p.DX == 0 && p.DY == 0 {
-			return l, fmt.Errorf("props object %d (%s) must be a two-point polyline for its capsule shape", o.ID, p.Kind)
+		if shape.Capsule != 0 && prop.DX == 0 && prop.DY == 0 {
+			return layout, fmt.Errorf(
+				"props object %d (%s) must be a two-point polyline for its capsule shape",
+				obj.ID,
+				prop.Kind,
+			)
 		}
-		l.Props = append(l.Props, p)
+		layout.Props = append(layout.Props, prop)
 	}
-	return l, nil
+	return layout, nil
 }
 
 // findLayer 按名字找对象图层，会进入图层组查找。
@@ -173,51 +183,51 @@ func findLayer(layers []tmjLayer, name string) *tmjLayer {
 	return nil
 }
 
-func parseProp(o tmjObject) (Prop, error) {
-	p := Prop{Kind: o.Type, X: o.X, Y: o.Y, S: 1}
-	if p.Kind == "" {
-		p.Kind = o.Class
+func parseProp(obj tmjObject) (Prop, error) {
+	prop := Prop{Kind: obj.Type, X: obj.X, Y: obj.Y, Scale: 1}
+	if prop.Kind == "" {
+		prop.Kind = obj.Class
 	}
-	if o.Template != "" {
-		return p, errors.New("object templates are not supported; detach the template in Tiled")
+	if obj.Template != "" {
+		return prop, errors.New("object templates are not supported; detach the template in Tiled")
 	}
-	if p.Kind == "" {
-		return p, errors.New("has no class (set it to the prop kind, e.g. house)")
+	if prop.Kind == "" {
+		return prop, errors.New("has no class (set it to the prop kind, e.g. house)")
 	}
-	for _, pr := range o.Properties {
+	for _, raw := range obj.Properties {
 		var err error
-		switch pr.Name {
+		switch raw.Name {
 		case "s":
-			err = json.Unmarshal(pr.Value, &p.S)
+			err = json.Unmarshal(raw.Value, &prop.Scale)
 		case "v":
-			err = json.Unmarshal(pr.Value, &p.Variant)
+			err = json.Unmarshal(raw.Value, &prop.Variant)
 		case "flip":
-			err = json.Unmarshal(pr.Value, &p.Flip)
+			err = json.Unmarshal(raw.Value, &prop.Flip)
 		}
 		if err != nil {
-			return p, fmt.Errorf("(%s) property %s: %w", p.Kind, pr.Name, err)
+			return prop, fmt.Errorf("(%s) property %s: %w", prop.Kind, raw.Name, err)
 		}
 	}
-	if !(p.S > 0) || math.IsInf(p.S, 0) {
-		return p, fmt.Errorf("(%s) s must be positive", p.Kind)
+	if !(prop.Scale > 0) || math.IsInf(prop.Scale, 0) {
+		return prop, fmt.Errorf("(%s) s must be positive", prop.Kind)
 	}
 	switch {
-	case len(o.Polyline) == 2:
+	case len(obj.Polyline) == 2:
 		// 墙段：起点是第一个点，dx/dy 是未缩放的偏移（随 s 缩放后等于折线的长度）
-		a, b := o.Polyline[0], o.Polyline[1]
-		p.X, p.Y = o.X+a.X, o.Y+a.Y
-		p.DX, p.DY = (b.X-a.X)/p.S, (b.Y-a.Y)/p.S
-	case o.Polyline != nil:
-		return p, fmt.Errorf("(%s) polyline must have exactly two points", p.Kind)
-	case !o.Point:
-		return p, fmt.Errorf("(%s) must be a point or a two-point polyline", p.Kind)
+		from, to := obj.Polyline[0], obj.Polyline[1]
+		prop.X, prop.Y = obj.X+from.X, obj.Y+from.Y
+		prop.DX, prop.DY = (to.X-from.X)/prop.Scale, (to.Y-from.Y)/prop.Scale
+	case obj.Polyline != nil:
+		return prop, fmt.Errorf("(%s) polyline must have exactly two points", prop.Kind)
+	case !obj.Point:
+		return prop, fmt.Errorf("(%s) must be a point or a two-point polyline", prop.Kind)
 	}
-	for _, v := range []float64{p.X, p.Y, p.DX, p.DY} {
-		if math.IsNaN(v) || math.IsInf(v, 0) {
-			return p, fmt.Errorf("(%s) has a non-finite number", p.Kind)
+	for _, value := range []float64{prop.X, prop.Y, prop.DX, prop.DY} {
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return prop, fmt.Errorf("(%s) has a non-finite number", prop.Kind)
 		}
 	}
-	return p, nil
+	return prop, nil
 }
 
 // parseShape 解析碰撞形状字符串，坐标相对脚下的点，随 s 缩放，flip 时左右镜像：
@@ -226,20 +236,20 @@ func parseProp(o tmjObject) (Prop, error) {
 //	rect x0 y0 x1 y1        轴对齐矩形
 //	capsule r               墙专用：沿墙段、半径为 r 的胶囊体
 //	none                    不挡路的装饰
-func parseShape(s string) (Shape, error) {
-	f := strings.Fields(s)
-	if len(f) == 0 {
+func parseShape(text string) (Shape, error) {
+	fields := strings.Fields(text)
+	if len(fields) == 0 {
 		return Shape{}, errors.New(`empty shape (use "none" for decor)`)
 	}
-	nums := make([]float64, len(f)-1)
-	for i, x := range f[1:] {
-		v, err := strconv.ParseFloat(x, 64)
-		if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
+	nums := make([]float64, len(fields)-1)
+	for i, x := range fields[1:] {
+		value, err := strconv.ParseFloat(x, 64)
+		if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
 			return Shape{}, fmt.Errorf("bad number %q", x)
 		}
-		nums[i] = v
+		nums[i] = value
 	}
-	switch f[0] {
+	switch fields[0] {
 	case "none":
 		if len(nums) == 0 {
 			return Shape{}, nil
@@ -260,5 +270,5 @@ func parseShape(s string) (Shape, error) {
 		}
 		return Shape{}, errors.New("capsule needs a positive radius")
 	}
-	return Shape{}, fmt.Errorf("unknown shape %q (circle, rect, capsule or none)", s)
+	return Shape{}, fmt.Errorf("unknown shape %q (circle, rect, capsule or none)", text)
 }

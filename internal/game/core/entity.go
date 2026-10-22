@@ -125,7 +125,7 @@ type Brain struct {
 const MaxRadius = 64
 
 // Alive 报告 e 是否可以行动并且可以被选为目标。
-func (e *Entity) Alive() bool { return e != nil && !e.Dead }
+func (entity *Entity) Alive() bool { return entity != nil && !entity.Dead }
 
 // Dist 是 a 与 b 中心之间的距离。
 func Dist(a, b *Entity) float64 { return math.Hypot(a.X-b.X, a.Y-b.Y) }
@@ -134,21 +134,23 @@ func Dist(a, b *Entity) float64 { return math.Hypot(a.X-b.X, a.Y-b.Y) }
 func EdgeDist(a, b *Entity) float64 { return math.Max(0, Dist(a, b)-a.Radius-b.Radius) }
 
 // HomeDist 是 e 与其家之间的距离。
-func (e *Entity) HomeDist() float64 { return math.Hypot(e.X-e.HomeX, e.Y-e.HomeY) }
+func (entity *Entity) HomeDist() float64 {
+	return math.Hypot(entity.X-entity.HomeX, entity.Y-entity.HomeY)
+}
 
 // HPRatio 为 HP / MaxHP。
-func (e *Entity) HPRatio() float64 {
-	if e.Attr.MaxHP <= 0 {
+func (entity *Entity) HPRatio() float64 {
+	if entity.Attr.MaxHP <= 0 {
 		return 0
 	}
-	return e.HP / e.Attr.MaxHP
+	return entity.HP / entity.Attr.MaxHP
 }
 
 // Shield 是 e 身上所有护盾还能吸收的伤害之和。
-func (e *Entity) Shield() float64 {
+func (entity *Entity) Shield() float64 {
 	sum := 0.0
-	for _, b := range e.Buffs {
-		sum += b.Absorb
+	for _, buff := range entity.Buffs {
+		sum += buff.Absorb
 	}
 	return sum
 }

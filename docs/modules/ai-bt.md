@@ -122,7 +122,7 @@ selector（根）   服务：update_target Range=220，每 0.5 秒
 
 ## 调试追踪（trace.go）
 
-前端调试面板选中一个实体后，客户端发 `Watch{id}`。`session.Watched()` 收集所有被观察的实体，`AI.Tick` 只给它们打开 Tracing，`recordTrace` 把每帧的执行记录转成 `pb.AiTick` 缓存起来，下次同步时由 `Trace(e, defSent)` 打包成 `AiTrace`（执行记录、目标、血量、离家距离、黑板、当前路径）发给观察者，然后清空。没人观察时这部分没有任何开销。
+前端调试面板选中一个实体后，客户端发 `Watch{id}`。`session.Watched()` 收集所有被观察的实体，`AI.Tick` 只给它们打开 Tracing，`recordTrace` 把每帧的执行记录转成 `pb.AiTick` 缓存起来，下次同步时由 `Trace(entity, defSent)` 打包成 `AiTrace`（执行记录、目标、血量、离家距离、黑板、当前路径）发给观察者，然后清空。没人观察时这部分没有任何开销。
 
 每个访问过的节点记录：
 

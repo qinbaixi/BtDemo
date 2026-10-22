@@ -14,8 +14,8 @@ const (
 	Running
 )
 
-func (s Status) String() string {
-	switch s {
+func (status Status) String() string {
+	switch status {
 	case Success:
 		return "success"
 	case Running:
@@ -50,9 +50,17 @@ func NewRegistry() *Registry {
 	}
 }
 
-func (r *Registry) Task(subType string, f TaskFunc)           { r.tasks[subType] = f }
-func (r *Registry) Condition(subType string, f ConditionFunc) { r.conditions[subType] = f }
-func (r *Registry) Service(subType string, f ServiceFunc)     { r.services[subType] = f }
+func (registry *Registry) Task(subType string, fn TaskFunc) { registry.tasks[subType] = fn }
+func (registry *Registry) Condition(subType string, fn ConditionFunc) {
+	registry.conditions[subType] = fn
+}
+
+func (registry *Registry) Service(
+	subType string,
+	fn ServiceFunc,
+) {
+	registry.services[subType] = fn
+}
 
 // Ctx 会传递给处理函数。
 type Ctx struct {
@@ -67,24 +75,24 @@ type Ctx struct {
 }
 
 // Tracing 表示是否在记录调试追踪；为 false 时处理函数不必拼说明文字。
-func (c *Ctx) Tracing() bool { return c.step >= 0 }
+func (ctx *Ctx) Tracing() bool { return ctx.step >= 0 }
 
 // Explain 为调试面板记下一句判断依据，例如“距离 85 > 60”。只在追踪时生效：
 // 条件里调用时写到这次条件检查上，任务和服务里调用时写到节点的说明里。
-func (c *Ctx) Explain(format string, args ...any) {
-	if c.step < 0 {
+func (ctx *Ctx) Explain(format string, args ...any) {
+	if ctx.step < 0 {
 		return
 	}
 	text := fmt.Sprintf(format, args...)
-	st := &c.inst.Trace[c.step]
+	step := &ctx.inst.Trace[ctx.step]
 	switch {
-	case c.check >= 0:
-		ck := &st.Checks[c.check]
-		ck.Why = joinWhy(ck.Why, text)
-	case c.Node.Kind == KindService:
-		st.Notes = append(st.Notes, "service:"+c.Node.SubType+" "+text)
+	case ctx.check >= 0:
+		check := &step.Checks[ctx.check]
+		check.Why = joinWhy(check.Why, text)
+	case ctx.Node.Kind == KindService:
+		step.Notes = append(step.Notes, "service:"+ctx.Node.SubType+" "+text)
 	default:
-		st.Why = append(st.Why, text)
+		step.Why = append(step.Why, text)
 	}
 }
 
@@ -96,7 +104,7 @@ func joinWhy(a, b string) string {
 }
 
 // Blackboard 返回该实例的黑板。
-func (c *Ctx) Blackboard() map[string]any { return c.inst.Blackboard }
+func (ctx *Ctx) Blackboard() map[string]any { return ctx.inst.Blackboard }
 
 type nodeMem struct {
 	lastRunning int // 节点上一次返回 Running 时的 tick 编号
@@ -136,9 +144,9 @@ type Instance struct {
 }
 
 // NewInstance 为 agent 创建一份可运行的 t 副本。
-func NewInstance(t *Tree, reg *Registry, agent any, rng *rand.Rand) *Instance {
+func NewInstance(tree *Tree, reg *Registry, agent any, rng *rand.Rand) *Instance {
 	return &Instance{
-		Tree:        t,
+		Tree:        tree,
 		Reg:         reg,
 		Agent:       agent,
 		Blackboard:  map[string]any{},
@@ -175,107 +183,129 @@ type Check struct {
 }
 
 // Tick 在时刻 now（秒）运行一次整棵树。
-func (in *Instance) Tick(now float64) Status {
-	in.tick++
-	in.now = now
-	in.Active = ""
-	in.Trace = in.Trace[:0]
-	in.depth = 0
-	return in.run(in.Tree.Root)
+func (instance *Instance) Tick(now float64) Status {
+	instance.tick++
+	instance.now = now
+	instance.Active = ""
+	instance.Trace = instance.Trace[:0]
+	instance.depth = 0
+	return instance.run(instance.Tree.Root)
 }
 
 // note 在追踪时为索引 i 处的追踪步骤添加一条备注。
-func (in *Instance) note(i int, s string) {
+func (instance *Instance) note(i int, text string) {
 	if i >= 0 {
-		in.Trace[i].Notes = append(in.Trace[i].Notes, s)
+		instance.Trace[i].Notes = append(instance.Trace[i].Notes, text)
 	}
 }
 
-func (in *Instance) memOf(n *Node) (*nodeMem, bool) {
-	m := in.mem[n.ID]
-	if m == nil {
-		m = &nodeMem{lastRunning: -1}
-		in.mem[n.ID] = m
+func (instance *Instance) memOf(node *Node) (*nodeMem, bool) {
+	mem := instance.mem[node.ID]
+	if mem == nil {
+		mem = &nodeMem{lastRunning: -1}
+		instance.mem[node.ID] = mem
 	}
-	fresh := m.lastRunning != in.tick-1
+	fresh := mem.lastRunning != instance.tick-1
 	if fresh {
-		m.child, m.order, m.results, m.data = 0, nil, nil, map[string]any{}
+		mem.child, mem.order, mem.results, mem.data = 0, nil, nil, map[string]any{}
 	}
-	return m, fresh
+	return mem, fresh
 }
 
-func (in *Instance) ctx(n *Node, fresh bool, m *nodeMem, step int) *Ctx {
-	return &Ctx{Agent: in.Agent, Now: in.now, Node: n, Fresh: fresh, Mem: m.data, inst: in, step: step, check: -1}
+func (instance *Instance) ctx(node *Node, fresh bool, mem *nodeMem, step int) *Ctx {
+	return &Ctx{
+		Agent: instance.Agent,
+		Now:   instance.now,
+		Node:  node,
+		Fresh: fresh,
+		Mem:   mem.data,
+		inst:  instance,
+		step:  step,
+		check: -1,
+	}
 }
 
-func (in *Instance) run(n *Node) Status {
-	m, fresh := in.memOf(n)
+func (instance *Instance) run(node *Node) Status {
+	mem, fresh := instance.memOf(node)
 
 	step := -1
-	if in.Tracing {
-		step = len(in.Trace)
-		in.Trace = append(in.Trace, TraceStep{Node: n, Depth: in.depth, Fresh: fresh})
-		in.depth++
-		defer func() { in.depth-- }()
+	if instance.Tracing {
+		step = len(instance.Trace)
+		instance.Trace = append(
+			instance.Trace,
+			TraceStep{Node: node, Depth: instance.depth, Fresh: fresh},
+		)
+		instance.depth++
+		defer func() { instance.depth-- }()
 	}
-	done := func(st Status) Status {
+	done := func(status Status) Status {
 		if step >= 0 {
-			in.Trace[step].Status = st
+			instance.Trace[step].Status = status
 		}
-		return st
+		return status
 	}
 
-	for _, d := range n.Decorators {
-		if !fresh && !d.Periodic {
+	for _, decorator := range node.Decorators {
+		if !fresh && !decorator.Periodic {
 			continue
 		}
-		if !in.checkDecorator(d, step) {
-			m.lastRunning = -1
-			in.note(step, "blocked:"+d.SubType)
-			return done(in.applyResultDecorators(n, Failure, step))
+		if !instance.checkDecorator(decorator, step) {
+			mem.lastRunning = -1
+			instance.note(step, "blocked:"+decorator.SubType)
+			return done(instance.applyResultDecorators(node, Failure, step))
 		}
 	}
 
-	for _, s := range n.Services {
+	for _, service := range node.Services {
 		// 服务会在其节点重新进入时保留自己的调度，因此即使节点每次 tick 都结束，time_between_ticks 仍然有效。
-		next, scheduled := in.serviceNext[s.ID]
+		next, scheduled := instance.serviceNext[service.ID]
 		if !scheduled {
-			next = in.now + s.FirstTick
+			next = instance.now + service.FirstTick
 		}
-		if in.now >= next {
-			next = in.now + s.Interval
-			if in.serviceMem[s.ID] == nil {
-				in.serviceMem[s.ID] = map[string]any{}
+		if instance.now >= next {
+			next = instance.now + service.Interval
+			if instance.serviceMem[service.ID] == nil {
+				instance.serviceMem[service.ID] = map[string]any{}
 			}
 			before := 0
 			if step >= 0 {
-				before = len(in.Trace[step].Notes)
+				before = len(instance.Trace[step].Notes)
 			}
-			in.Reg.services[s.SubType](&Ctx{Agent: in.Agent, Now: in.now, Node: s, Mem: in.serviceMem[s.ID], inst: in, step: step, check: -1})
+			instance.Reg.services[service.SubType](
+				&Ctx{
+					Agent: instance.Agent,
+					Now:   instance.now,
+					Node:  service,
+					Mem:   instance.serviceMem[service.ID],
+					inst:  instance,
+					step:  step,
+					check: -1,
+				},
+			)
 			// 服务没写说明时也记一笔“触发过”
-			if step >= 0 && len(in.Trace[step].Notes) == before {
-				in.note(step, "service:"+s.SubType)
+			if step >= 0 && len(instance.Trace[step].Notes) == before {
+				instance.note(step, "service:"+service.SubType)
 			}
 		}
-		in.serviceNext[s.ID] = next
+		instance.serviceNext[service.ID] = next
 	}
 
-	var st Status
-	if n.Kind == KindComposite {
-		st = composites[n.SubType](in, n, m)
+	var status Status
+	if node.Kind == KindComposite {
+		status = composites[node.SubType](instance, node, mem)
 	} else {
-		st = in.Reg.tasks[n.SubType](in.ctx(n, fresh, m, step))
-		in.Active = n.SubType
+		status = instance.Reg.tasks[node.SubType](instance.ctx(node, fresh, mem, step))
+		instance.Active = node.SubType
 	}
 
-	st = in.applyResultDecorators(n, st, step)
+	status = instance.applyResultDecorators(node, status, step)
 
-	if st == Running {
-		m.lastRunning = in.tick
+	if status == Running {
+		mem.lastRunning = instance.tick
 	} else {
-		m.lastRunning = -1
+		mem.lastRunning = -1
 	}
-	return done(st)
+	return done(status)
 }
 
 // builtinDecorators 是直接改变结果而非检查条件的装饰器，无需游戏代码即可使用。
@@ -283,70 +313,78 @@ var builtinDecorators = map[string]bool{"cooldown": true, "invert": true, "force
 
 // applyResultDecorators 让 n 的结果装饰器改变 st。当条件装饰器阻止了节点时，这些结果装饰器同样生效，
 // 因此 ForceSuccess 可以让一个可选步骤（例如冷却中的一句台词）永远不会导致其父节点失败。
-func (in *Instance) applyResultDecorators(n *Node, st Status, step int) Status {
-	for _, d := range n.Decorators {
-		before := st
-		st = applyDecorator(in, d, st)
-		if st != before {
-			in.note(step, d.SubType)
+func (instance *Instance) applyResultDecorators(node *Node, status Status, step int) Status {
+	for _, decorator := range node.Decorators {
+		before := status
+		status = applyDecorator(instance, decorator, status)
+		if status != before {
+			instance.note(step, decorator.SubType)
 		}
 	}
-	return st
+	return status
 }
 
 // checkDecorator 检查一个条件装饰器（或冷却）；追踪时把结果和依据记到 step 的 Checks 里。
-func (in *Instance) checkDecorator(d *Node, step int) bool {
-	switch d.SubType {
+func (instance *Instance) checkDecorator(decorator *Node, step int) bool {
+	switch decorator.SubType {
 	case "invert", "force_success":
 		return true
 	}
-	ck := -1
+	checkIdx := -1
 	if step >= 0 {
-		ck = len(in.Trace[step].Checks)
-		in.Trace[step].Checks = append(in.Trace[step].Checks, Check{Node: d})
+		checkIdx = len(instance.Trace[step].Checks)
+		instance.Trace[step].Checks = append(instance.Trace[step].Checks, Check{Node: decorator})
 	}
 	var ok bool
-	if d.SubType == "cooldown" {
-		ready := in.cooldowns[d.ID]
-		ok = in.now >= ready
-		if ck >= 0 {
+	if decorator.SubType == "cooldown" {
+		ready := instance.cooldowns[decorator.ID]
+		ok = instance.now >= ready
+		if checkIdx >= 0 {
 			if ok {
-				in.Trace[step].Checks[ck].Why = "冷却完毕"
+				instance.Trace[step].Checks[checkIdx].Why = "冷却完毕"
 			} else {
-				in.Trace[step].Checks[ck].Why = fmt.Sprintf("冷却中，还剩 %.1fs", ready-in.now)
+				instance.Trace[step].Checks[checkIdx].Why = fmt.Sprintf("冷却中，还剩 %.1fs", ready-instance.now)
 			}
 		}
 	} else {
-		ok = in.Reg.conditions[d.SubType](&Ctx{Agent: in.Agent, Now: in.now, Node: d, inst: in, step: step, check: ck}) != d.Inverse
+		ctx := &Ctx{
+			Agent: instance.Agent,
+			Now:   instance.now,
+			Node:  decorator,
+			inst:  instance,
+			step:  step,
+			check: checkIdx,
+		}
+		ok = instance.Reg.conditions[decorator.SubType](ctx) != decorator.Inverse
 	}
-	if ck >= 0 {
-		in.Trace[step].Checks[ck].Pass = ok
+	if checkIdx >= 0 {
+		instance.Trace[step].Checks[checkIdx].Pass = ok
 	}
 	return ok
 }
 
-func applyDecorator(in *Instance, d *Node, st Status) Status {
-	switch d.SubType {
+func applyDecorator(instance *Instance, decorator *Node, status Status) Status {
+	switch decorator.SubType {
 	case "cooldown":
-		if st == Success {
-			in.cooldowns[d.ID] = in.now + d.Num("Seconds", 0)
+		if status == Success {
+			instance.cooldowns[decorator.ID] = instance.now + decorator.Num("Seconds", 0)
 		}
 	case "force_success":
-		if st == Failure {
+		if status == Failure {
 			return Success
 		}
 	case "invert":
-		switch st {
+		switch status {
 		case Success:
 			return Failure
 		case Failure:
 			return Success
 		}
 	}
-	return st
+	return status
 }
 
-type compositeFunc func(in *Instance, n *Node, m *nodeMem) Status
+type compositeFunc func(instance *Instance, node *Node, mem *nodeMem) Status
 
 var composites map[string]compositeFunc
 
@@ -359,54 +397,54 @@ func init() {
 	}
 }
 
-func selector(in *Instance, n *Node, _ *nodeMem) Status {
-	for _, c := range n.Children {
-		if st := in.run(c); st != Failure {
-			return st
+func selector(instance *Instance, node *Node, _ *nodeMem) Status {
+	for _, child := range node.Children {
+		if status := instance.run(child); status != Failure {
+			return status
 		}
 	}
 	return Failure
 }
 
-func sequence(in *Instance, n *Node, m *nodeMem) Status {
-	for m.child < len(n.Children) {
-		st := in.run(n.Children[m.child])
-		if st != Success {
-			return st
+func sequence(instance *Instance, node *Node, mem *nodeMem) Status {
+	for mem.child < len(node.Children) {
+		status := instance.run(node.Children[mem.child])
+		if status != Success {
+			return status
 		}
-		m.child++
+		mem.child++
 	}
 	return Success
 }
 
-func randomSelector(in *Instance, n *Node, m *nodeMem) Status {
-	if m.order == nil {
-		m.order = in.Rand.Perm(len(n.Children))
+func randomSelector(instance *Instance, node *Node, mem *nodeMem) Status {
+	if mem.order == nil {
+		mem.order = instance.Rand.Perm(len(node.Children))
 	}
-	for m.child < len(m.order) {
-		st := in.run(n.Children[m.order[m.child]])
-		if st != Failure {
-			return st
+	for mem.child < len(mem.order) {
+		status := instance.run(node.Children[mem.order[mem.child]])
+		if status != Failure {
+			return status
 		}
-		m.child++
+		mem.child++
 	}
 	return Failure
 }
 
-func parallel(in *Instance, n *Node, m *nodeMem) Status {
-	if m.results == nil {
-		m.results = make([]Status, len(n.Children))
-		for i := range m.results {
-			m.results[i] = Running
+func parallel(instance *Instance, node *Node, mem *nodeMem) Status {
+	if mem.results == nil {
+		mem.results = make([]Status, len(node.Children))
+		for i := range mem.results {
+			mem.results[i] = Running
 		}
 	}
-	requireOne := n.Str("Policy", "RequireAll") == "RequireOne"
+	requireOne := node.Str("Policy", "RequireAll") == "RequireOne"
 	running := false
-	for i, c := range n.Children {
-		if m.results[i] == Running {
-			m.results[i] = in.run(c)
+	for i, child := range node.Children {
+		if mem.results[i] == Running {
+			mem.results[i] = instance.run(child)
 		}
-		switch m.results[i] {
+		switch mem.results[i] {
 		case Success:
 			if requireOne {
 				return Success

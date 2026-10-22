@@ -42,8 +42,8 @@ type Node struct {
 }
 
 // Num 返回数值属性；若该属性不存在，则返回 def。
-func (n *Node) Num(name string, def float64) float64 {
-	switch v := n.Props[name].(type) {
+func (node *Node) Num(name string, def float64) float64 {
+	switch v := node.Props[name].(type) {
 	case int:
 		return float64(v)
 	case int64:
@@ -55,9 +55,9 @@ func (n *Node) Num(name string, def float64) float64 {
 }
 
 // Str 返回字符串属性；若该属性不存在，则返回 def。
-func (n *Node) Str(name, def string) string {
-	if v, ok := n.Props[name].(string); ok {
-		return v
+func (node *Node) Str(name, def string) string {
+	if value, ok := node.Props[name].(string); ok {
+		return value
 	}
 	return def
 }
@@ -71,7 +71,7 @@ type Tree struct {
 
 // Load 根据 owl-bt 为 Go 导出的数据（`<Prefix>RootID` 和 `<Prefix>Nodes`）构建 Tree。
 func Load(name string, rootID int, raw map[int]map[string]any) (*Tree, error) {
-	t := &Tree{Name: name, Nodes: make(map[int]*Node, len(raw))}
+	tree := &Tree{Name: name, Nodes: make(map[int]*Node, len(raw))}
 	ids := make([]int, 0, len(raw))
 	for id := range raw {
 		ids = append(ids, id)
@@ -79,91 +79,103 @@ func Load(name string, rootID int, raw map[int]map[string]any) (*Tree, error) {
 	sort.Ints(ids)
 	for _, id := range ids {
 		entry := raw[id]
-		n := &Node{ID: id, Props: map[string]any{}}
+		node := &Node{ID: id, Props: map[string]any{}}
 		kind, _ := entry["type"].(string)
-		n.Kind = Kind(kind)
-		n.SubType = fmt.Sprint(entry["sub_type"])
-		if p, ok := entry["properties"].(map[string]any); ok {
-			n.Props = p
+		node.Kind = Kind(kind)
+		node.SubType = fmt.Sprint(entry["sub_type"])
+		if props, ok := entry["properties"].(map[string]any); ok {
+			node.Props = props
 		}
-		n.Inverse, _ = entry["inverse_check_condition"].(bool)
-		n.Periodic, _ = entry["periodic"].(bool)
-		n.Interval = toFloat(entry["time_between_ticks"])
-		n.FirstTick = toFloat(entry["first_tick_time"])
-		t.Nodes[id] = n
+		node.Inverse, _ = entry["inverse_check_condition"].(bool)
+		node.Periodic, _ = entry["periodic"].(bool)
+		node.Interval = toFloat(entry["time_between_ticks"])
+		node.FirstTick = toFloat(entry["first_tick_time"])
+		tree.Nodes[id] = node
 	}
 	for _, id := range ids {
-		entry, n := raw[id], t.Nodes[id]
+		entry, node := raw[id], tree.Nodes[id]
 		var err error
-		if n.Children, err = t.refs(entry, "children", id); err != nil {
+		if node.Children, err = tree.refs(entry, "children", id); err != nil {
 			return nil, err
 		}
-		if n.Decorators, err = t.refs(entry, "decorators", id); err != nil {
+		if node.Decorators, err = tree.refs(entry, "decorators", id); err != nil {
 			return nil, err
 		}
-		if n.Services, err = t.refs(entry, "services", id); err != nil {
+		if node.Services, err = tree.refs(entry, "services", id); err != nil {
 			return nil, err
 		}
 	}
-	t.Root = t.Nodes[rootID]
-	if t.Root == nil {
+	tree.Root = tree.Nodes[rootID]
+	if tree.Root == nil {
 		return nil, fmt.Errorf("bt %s: root node %d missing", name, rootID)
 	}
-	return t, nil
+	return tree, nil
 }
 
-func (t *Tree) refs(entry map[string]any, key string, owner int) ([]*Node, error) {
+func (tree *Tree) refs(entry map[string]any, key string, owner int) ([]*Node, error) {
 	ids, ok := entry[key].([]int)
 	if !ok {
 		return nil, nil
 	}
 	out := make([]*Node, 0, len(ids))
 	for _, id := range ids {
-		n := t.Nodes[id]
-		if n == nil {
-			return nil, fmt.Errorf("bt %s: node %d references missing %s %d", t.Name, owner, key, id)
+		node := tree.Nodes[id]
+		if node == nil {
+			return nil, fmt.Errorf(
+				"bt %s: node %d references missing %s %d",
+				tree.Name,
+				owner,
+				key,
+				id,
+			)
 		}
-		out = append(out, n)
+		out = append(out, node)
 	}
 	return out, nil
 }
 
 // Validate 检查树中的每个条目在 reg 中都有对应的处理函数。
-func (t *Tree) Validate(reg *Registry) error {
-	for _, id := range sortedIDs(t.Nodes) {
-		n := t.Nodes[id]
+func (tree *Tree) Validate(reg *Registry) error {
+	for _, id := range sortedIDs(tree.Nodes) {
+		node := tree.Nodes[id]
 		var ok bool
-		switch n.Kind {
+		switch node.Kind {
 		case KindComposite:
-			_, ok = composites[n.SubType]
+			_, ok = composites[node.SubType]
 		case KindTask:
-			_, ok = reg.tasks[n.SubType]
+			_, ok = reg.tasks[node.SubType]
 		case KindDecorator:
-			_, ok = reg.conditions[n.SubType]
+			_, ok = reg.conditions[node.SubType]
 			if !ok {
-				_, ok = builtinDecorators[n.SubType]
+				_, ok = builtinDecorators[node.SubType]
 			}
 		case KindService:
-			_, ok = reg.services[n.SubType]
+			_, ok = reg.services[node.SubType]
 		}
 		if !ok {
-			return fmt.Errorf("bt %s: no handler for %s %q (node %d)", t.Name, n.Kind, n.SubType, n.ID)
+			return fmt.Errorf(
+				"bt %s: no handler for %s %q (node %d)",
+				tree.Name,
+				node.Kind,
+				node.SubType,
+				node.ID,
+			)
 		}
 	}
 	return nil
 }
 
-func sortedIDs(m map[int]*Node) []int {
-	ids := make([]int, 0, len(m))
-	for id := range m {
+func sortedIDs(nodes map[int]*Node) []int {
+	ids := make([]int, 0, len(nodes))
+	for id := range nodes {
 		ids = append(ids, id)
 	}
 	sort.Ints(ids)
 	return ids
 }
 
-func toFloat(v any) float64 {
-	switch x := v.(type) {
+func toFloat(value any) float64 {
+	switch x := value.(type) {
 	case int:
 		return float64(x)
 	case int64:

@@ -16,102 +16,121 @@ import (
 
 // System 创建并复活实体。
 type System struct {
-	s    *core.State
-	grid *aoi.Grid
-	move *move.System
-	ai   *ai.System
+	state *core.State
+	grid  *aoi.Grid
+	move  *move.System
+	aiSys *ai.System
 }
 
 // New 创建生成系统。
-func New(s *core.State, grid *aoi.Grid, mv *move.System, a *ai.System) *System {
-	return &System{s: s, grid: grid, move: mv, ai: a}
+func New(state *core.State, grid *aoi.Grid, moveSys *move.System, sys *ai.System) *System {
+	return &System{state: state, grid: grid, move: moveSys, aiSys: sys}
 }
 
 // SpawnConfigured 放置 world.yaml 中列出的每个怪物和 NPC。
-func (sp *System) SpawnConfigured() {
-	for _, at := range sp.s.Cfg.Spawns {
-		for i := 0; i < at.Count; i++ {
-			x, y := sp.s.Scatter(at.X, at.Y, at.Spread)
-			sp.Template(sp.s.Cfg.Templates[at.Template], x, y)
+func (spawnSys *System) SpawnConfigured() {
+	for _, spawnCfg := range spawnSys.state.Cfg.Spawns {
+		for i := 0; i < spawnCfg.Count; i++ {
+			x, y := spawnSys.state.Scatter(spawnCfg.X, spawnCfg.Y, spawnCfg.Spread)
+			spawnSys.Template(spawnSys.state.Cfg.Templates[spawnCfg.Template], x, y)
 		}
 	}
 }
 
 // Template 根据模板在 (x, y) 处创建一个怪物或 NPC。
-func (sp *System) Template(t *config.Template, x, y float64) *core.Entity {
-	e := sp.s.Ents.New()
-	e.Identity = core.Identity{ID: e.ID, Kind: core.Kind(t.Kind), Name: t.Name, Faction: t.Faction, Color: t.Color, Model: t.Model, Tmpl: t}
-	e.Radius = t.Radius
-	x, y = sp.move.FreeSpot(e, x, y)
-	e.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: t.Radius}
-	e.Level, e.Base, e.Speed = t.Level, t.Attrs, t.Speed
-	e.Skills = sp.skills(t.Skills)
-	attr.Init(e)
-	sp.ai.Attach(e, t.Tree)
-	sp.add(e)
-	return e
+func (spawnSys *System) Template(template *config.Template, x, y float64) *core.Entity {
+	entity := spawnSys.state.Ents.New()
+	entity.Identity = core.Identity{
+		ID:      entity.ID,
+		Kind:    core.Kind(template.Kind),
+		Name:    template.Name,
+		Faction: template.Faction,
+		Color:   template.Color,
+		Model:   template.Model,
+		Tmpl:    template,
+	}
+	entity.Radius = template.Radius
+	x, y = spawnSys.move.FreeSpot(entity, x, y)
+	entity.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: template.Radius}
+	entity.Level, entity.Base, entity.Speed = template.Level, template.Attrs, template.Speed
+	entity.Skills = spawnSys.skills(template.Skills)
+	attr.Init(entity)
+	spawnSys.aiSys.Attach(entity, template.Tree)
+	spawnSys.add(entity)
+	return entity
 }
 
 // Player 在玩家出生点创建一个新的玩家角色。
-func (sp *System) Player() *core.Entity {
-	p := sp.s.Cfg.World.Player
-	e := sp.s.Ents.New()
-	e.Identity = core.Identity{ID: e.ID, Kind: core.KindPlayer, Faction: "player", Name: fmt.Sprintf("%s%d", p.NamePrefix, e.ID), Color: p.Color, Model: p.Model}
-	e.Radius = p.Radius
-	x, y := sp.s.Scatter(p.Spawn.X, p.Spawn.Y, p.Spawn.Spread)
-	x, y = sp.move.FreeSpot(e, x, y)
-	e.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: p.Radius}
-	e.Level, e.Base, e.Growth, e.Speed = 1, p.Attrs, p.Growth, p.Speed
-	for e.Level < p.Level {
-		attr.LevelUp(e)
+func (spawnSys *System) Player() *core.Entity {
+	player := spawnSys.state.Cfg.World.Player
+	entity := spawnSys.state.Ents.New()
+	entity.Identity = core.Identity{
+		ID:      entity.ID,
+		Kind:    core.KindPlayer,
+		Faction: "player",
+		Name:    fmt.Sprintf("%s%d", player.NamePrefix, entity.ID),
+		Color:   player.Color,
+		Model:   player.Model,
 	}
-	e.Skills = sp.skills(p.Skills)
-	attr.Init(e)
-	sp.add(e)
-	return e
+	entity.Radius = player.Radius
+	x, y := spawnSys.state.Scatter(player.Spawn.X, player.Spawn.Y, player.Spawn.Spread)
+	x, y = spawnSys.move.FreeSpot(entity, x, y)
+	entity.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: player.Radius}
+	entity.Level = 1
+	entity.Base, entity.Growth, entity.Speed = player.Attrs, player.Growth, player.Speed
+	for entity.Level < player.Level {
+		attr.LevelUp(entity)
+	}
+	entity.Skills = spawnSys.skills(player.Skills)
+	attr.Init(entity)
+	spawnSys.add(entity)
+	return entity
 }
 
-func (sp *System) add(e *core.Entity) {
-	sp.s.Ents.Add(e)
-	sp.grid.Add(e)
+func (spawnSys *System) add(entity *core.Entity) {
+	spawnSys.state.Ents.Add(entity)
+	spawnSys.grid.Add(entity)
 }
 
 // Remove 将 e 永久移出世界。
-func (sp *System) Remove(e *core.Entity) {
-	sp.grid.Remove(e)
-	sp.s.Ents.Remove(e)
+func (spawnSys *System) Remove(entity *core.Entity) {
+	spawnSys.grid.Remove(entity)
+	spawnSys.state.Ents.Remove(entity)
 }
 
-func (sp *System) skills(ids []string) []*config.Skill {
+func (spawnSys *System) skills(ids []string) []*config.Skill {
 	out := make([]*config.Skill, 0, len(ids))
 	for _, id := range ids {
-		out = append(out, sp.s.Cfg.Skills[id])
+		out = append(out, spawnSys.state.Cfg.Skills[id])
 	}
 	return out
 }
 
 // Tick 复活复活时间已到的死亡实体。
-func (sp *System) Tick() {
-	now := sp.s.Now()
-	sp.s.Ents.Each(func(e *core.Entity) {
-		if e.Dead && now >= e.RespawnAt {
-			sp.respawn(e)
+func (spawnSys *System) Tick() {
+	now := spawnSys.state.Now()
+	spawnSys.state.Ents.Each(func(entity *core.Entity) {
+		if entity.Dead && now >= entity.RespawnAt {
+			spawnSys.respawn(entity)
 		}
 	})
 }
 
-func (sp *System) respawn(e *core.Entity) {
-	e.Dead = false
-	x, y := e.HomeX, e.HomeY
-	if e.Kind == core.KindPlayer {
-		at := sp.s.Cfg.World.Player.Spawn
-		x, y = sp.s.Scatter(at.X, at.Y, at.Spread)
+func (spawnSys *System) respawn(entity *core.Entity) {
+	entity.Dead = false
+	x, y := entity.HomeX, entity.HomeY
+	if entity.Kind == core.KindPlayer {
+		spawnAt := spawnSys.state.Cfg.World.Player.Spawn
+		x, y = spawnSys.state.Scatter(spawnAt.X, spawnAt.Y, spawnAt.Spread)
 	}
-	e.Cooldowns = map[string]float64{}
-	e.Steering = core.Steering{}
-	e.LastAttacker, e.LastHitAt = 0, 0
-	attr.Init(e)
-	sp.ai.Reset(e)
-	sp.move.Place(e, x, y)
-	sp.s.Events.Emit(e, &core.Event{Kind: pb.EventKind_RESPAWN.Enum(), Id: core.I32(e.ID)})
+	entity.Cooldowns = map[string]float64{}
+	entity.Steering = core.Steering{}
+	entity.LastAttacker, entity.LastHitAt = 0, 0
+	attr.Init(entity)
+	spawnSys.aiSys.Reset(entity)
+	spawnSys.move.Place(entity, x, y)
+	spawnSys.state.Events.Emit(
+		entity,
+		&core.Event{Kind: pb.EventKind_RESPAWN.Enum(), Id: core.I32(entity.ID)},
+	)
 }

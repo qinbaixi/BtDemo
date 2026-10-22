@@ -23,11 +23,11 @@ type State struct {
 - **Clock**：`Now` 是游戏开始后的秒数，`Dt` 是每帧秒数（1/tick_rate），`Tick` 是帧号。所有冷却、Buff、复活时间都用 `Now` 计算，不用系统时钟，所以测试里可以手动推进时间。
 - **Rand**：所有随机（暴击、伤害浮动、刷怪散布、随机选择器）都走这一个随机源。同样的种子、同样的输入，跑出同样的结果。
 - **Entities**：`map[id]*Entity` 加一个排好序的 id 切片。`Each` 按 id 顺序遍历（Go 的 map 遍历顺序是随机的，直接遍历会让结果不可复现），并先复制 id 列表，所以回调里增删实体是安全的。
-- **Events**：`Emit(e, ev)` 把事件和发生位置（实体当前坐标）一起入队；`session.Flush` 只把发生在玩家九宫格内的事件发给他，然后 `Clear`。
+- **Events**：`Emit(entity, event)` 把事件和发生位置（实体当前坐标）一起入队；`session.Flush` 只把发生在玩家九宫格内的事件发给他，然后 `Clear`。
 
 ## Entity：用组件组织字段
 
-玩家、怪物、NPC 都是同一个 `Entity` 类型，用 `Kind` 区分。字段按关注点分成组件，通过结构体嵌入组合（`e.X` 等价于 `e.Transform.X`）：
+玩家、怪物、NPC 都是同一个 `Entity` 类型，用 `Kind` 区分。字段按关注点分成组件，通过结构体嵌入组合（`entity.X` 等价于 `entity.Transform.X`）：
 
 ```go
 type Entity struct {
@@ -48,11 +48,11 @@ type Entity struct {
 
 | 函数 | 含义 |
 | --- | --- |
-| `e.Alive()` | 不为 nil 且没死。对 nil 调用也安全，所以 `s.Ents.Get(id).Alive()` 可以直接写 |
+| `entity.Alive()` | 不为 nil 且没死。对 nil 调用也安全，所以 `state.Ents.Get(id).Alive()` 可以直接写 |
 | `core.Dist(a, b)` | 圆心距离 |
 | `core.EdgeDist(a, b)` | 边缘距离（圆心距离减两个半径）。技能射程、追击停止距离都用它，所以体型大的怪不会“贴脸才打得到” |
-| `e.HomeDist()` | 离出生点多远（脱战回家用） |
-| `e.HPRatio()` | 血量百分比 |
+| `entity.HomeDist()` | 离出生点多远（脱战回家用） |
+| `entity.HPRatio()` | 血量百分比 |
 | `core.I32 / F32` | 生成 proto2 的可选字段指针 |
 | `core.Round1` | 保留一位小数，减少下发的数据量 |
 

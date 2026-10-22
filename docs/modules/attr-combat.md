@@ -27,10 +27,10 @@ Buff：Atk、MAtk ×(1+ΣAtkPct)，Def、MDef ×(1+ΣDefPct)，Speed ×(1+ΣSpee
 | 函数 | 作用 |
 | --- | --- |
 | `Compute(base, speed, buffs)` | 纯函数：输入基础属性、移速和 Buff，返回派生属性。方便单独测试 |
-| `Recalc(e)` | 重算 `e.Attr`。最大生命变化时**保持血量百分比**，而不是保持血量数值 |
-| `Init(e)` | 重算并回满血（出生、复活、升级） |
-| `LevelUp(e)` | 等级 +1，基础属性加上成长值 |
-| `System.GainExp(e, n)` | 加经验，够了就连续升级，每升一级发 `LEVEL_UP` 事件 |
+| `Recalc(entity)` | 重算 `entity.Attr`。最大生命变化时**保持血量百分比**，而不是保持血量数值 |
+| `Init(entity)` | 重算并回满血（出生、复活、升级） |
+| `LevelUp(entity)` | 等级 +1，基础属性加上成长值 |
+| `System.GainExp(entity, n)` | 加经验，够了就连续升级，每升一级发 `LEVEL_UP` 事件 |
 
 升级所需经验：`100 × 当前等级`。
 
@@ -86,7 +86,7 @@ AOE 先收集目标再结算，是因为结算可能杀死目标，而遍历 AOI
 
 `applyDamage` 扣血前依次减掉两部分，伤害事件里分别记下来，前端据此飘“格挡”“吸收 N”：
 
-1. **格挡**：玩家按住右键时 `e.Blocking` 为真，伤害减少 `world.yaml` 的 `player.block.reduce`（默认 0.8，即减 80%），记在 `Event.blocked`。格挡时移速乘 `player.block.speed`（默认 0.5），不能放技能。
+1. **格挡**：玩家按住右键时 `entity.Blocking` 为真，伤害减少 `world.yaml` 的 `player.block.reduce`（默认 0.8，即减 80%），记在 `Event.blocked`。格挡时移速乘 `player.block.speed`（默认 0.5），不能放技能。
 2. **护盾**：剩下的伤害先由护盾 Buff 的 `Absorb` 吸收，记在 `Event.absorbed`；护盾打完这个 Buff 就被移除（时间到也会移除）。
 
 剩下的才扣生命（`Event.v`），可能是 0。
@@ -103,8 +103,8 @@ AOE 先收集目标再结算，是因为结算可能杀死目标，而遍历 AOI
 ### 其他接口
 
 - `Tick()`：每帧清掉过期的 Buff，有变化就重算属性。
-- `NearestHostile(e, r)`：半径内最近的敌对单位（行为树找目标用）。距离相同时选 id 小的，保证结果稳定。
-- `NearestMonster(e, r)`：玩家没选目标就放技能时，自动选最近的怪。
+- `NearestHostile(entity, r)`：半径内最近的敌对单位（行为树找目标用）。距离相同时选 id 小的，保证结果稳定。
+- `NearestMonster(entity, r)`：玩家没选目标就放技能时，自动选最近的怪。
 - 敌对关系来自 `world.yaml` 的 `hostile` 表，按阵营判断，`State.Hostile(a, b)`。
 
 ## 想改什么去哪

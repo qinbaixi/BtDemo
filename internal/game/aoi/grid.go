@@ -18,73 +18,78 @@ type Grid struct {
 }
 
 // NewGrid 创建一个覆盖 w×h 地图的格子网格。
-func NewGrid(w, h, cell float64) *Grid {
-	g := &Grid{Cell: cell, Cols: int(math.Ceil(w / cell)), Rows: int(math.Ceil(h / cell)), where: map[int]int{}}
-	g.cells = make([]map[int]*core.Entity, g.Cols*g.Rows)
-	for i := range g.cells {
-		g.cells[i] = map[int]*core.Entity{}
+func NewGrid(width, height, cell float64) *Grid {
+	grid := &Grid{
+		Cell:  cell,
+		Cols:  int(math.Ceil(width / cell)),
+		Rows:  int(math.Ceil(height / cell)),
+		where: map[int]int{},
 	}
-	return g
+	grid.cells = make([]map[int]*core.Entity, grid.Cols*grid.Rows)
+	for i := range grid.cells {
+		grid.cells[i] = map[int]*core.Entity{}
+	}
+	return grid
 }
 
 // CellOf 返回包含 (x, y) 的格子索引，结果限制在地图范围内。
-func (g *Grid) CellOf(x, y float64) int {
-	cx := clampInt(int(x/g.Cell), 0, g.Cols-1)
-	cy := clampInt(int(y/g.Cell), 0, g.Rows-1)
-	return cy*g.Cols + cx
+func (grid *Grid) CellOf(x, y float64) int {
+	cx := clampInt(int(x/grid.Cell), 0, grid.Cols-1)
+	cy := clampInt(int(y/grid.Cell), 0, grid.Rows-1)
+	return cy*grid.Cols + cx
 }
 
 // Add 将 e 放入网格。
-func (g *Grid) Add(e *core.Entity) {
-	c := g.CellOf(e.X, e.Y)
-	g.cells[c][e.ID] = e
-	g.where[e.ID] = c
+func (grid *Grid) Add(entity *core.Entity) {
+	cell := grid.CellOf(entity.X, entity.Y)
+	grid.cells[cell][entity.ID] = entity
+	grid.where[entity.ID] = cell
 }
 
 // Remove 将 e 从网格中移除。
-func (g *Grid) Remove(e *core.Entity) {
-	if c, ok := g.where[e.ID]; ok {
-		delete(g.cells[c], e.ID)
-		delete(g.where, e.ID)
+func (grid *Grid) Remove(entity *core.Entity) {
+	if cell, ok := grid.where[entity.ID]; ok {
+		delete(grid.cells[cell], entity.ID)
+		delete(grid.where, entity.ID)
 	}
 }
 
 // Moved 在 e 的位置变化后更新其所在格子。
-func (g *Grid) Moved(e *core.Entity) {
-	old, ok := g.where[e.ID]
+func (grid *Grid) Moved(entity *core.Entity) {
+	old, ok := grid.where[entity.ID]
 	if !ok {
 		return
 	}
-	if c := g.CellOf(e.X, e.Y); c != old {
-		delete(g.cells[old], e.ID)
-		g.cells[c][e.ID] = e
-		g.where[e.ID] = c
+	if cell := grid.CellOf(entity.X, entity.Y); cell != old {
+		delete(grid.cells[old], entity.ID)
+		grid.cells[cell][entity.ID] = entity
+		grid.where[entity.ID] = cell
 	}
 }
 
 // Neighbors 对 cell 周围九宫格内的每个实体调用 fn。
-func (g *Grid) Neighbors(cell int, fn func(*core.Entity)) {
-	cx, cy := cell%g.Cols, cell/g.Cols
-	for y := max(cy-1, 0); y <= min(cy+1, g.Rows-1); y++ {
-		for x := max(cx-1, 0); x <= min(cx+1, g.Cols-1); x++ {
-			for _, e := range g.cells[y*g.Cols+x] {
-				fn(e)
+func (grid *Grid) Neighbors(cell int, fn func(*core.Entity)) {
+	cx, cy := cell%grid.Cols, cell/grid.Cols
+	for y := max(cy-1, 0); y <= min(cy+1, grid.Rows-1); y++ {
+		for x := max(cx-1, 0); x <= min(cx+1, grid.Cols-1); x++ {
+			for _, entity := range grid.cells[y*grid.Cols+x] {
+				fn(entity)
 			}
 		}
 	}
 }
 
 // InRange 对中心位于 (x, y) 半径 r 之内的每个实体调用 fn。
-func (g *Grid) InRange(x, y, r float64, fn func(*core.Entity)) {
-	x0 := clampInt(int((x-r)/g.Cell), 0, g.Cols-1)
-	x1 := clampInt(int((x+r)/g.Cell), 0, g.Cols-1)
-	y0 := clampInt(int((y-r)/g.Cell), 0, g.Rows-1)
-	y1 := clampInt(int((y+r)/g.Cell), 0, g.Rows-1)
+func (grid *Grid) InRange(x, y, radius float64, fn func(*core.Entity)) {
+	x0 := clampInt(int((x-radius)/grid.Cell), 0, grid.Cols-1)
+	x1 := clampInt(int((x+radius)/grid.Cell), 0, grid.Cols-1)
+	y0 := clampInt(int((y-radius)/grid.Cell), 0, grid.Rows-1)
+	y1 := clampInt(int((y+radius)/grid.Cell), 0, grid.Rows-1)
 	for cy := y0; cy <= y1; cy++ {
 		for cx := x0; cx <= x1; cx++ {
-			for _, e := range g.cells[cy*g.Cols+cx] {
-				if math.Hypot(e.X-x, e.Y-y) <= r {
-					fn(e)
+			for _, entity := range grid.cells[cy*grid.Cols+cx] {
+				if math.Hypot(entity.X-x, entity.Y-y) <= radius {
+					fn(entity)
 				}
 			}
 		}
@@ -92,9 +97,9 @@ func (g *Grid) InRange(x, y, r float64, fn func(*core.Entity)) {
 }
 
 // Sees 报告位于格子 a 的观察者能否看到格子 b。
-func (g *Grid) Sees(a, b int) bool {
-	ax, ay := a%g.Cols, a/g.Cols
-	bx, by := b%g.Cols, b/g.Cols
+func (grid *Grid) Sees(a, b int) bool {
+	ax, ay := a%grid.Cols, a/grid.Cols
+	bx, by := b%grid.Cols, b/grid.Cols
 	return absInt(ax-bx) <= 1 && absInt(ay-by) <= 1
 }
 

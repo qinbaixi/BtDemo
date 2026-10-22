@@ -29,16 +29,18 @@ func NewState(cfg *config.Config, seed int64) *State {
 }
 
 // Now 返回当前的游戏时间（秒）。
-func (s *State) Now() float64 { return s.Clock.Now }
+func (state *State) Now() float64 { return state.Clock.Now }
 
 // Hostile 报告 a 是否会攻击 b。
-func (s *State) Hostile(a, b *Entity) bool { return a != b && s.Cfg.Hostile(a.Faction, b.Faction) }
+func (state *State) Hostile(a, b *Entity) bool {
+	return a != b && state.Cfg.Hostile(a.Faction, b.Faction)
+}
 
 // Scatter 返回 (x, y) 周围 spread 范围内的一个随机点。
-func (s *State) Scatter(x, y, spread float64) (float64, float64) {
-	a := s.Rand.Float64() * 2 * math.Pi
-	r := math.Sqrt(s.Rand.Float64()) * spread
-	return x + math.Cos(a)*r, y + math.Sin(a)*r
+func (state *State) Scatter(x, y, spread float64) (float64, float64) {
+	angle := state.Rand.Float64() * 2 * math.Pi
+	radius := math.Sqrt(state.Rand.Float64()) * spread
+	return x + math.Cos(angle)*radius, y + math.Sin(angle)*radius
 }
 
 // Clock 是游戏时间，每次按固定的一个 tick 推进。
@@ -49,9 +51,9 @@ type Clock struct {
 }
 
 // Advance 将时钟向前推进一个 tick。
-func (c *Clock) Advance() {
-	c.Tick++
-	c.Now += c.Dt
+func (clock *Clock) Advance() {
+	clock.Tick++
+	clock.Now += clock.Dt
 }
 
 // Entities 是世界中所有实体的表。
@@ -62,40 +64,43 @@ type Entities struct {
 }
 
 // New 创建一个带有新 ID 的实体。在调用 Add 之前，它不在表中。
-func (t *Entities) New() *Entity {
-	t.nextID++
-	return &Entity{Identity: Identity{ID: t.nextID}, Combat: Combat{Cooldowns: map[string]float64{}}}
+func (entities *Entities) New() *Entity {
+	entities.nextID++
+	return &Entity{
+		Identity: Identity{ID: entities.nextID},
+		Combat:   Combat{Cooldowns: map[string]float64{}},
+	}
 }
 
 // Add 将 e 放入表中。
-func (t *Entities) Add(e *Entity) {
-	if _, ok := t.byID[e.ID]; !ok {
-		i, _ := slices.BinarySearch(t.ids, e.ID)
-		t.ids = slices.Insert(t.ids, i, e.ID)
+func (entities *Entities) Add(entity *Entity) {
+	if _, ok := entities.byID[entity.ID]; !ok {
+		i, _ := slices.BinarySearch(entities.ids, entity.ID)
+		entities.ids = slices.Insert(entities.ids, i, entity.ID)
 	}
-	t.byID[e.ID] = e
-	t.nextID = max(t.nextID, e.ID)
+	entities.byID[entity.ID] = entity
+	entities.nextID = max(entities.nextID, entity.ID)
 }
 
 // Remove 将 e 从表中移除。
-func (t *Entities) Remove(e *Entity) {
-	if _, ok := t.byID[e.ID]; !ok {
+func (entities *Entities) Remove(entity *Entity) {
+	if _, ok := entities.byID[entity.ID]; !ok {
 		return
 	}
-	delete(t.byID, e.ID)
-	if i, found := slices.BinarySearch(t.ids, e.ID); found {
-		t.ids = slices.Delete(t.ids, i, i+1)
+	delete(entities.byID, entity.ID)
+	if i, found := slices.BinarySearch(entities.ids, entity.ID); found {
+		entities.ids = slices.Delete(entities.ids, i, i+1)
 	}
 }
 
 // Get 返回具有给定 ID 的实体，不存在则返回 nil。
-func (t *Entities) Get(id int) *Entity { return t.byID[id] }
+func (entities *Entities) Get(id int) *Entity { return entities.byID[id] }
 
 // Each 按 ID 顺序对每个实体调用 fn，因此在给定种子下，tick 的执行是确定性的。
-func (t *Entities) Each(fn func(*Entity)) {
-	for _, id := range slices.Clone(t.ids) { // fn 中可能会添加或移除实体
-		if e := t.byID[id]; e != nil {
-			fn(e)
+func (entities *Entities) Each(fn func(*Entity)) {
+	for _, id := range slices.Clone(entities.ids) { // fn 中可能会添加或移除实体
+		if entity := entities.byID[id]; entity != nil {
+			fn(entity)
 		}
 	}
 }
@@ -105,8 +110,8 @@ type Event = pb.Event
 
 // PendingEvent 是排队中的事件及其发生位置。
 type PendingEvent struct {
-	X, Y float64
-	Ev   *Event
+	X, Y  float64
+	Event *Event
 }
 
 // Events 是自上次同步以来的事件队列。
@@ -115,12 +120,12 @@ type Events struct {
 }
 
 // Emit 将 ev 加入队列，位置为 e 所在位置。
-func (q *Events) Emit(e *Entity, ev *Event) {
-	q.list = append(q.list, PendingEvent{X: e.X, Y: e.Y, Ev: ev})
+func (events *Events) Emit(entity *Entity, event *Event) {
+	events.list = append(events.list, PendingEvent{X: entity.X, Y: entity.Y, Event: event})
 }
 
 // List 返回队列中的事件。
-func (q *Events) List() []PendingEvent { return q.list }
+func (events *Events) List() []PendingEvent { return events.list }
 
 // Clear 清空队列。
-func (q *Events) Clear() { q.list = q.list[:0] }
+func (events *Events) Clear() { events.list = events.list[:0] }

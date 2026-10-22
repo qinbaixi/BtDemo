@@ -58,7 +58,7 @@ type Transform struct {
 }
 ```
 
-字段只写类型不写名字，叫嵌入。嵌入后可以直接写 `e.X`，等价于 `e.Transform.X`。项目用这个办法把实体的字段按用途分组（组件），读代码时看字段属于哪个组件，就知道是哪个系统负责它。
+字段只写类型不写名字，叫嵌入。嵌入后可以直接写 `entity.X`，等价于 `entity.Transform.X`。项目用这个办法把实体的字段按用途分组（组件），读代码时看字段属于哪个组件，就知道是哪个系统负责它。
 
 ## 多返回值与错误
 
@@ -105,7 +105,7 @@ type Ctx struct {
     Agent any        // any = 任意类型
 }
 
-a := ctx.Agent.(*Agent)   // 类型断言：我知道它其实是 *Agent
+agent := ctx.Agent.(*Agent)   // 类型断言：我知道它其实是 *Agent
 ```
 
 行为树运行时（`internal/bt`）不认识游戏里的实体，只把一个 `any` 传给节点函数；游戏代码再断言回 `*ai.Agent`。这样 bt 包不依赖 game 包，可以单独测试。

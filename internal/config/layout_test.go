@@ -37,32 +37,35 @@ func TestLayoutReadsPropsAndWalls(t *testing.T) {
 	objects := `{"id":1,"class":"bush","x":10,"y":12,"point":true},
 {"id":2,"type":"wall","x":20,"y":20,"polyline":[{"x":2,"y":0},{"x":12,"y":10}],"properties":[{"name":"s","type":"float","value":2}]},
 {"id":3,"type":"rock","x":30,"y":30,"point":true,"properties":[{"name":"v","type":"int","value":2},{"name":"flip","type":"bool","value":true}]}`
-	l, err := parseLayout(tmj(shapes, objects))
+	layout, err := parseLayout(tmj(shapes, objects))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if l.Width != 64 || l.Height != 64 || len(l.Props) != 3 {
-		t.Fatalf("got %vx%v with %d props", l.Width, l.Height, len(l.Props))
+	if layout.Width != 64 || layout.Height != 64 || len(layout.Props) != 3 {
+		t.Fatalf("got %vx%v with %d props", layout.Width, layout.Height, len(layout.Props))
 	}
-	if p := l.Props[0]; p.Kind != "bush" || p.X != 10 || p.Y != 12 || p.S != 1 {
-		t.Errorf("bush (Tiled 1.9 class field): %+v", p)
+	if prop := layout.Props[0]; prop.Kind != "bush" || prop.X != 10 || prop.Y != 12 ||
+		prop.Scale != 1 {
+		t.Errorf("bush (Tiled 1.9 class field): %+v", prop)
 	}
 	// 墙从折线第一点开始，dx/dy 是除以 s 之后的偏移
-	if p := l.Props[1]; p.X != 22 || p.Y != 20 || p.DX != 5 || p.DY != 5 || p.S != 2 {
-		t.Errorf("wall: %+v", p)
+	if prop := layout.Props[1]; prop.X != 22 || prop.Y != 20 || prop.DX != 5 || prop.DY != 5 ||
+		prop.Scale != 2 {
+		t.Errorf("wall: %+v", prop)
 	}
-	if p := l.Props[2]; p.Variant != 2 || !p.Flip {
-		t.Errorf("rock: %+v", p)
+	if prop := layout.Props[2]; prop.Variant != 2 || !prop.Flip {
+		t.Errorf("rock: %+v", prop)
 	}
-	if sh := l.Shapes["bush"]; sh.Circle != nil || sh.Rect != nil || sh.Capsule != 0 {
-		t.Errorf("none shape: %+v", sh)
+	if shape := layout.Shapes["bush"]; shape.Circle != nil || shape.Rect != nil ||
+		shape.Capsule != 0 {
+		t.Errorf("none shape: %+v", shape)
 	}
 }
 
 func TestLayoutMissingFileIsOpenMap(t *testing.T) {
-	l, err := loadLayout(t.TempDir())
-	if err != nil || len(l.Props) != 0 || l.Source != nil {
-		t.Fatalf("got %+v, %v", l, err)
+	layout, err := loadLayout(t.TempDir())
+	if err != nil || len(layout.Props) != 0 || layout.Source != nil {
+		t.Fatalf("got %+v, %v", layout, err)
 	}
 	if _, err := parseLayout([]byte(`{`)); err == nil || !strings.Contains(err.Error(), "JSON") {
 		t.Errorf("bad JSON: %v", err)

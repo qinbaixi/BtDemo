@@ -26,15 +26,15 @@ func TestWebSocketProtocol(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, err := game.NewWorld(cfg, 1)
+	world, err := game.NewWorld(cfg, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go w.Run(ctx)
+	go world.Run(ctx)
 
-	srv := httptest.NewServer(Handler(w, fstest.MapFS{"index.html": {Data: []byte("x")}}))
+	srv := httptest.NewServer(Handler(world, fstest.MapFS{"index.html": {Data: []byte("x")}}))
 	defer srv.Close()
 
 	// 浏览器读到的地图和服务端加载的是同一份
@@ -48,7 +48,10 @@ func TestWebSocketProtocol(t *testing.T) {
 		t.Fatalf("/map.tmj: status %d, %d bytes", res.StatusCode, len(body))
 	}
 
-	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/ws", nil)
+	conn, _, err := websocket.DefaultDialer.Dial(
+		"ws"+strings.TrimPrefix(srv.URL, "http")+"/ws",
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,9 +78,13 @@ func TestWebSocketProtocol(t *testing.T) {
 	if welcome == nil || welcome.GetId() == 0 || len(welcome.GetSkills()) == 0 {
 		t.Fatalf("bad welcome: %v", welcome)
 	}
-	me := welcome.GetId()
+	myID := welcome.GetId()
 
-	move, _ := proto.Marshal(&pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Float32(1), Dy: proto.Float32(0)}}})
+	move, _ := proto.Marshal(
+		&pb.ClientMsg{
+			Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Float32(1), Dy: proto.Float32(0)}},
+		},
+	)
 	if err := conn.WriteMessage(websocket.BinaryMessage, move); err != nil {
 		t.Fatal(err)
 	}
@@ -86,20 +93,20 @@ func TestWebSocketProtocol(t *testing.T) {
 	var firstX, lastX float32
 	for i := 0; i < 40; i++ {
 		msg := read()
-		if e := msg.GetEnter(); e != nil {
-			for _, info := range e.GetEnts() {
-				if info.GetId() == me {
+		if enter := msg.GetEnter(); enter != nil {
+			for _, info := range enter.GetEnts() {
+				if info.GetId() == myID {
 					sawSelf = info.GetModel() == "knight"
 				}
 			}
 		}
-		if s := msg.GetSync(); s != nil {
-			for _, st := range s.GetEnts() {
-				if st.GetId() == me {
+		if syncMsg := msg.GetSync(); syncMsg != nil {
+			for _, entityState := range syncMsg.GetEnts() {
+				if entityState.GetId() == myID {
 					if firstX == 0 {
-						firstX = st.GetX()
+						firstX = entityState.GetX()
 					}
-					lastX = st.GetX()
+					lastX = entityState.GetX()
 				}
 			}
 		}

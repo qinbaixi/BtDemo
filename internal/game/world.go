@@ -56,65 +56,72 @@ func NewWorld(cfg *config.Config, seed int64) (*World, error) {
 
 // newWorld 与 NewWorld 相同，但直接传入障碍物。
 func newWorld(cfg *config.Config, seed int64, obstacles []nav.Shape) (*World, error) {
-	w := &World{State: core.NewState(cfg, seed), inbox: make(chan func(), 256)}
-	w.Grid = aoi.NewGrid(cfg.World.Map.Width, cfg.World.Map.Height, cfg.World.AOI.Cell)
-	w.Attr = attr.New(w.State)
-	w.Nav = nav.New(cfg.World.Map.Width, cfg.World.Map.Height, obstacles)
-	w.Move = move.New(w.State, w.Grid, w.Nav)
-	w.Combat = combat.New(w.State, w.Grid, w.Attr)
+	world := &World{State: core.NewState(cfg, seed), inbox: make(chan func(), 256)}
+	world.Grid = aoi.NewGrid(cfg.World.Map.Width, cfg.World.Map.Height, cfg.World.AOI.Cell)
+	world.Attr = attr.New(world.State)
+	world.Nav = nav.New(cfg.World.Map.Width, cfg.World.Map.Height, obstacles)
+	world.Move = move.New(world.State, world.Grid, world.Nav)
+	world.Combat = combat.New(world.State, world.Grid, world.Attr)
 	var err error
-	if w.AI, err = ai.New(w.State, w.Combat, w.Move); err != nil {
+	if world.AI, err = ai.New(world.State, world.Combat, world.Move); err != nil {
 		return nil, err
 	}
-	w.Spawn = spawn.New(w.State, w.Grid, w.Move, w.AI)
-	w.Sessions = session.New(w.State, w.Grid, w.Nav, w.Combat, w.AI, w.Spawn)
-	w.Spawn.SpawnConfigured()
-	return w, nil
+	world.Spawn = spawn.New(world.State, world.Grid, world.Move, world.AI)
+	world.Sessions = session.New(
+		world.State,
+		world.Grid,
+		world.Nav,
+		world.Combat,
+		world.AI,
+		world.Spawn,
+	)
+	world.Spawn.SpawnConfigured()
+	return world, nil
 }
 
 // TreeNames 列出编译进二进制文件的行为树。
 func TreeNames() map[string]bool { return ai.TreeNames() }
 
 // Do 在世界 goroutine 上运行 fn。
-func (w *World) Do(fn func()) { w.inbox <- fn }
+func (world *World) Do(fn func()) { world.inbox <- fn }
 
 // Run 推进世界运行，直到 ctx 结束。
-func (w *World) Run(ctx context.Context) {
-	ticker := time.NewTicker(time.Duration(float64(time.Second) * w.State.Clock.Dt))
+func (world *World) Run(ctx context.Context) {
+	ticker := time.NewTicker(time.Duration(float64(time.Second) * world.State.Clock.Dt))
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case fn := <-w.inbox:
+		case fn := <-world.inbox:
 			fn()
 		case <-ticker.C:
-			w.Step()
+			world.Step()
 		}
 	}
 }
 
 // Step 将世界推进一个 tick。
-func (w *World) Step() {
-	w.State.Clock.Advance()
-	w.Spawn.Tick()
-	w.Combat.Tick()
-	w.Move.Tick()
-	w.AI.Tick(w.Sessions.Watched())
-	cfg := w.State.Cfg.World
-	if w.State.Clock.Tick%max(1, cfg.TickRate/cfg.SyncRate) == 0 {
-		w.Sessions.Flush()
+func (world *World) Step() {
+	world.State.Clock.Advance()
+	world.Spawn.Tick()
+	world.Combat.Tick()
+	world.Move.Tick()
+	world.AI.Tick(world.Sessions.Watched())
+	cfg := world.State.Cfg.World
+	if world.State.Clock.Tick%max(1, cfg.TickRate/cfg.SyncRate) == 0 {
+		world.Sessions.Flush()
 	}
 }
 
 // Get 返回具有给定 id 的实体，若不存在则返回 nil。
-func (w *World) Get(id int) *core.Entity { return w.State.Ents.Get(id) }
+func (world *World) Get(id int) *core.Entity { return world.State.Ents.Get(id) }
 
 // Join 为一个连接创建新角色。须在世界 goroutine 上调用。
-func (w *World) Join() *Session { return w.Sessions.Join() }
+func (world *World) Join() *Session { return world.Sessions.Join() }
 
 // Leave 移除会话的角色。须在世界 goroutine 上调用。
-func (w *World) Leave(s *Session) { w.Sessions.Leave(s) }
+func (world *World) Leave(client *Session) { world.Sessions.Leave(client) }
 
 // Input 应用一条客户端消息。须在世界 goroutine 上调用。
-func (w *World) Input(s *Session, msg *pb.ClientMsg) { w.Sessions.Input(s, msg) }
+func (world *World) Input(client *Session, msg *pb.ClientMsg) { world.Sessions.Input(client, msg) }

@@ -32,7 +32,7 @@ type Grid struct {
 }
 ```
 
-`where` 让实体本身不需要保存任何 AOI 字段：实体移动后调用 `grid.Moved(e)`，它查出旧格子、算出新格子，不同才搬家。这个调用由 `move.By` / `move.Place` 负责，其他系统改位置都应该通过 move。
+`where` 让实体本身不需要保存任何 AOI 字段：实体移动后调用 `grid.Moved(entity)`，它查出旧格子、算出新格子，不同才搬家。这个调用由 `move.By` / `move.Place` 负责，其他系统改位置都应该通过 move。
 
 ## 接口
 

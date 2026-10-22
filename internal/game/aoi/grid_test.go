@@ -11,36 +11,40 @@ func ent(id int, x, y float64) *core.Entity {
 }
 
 func TestGridNeighborsAndMove(t *testing.T) {
-	g := NewGrid(1000, 1000, 100)
-	a := ent(1, 150, 150)
-	b := ent(2, 250, 250) // 对角相邻的格子
-	c := ent(3, 450, 150) // 相隔两个格子
-	for _, e := range []*core.Entity{a, b, c} {
-		g.Add(e)
+	grid := NewGrid(1000, 1000, 100)
+	near := ent(1, 150, 150)
+	diag := ent(2, 250, 250) // 对角相邻的格子
+	far := ent(3, 450, 150)  // 相隔两个格子
+	for _, entity := range []*core.Entity{near, diag, far} {
+		grid.Add(entity)
 	}
 	seen := func() map[int]bool {
 		out := map[int]bool{}
-		g.Neighbors(g.CellOf(a.X, a.Y), func(e *core.Entity) { out[e.ID] = true })
+		grid.Neighbors(
+			grid.CellOf(near.X, near.Y),
+			func(entity *core.Entity) { out[entity.ID] = true },
+		)
 		return out
 	}
 	if s := seen(); !s[1] || !s[2] || s[3] {
 		t.Fatalf("visible %v", s)
 	}
-	c.X = 250 // 现在相邻了
-	g.Moved(c)
+	far.X = 250 // 现在相邻了
+	grid.Moved(far)
 	if s := seen(); !s[3] {
 		t.Fatalf("moved entity not visible: %v", s)
 	}
-	g.Remove(b)
+	grid.Remove(diag)
 	if s := seen(); s[2] {
 		t.Fatalf("removed entity still visible: %v", s)
 	}
-	if !g.Sees(g.CellOf(0, 0), g.CellOf(199, 199)) || g.Sees(g.CellOf(0, 0), g.CellOf(250, 0)) {
+	if !grid.Sees(grid.CellOf(0, 0), grid.CellOf(199, 199)) ||
+		grid.Sees(grid.CellOf(0, 0), grid.CellOf(250, 0)) {
 		t.Fatal("Sees is wrong")
 	}
-	var in []int
-	g.InRange(150, 150, 90, func(e *core.Entity) { in = append(in, e.ID) })
-	if len(in) != 1 || in[0] != 1 {
-		t.Fatalf("InRange %v", in)
+	var got []int
+	grid.InRange(150, 150, 90, func(entity *core.Entity) { got = append(got, entity.ID) })
+	if len(got) != 1 || got[0] != 1 {
+		t.Fatalf("InRange %v", got)
 	}
 }

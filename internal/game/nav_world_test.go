@@ -10,11 +10,11 @@ import (
 )
 
 // overlap 是 e 嵌入障碍物的深度（完全不重叠时为 0）。
-func overlap(w *World, e *core.Entity) float64 {
+func overlap(world *World, entity *core.Entity) float64 {
 	worst := 0.0
-	for _, s := range w.Nav.Shapes() {
-		if d := e.Radius - s.Dist(nav.Vec{X: e.X, Y: e.Y}); d > worst {
-			worst = d
+	for _, shape := range world.Nav.Shapes() {
+		if depth := entity.Radius - shape.Dist(nav.Vec{X: entity.X, Y: entity.Y}); depth > worst {
+			worst = depth
 		}
 	}
 	return worst
@@ -30,67 +30,94 @@ func TestShippedMapKeepsEntitiesOutOfProps(t *testing.T) {
 	if len(cfg.Layout.Props) == 0 || len(cfg.Layout.Shapes) == 0 {
 		t.Fatal("map.tmj has no props or shapes")
 	}
-	w, err := NewWorld(cfg, 7)
+	world, err := NewWorld(cfg, 7)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := w.Join()
+	session := world.Join()
 	check := func(when string) {
-		w.State.Ents.Each(func(e *core.Entity) {
-			if d := overlap(w, e); d > 0.5 {
-				t.Errorf("%s: %s #%d at (%.0f, %.0f) is %.1fpx inside an obstacle", when, e.Name, e.ID, e.X, e.Y, d)
+		world.State.Ents.Each(func(entity *core.Entity) {
+			if depth := overlap(world, entity); depth > 0.5 {
+				t.Errorf(
+					"%s: %s #%d at (%.0f, %.0f) is %.1fpx inside an obstacle",
+					when,
+					entity.Name,
+					entity.ID,
+					entity.X,
+					entity.Y,
+					depth,
+				)
 			}
 		})
 	}
 	check("spawn")
-	s.Player.MoveX = 1 // 向东穿过圣所墙、草地和树林
+	session.Player.MoveX = 1 // 向东穿过圣所墙、草地和树林
 	for i := 0; i < 60*20; i++ {
-		w.Step()
-		drain(s)
+		world.Step()
+		drain(session)
 	}
 	check("after 60s")
 }
 
 // 玩家无法穿过房屋；走向房屋时会沿其表面滑动。
 func TestPlayerBlockedByHouse(t *testing.T) {
-	w := testWorld(nav.Shape{Kind: nav.Rect, A: nav.Vec{X: 400, Y: 400}, B: nav.Vec{X: 600, Y: 450}})
-	p := addTestEntity(w, 1, "player", 500, 300, playerBase)
-	p.MoveY = 1
+	world := testWorld(
+		nav.Shape{Kind: nav.Rect, A: nav.Vec{X: 400, Y: 400}, B: nav.Vec{X: 600, Y: 450}},
+	)
+	player := addTestEntity(world, 1, "player", 500, 300, playerBase)
+	player.MoveY = 1
 	for i := 0; i < 40; i++ {
-		w.Step()
+		world.Step()
 	}
-	if p.Y > 400-p.Radius+0.01 {
-		t.Fatalf("player walked into the house: y = %.1f", p.Y)
+	if player.Y > 400-player.Radius+0.01 {
+		t.Fatalf("player walked into the house: y = %.1f", player.Y)
 	}
-	p.MoveX, p.MoveY = 0.7071, 0.7071 // 斜向移动：沿墙向东滑动
-	x0 := p.X
+	player.MoveX, player.MoveY = 0.7071, 0.7071 // 斜向移动：沿墙向东滑动
+	x0 := player.X
 	for i := 0; i < 10; i++ {
-		w.Step()
+		world.Step()
 	}
-	if p.X <= x0+20 || p.Y > 400-p.Radius+0.01 {
-		t.Fatalf("no slide: x %.1f -> %.1f, y %.1f", x0, p.X, p.Y)
+	if player.X <= x0+20 || player.Y > 400-player.Radius+0.01 {
+		t.Fatalf("no slide: x %.1f -> %.1f, y %.1f", x0, player.X, player.Y)
 	}
 }
 
 // 追赶墙后玩家的怪物会绕过墙并追上玩家。
 func TestChaseFindsWayAroundWall(t *testing.T) {
-	w := testWorld(nav.Shape{Kind: nav.Capsule, A: nav.Vec{X: 500, Y: 150}, B: nav.Vec{X: 500, Y: 850}, R: 10})
-	m := addTestEntity(w, 1, "monster", 350, 500, monsterBase)
-	p := addTestEntity(w, 2, "player", 650, 500, playerBase)
-	m.Target = p.ID
-	inst := aiInstance(t, w, m, map[int]map[string]any{
-		1: {"node_id": 1, "type": "task", "sub_type": "chase_target", "properties": map[string]any{"StopRange": 10}},
+	world := testWorld(
+		nav.Shape{
+			Kind:   nav.Capsule,
+			A:      nav.Vec{X: 500, Y: 150},
+			B:      nav.Vec{X: 500, Y: 850},
+			Radius: 10,
+		},
+	)
+	monster := addTestEntity(world, 1, "monster", 350, 500, monsterBase)
+	player := addTestEntity(world, 2, "player", 650, 500, playerBase)
+	monster.Target = player.ID
+	inst := aiInstance(t, world, monster, map[int]map[string]any{
+		1: {
+			"node_id":    1,
+			"type":       "task",
+			"sub_type":   "chase_target",
+			"properties": map[string]any{"StopRange": 10},
+		},
 	})
 	for i := 0; i < 20*20; i++ {
-		if tickAI(w, inst) == bt.Success {
+		if tickAI(world, inst) == bt.Success {
 			break
 		}
-		if overlap(w, m) > 0.5 {
-			t.Fatalf("monster went into the wall at (%.0f, %.0f)", m.X, m.Y)
+		if overlap(world, monster) > 0.5 {
+			t.Fatalf("monster went into the wall at (%.0f, %.0f)", monster.X, monster.Y)
 		}
 	}
-	if d := core.EdgeDist(m, p); d > 10 {
-		t.Fatalf("monster did not reach the player: %.0f px apart, at (%.0f, %.0f)", d, m.X, m.Y)
+	if dist := core.EdgeDist(monster, player); dist > 10 {
+		t.Fatalf(
+			"monster did not reach the player: %.0f px apart, at (%.0f, %.0f)",
+			dist,
+			monster.X,
+			monster.Y,
+		)
 	}
 }
 
@@ -99,27 +126,27 @@ func TestChaseFindsWayAroundWall(t *testing.T) {
 // 而不是每个 tick 都搜索。
 func TestUnreachableGoalDoesNotReplanEveryTick(t *testing.T) {
 	box := []nav.Shape{
-		{Kind: nav.Capsule, A: nav.Vec{X: 600, Y: 400}, B: nav.Vec{X: 800, Y: 400}, R: 10},
-		{Kind: nav.Capsule, A: nav.Vec{X: 800, Y: 400}, B: nav.Vec{X: 800, Y: 600}, R: 10},
-		{Kind: nav.Capsule, A: nav.Vec{X: 800, Y: 600}, B: nav.Vec{X: 600, Y: 600}, R: 10},
-		{Kind: nav.Capsule, A: nav.Vec{X: 600, Y: 600}, B: nav.Vec{X: 600, Y: 400}, R: 10},
+		{Kind: nav.Capsule, A: nav.Vec{X: 600, Y: 400}, B: nav.Vec{X: 800, Y: 400}, Radius: 10},
+		{Kind: nav.Capsule, A: nav.Vec{X: 800, Y: 400}, B: nav.Vec{X: 800, Y: 600}, Radius: 10},
+		{Kind: nav.Capsule, A: nav.Vec{X: 800, Y: 600}, B: nav.Vec{X: 600, Y: 600}, Radius: 10},
+		{Kind: nav.Capsule, A: nav.Vec{X: 600, Y: 600}, B: nav.Vec{X: 600, Y: 400}, Radius: 10},
 	}
-	w := testWorld(box...)
-	m := addTestEntity(w, 1, "monster", 300, 500, monsterBase)
+	world := testWorld(box...)
+	monster := addTestEntity(world, 1, "monster", 300, 500, monsterBase)
 	arrived := false
 	for i := 0; i < 400 && !arrived; i++ {
-		w.State.Clock.Now += w.State.Clock.Dt
-		arrived = w.Move.Toward(m, 700, 500, 6)
+		world.State.Clock.Now += world.State.Clock.Dt
+		arrived = world.Move.Toward(monster, 700, 500, 6)
 	}
 	if !arrived {
-		t.Fatalf("never settled next to the box: at (%.0f, %.0f)", m.X, m.Y)
+		t.Fatalf("never settled next to the box: at (%.0f, %.0f)", monster.X, monster.Y)
 	}
-	if m.X > 600-m.Radius+0.5 || m.X < 560 {
-		t.Fatalf("stopped at (%.0f, %.0f), want just outside the west wall", m.X, m.Y)
+	if monster.X > 600-monster.Radius+0.5 || monster.X < 560 {
+		t.Fatalf("stopped at (%.0f, %.0f), want just outside the west wall", monster.X, monster.Y)
 	}
-	planAt := m.Steering.RepathAt
-	w.State.Clock.Now += w.State.Clock.Dt
-	if !w.Move.Toward(m, 700, 500, 6) || m.Steering.RepathAt != planAt {
+	planAt := monster.Steering.RepathAt
+	world.State.Clock.Now += world.State.Clock.Dt
+	if !world.Move.Toward(monster, 700, 500, 6) || monster.Steering.RepathAt != planAt {
 		t.Fatal("replanned on the very next tick after settling")
 	}
 }

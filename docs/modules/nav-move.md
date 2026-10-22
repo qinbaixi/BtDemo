@@ -83,7 +83,7 @@ func (m *System) Toward(e, x, y, step) bool   // 沿路径朝目标走 step 像�
 func (m *System) Tick()               // 每帧：玩家按输入方向走
 ```
 
-所有改位置的操作最后都调用 `grid.Moved(e)`，AOI 格子随之更新。
+所有改位置的操作最后都调用 `grid.Moved(entity)`，AOI 格子随之更新。
 
 ### Toward：跟随路径
 
