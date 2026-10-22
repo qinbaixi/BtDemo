@@ -236,6 +236,12 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		default:
 			return fmt.Errorf("skills.yaml: skill %s has unknown damage %q", id, skill.Damage)
 		}
+		if skill.Kind == "dash" && skill.Distance <= 0 {
+			return fmt.Errorf("skills.yaml: dash skill %s needs a distance", id)
+		}
+		if skill.Kind == "line" && skill.Range <= 0 {
+			return fmt.Errorf("skills.yaml: line skill %s needs a range", id)
+		}
 		for _, buff := range []*Buff{skill.Buff, skill.Debuff} {
 			if buff == nil || buff.Look == "" {
 				continue
@@ -298,6 +304,12 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		}
 		if err := checkSkills("monsters.yaml template "+id, template.Skills); err != nil {
 			return err
+		}
+		// 行为树放技能时不给方向（combat.Cast），要瞄准的技能怪物用不了
+		for _, skillID := range template.Skills {
+			if kind := cfg.Skills[skillID].Kind; kind == "dash" || kind == "line" {
+				return fmt.Errorf("monsters.yaml: template %s cannot use %s skill %s", id, kind, skillID)
+			}
 		}
 	}
 	if layout := cfg.Layout; layout.Source != nil &&

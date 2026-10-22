@@ -2,7 +2,7 @@
 // 击杀、技能等效果，拖滑条实时调打击感参数（config.ts 的 FEEL）和后期处理。
 // 改特效时用它看效果、出预览，不用每次进游戏找怪打。
 
-import { FEEL } from './game/config';
+import { FEEL, LOOK_FIRE, LOOK_FROST, LOOK_HASTE, LOOK_HOLY } from './game/config';
 import { onEvent } from './game/events';
 import { makeEntity, posOf, state, type ClientEntity } from './game/state';
 import { loadMap } from './game/map';
@@ -24,6 +24,14 @@ const DUMMIES: { id: number; model: string; name: string; r: number; dx: number;
 let center = { x: 1200, y: 800 };
 let walking = false;
 let auto = false;
+// 假 Buff 外观：实体 id -> (外观位 -> 到期时间)，tick 里算出每个实体的 looks
+const lookUntil = new Map<number, Map<number, number>>();
+
+function addLook(id: number, look: number, seconds: number): void {
+  let looks = lookUntil.get(id);
+  if (!looks) lookUntil.set(id, (looks = new Map()));
+  looks.set(look, performance.now() + seconds * 1000);
+}
 
 export async function startFxLab(): Promise<void> {
   setConn('ok', '特效实验页（离线）');
@@ -80,6 +88,9 @@ function tick(): void {
   if (auto && tickN % 5 === 0) hit(Math.random() < 0.25);
   for (const e of state.ents.values()) {
     if (e.dead && e.deadAt >= 0 && now - e.deadAt > 5000) revive(e);
+    let looks = 0;
+    for (const [look, until] of lookUntil.get(e.id) ?? []) if (until > now) looks |= look;
+    e.looks = e.dead ? 0 : looks;
   }
 }
 
@@ -150,6 +161,42 @@ const ACTIONS: [string, () => void][] = [
   ['治疗', () => { const me = state.ents.get(ME)!; emit({ k: 'cast', src: ME, fx: 'heal', skill: 'heal', name: '治疗', color: '#7cff9b' }); emit({ k: 'heal', dst: ME, v: 120 }); me.hp = Math.min(me.maxHp, me.hp + 120); }],
   ['护盾', () => emit({ k: 'cast', src: ME, fx: 'shield', skill: 'shield', name: '圣盾', color: '#7fd8ff' })],
   ['升级', () => emit({ k: 'lvl', id: ME, lv: 11 })],
+  ['疾风步', () => { emit({ k: 'cast', src: ME, fx: 'haste', skill: 'haste', name: '疾风步', color: '#9effd8' }); addLook(ME, LOOK_HASTE, 4); }],
+  ['圣光庇护', () => { emit({ k: 'cast', src: ME, fx: 'holy', skill: 'holy_guard', name: '圣光庇护', color: '#ffe9a0' }); addLook(ME, LOOK_HOLY, 2); }],
+  ['免疫', () => { const t = target(); if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'bite', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 0, immune: true }); }],
+  ['闪现', () => {
+    const me = state.ents.get(ME)!;
+    const from = posOf(me, performance.now());
+    const dir = Math.cos(me.facing) < 0 ? -1 : 1;
+    // 闪出去再闪回来，来回都看得到
+    const to = { x: from.x + dir * 170, y: from.y };
+    emit({ k: 'cast', src: ME, fx: 'blink', skill: 'blink', name: '闪现', color: '#b98cff', x: from.x, y: from.y, tx: to.x, ty: to.y });
+    me.facing = dir < 0 ? 0 : Math.PI;
+  }],
+  ['烈焰附魔', () => { emit({ k: 'cast', src: ME, fx: 'enchant', skill: 'enchant', name: '烈焰附魔', color: '#ff8a3a' }); addLook(ME, LOOK_FIRE, 8); }],
+  ['飞斧', () => {
+    const victim = target();
+    const from = posOf(state.ents.get(ME)!, performance.now());
+    if (!victim) return;
+    const to = posOf(victim, performance.now());
+    const dist = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+    const stop = Math.max(0, dist - (victim.r || 14));
+    emit({ k: 'cast', src: ME, dst: victim.id, fx: 'axe', skill: 'axe', name: '飞斧', color: '#d8dde6',
+      x: from.x, y: from.y, tx: from.x + (to.x - from.x) / dist * stop, ty: from.y + (to.y - from.y) / dist * stop });
+    emit({ k: 'dmg', src: ME, dst: victim.id, v: 38 });
+    damage(victim, 38);
+    if (victim.hp <= 0) kill(victim);
+  }],
+  ['冰霜新星', () => {
+    const me = posOf(state.ents.get(ME)!, performance.now());
+    emit({ k: 'cast', src: ME, fx: 'frost', skill: 'frost_nova', name: '冰霜新星', color: '#8fd8ff', radius: 130, x: me.x, y: me.y });
+    for (const e of state.ents.values()) {
+      if (e.id === ME || e.dead) continue;
+      emit({ k: 'dmg', src: ME, dst: e.id, v: 24 });
+      damage(e, 24);
+      if (e.hp <= 0) kill(e); else addLook(e.id, LOOK_FROST, 3);
+    }
+  }],
 ];
 
 // 滑条：[标签, FEEL 字段, 最小, 最大, 步长]

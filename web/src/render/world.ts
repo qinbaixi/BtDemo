@@ -10,10 +10,11 @@
 //   overlay      另一块 2D 画布：头顶文字、调试线条、暗角（不参与泛光和调色，保持清晰）
 
 import { Application, Container, Graphics, RenderLayer, type TextureSource } from 'pixi.js';
-import { ATTACK_MS, DEATH_MS, FEEL, HIT_MS, MODEL_SCALE, RIM } from '../game/config';
+import { ATTACK_MS, DEATH_MS, FEEL, HIT_MS, LOOK_FROST, LOOK_HOLY, MODEL_SCALE, RIM } from '../game/config';
 import { clamp, hypot } from '../game/math';
-import { posOf, state, type ClientEntity, type Point, type Quality, type Scenery } from '../game/state';
+import { headY, posOf, state, type ClientEntity, type Point, type Quality, type Scenery } from '../game/state';
 import { art } from './art';
+import type { LookEnt } from './fx';
 import { makeGrade, makeLut, ZONE_GRADES } from './grade';
 import { createLighting, type Lighting } from './lighting';
 import { drawOverlay, initOverlay, resizeOverlay } from './overlay';
@@ -177,6 +178,7 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
 
   // 角色：每个实体一个 ActorView，实体被移除（离开 AOI）后销毁
   const ents: { e: ClientEntity; p: Point }[] = [];
+  const lookEnts: LookEnt[] = [];
   for (const e of state.ents.values()) {
     const p = posOf(e, now);
     ents.push({ e, p });
@@ -186,6 +188,12 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
       actors.set(e.id, v);
     }
     const pose = poseOf(e, p, now, dt);
+    if (e.looks && !e.dead) {
+      lookEnts.push({
+        id: e.id, x: p.x, y: p.y, r: e.r || 14, h: p.y - headY(e, p), looks: e.looks,
+        moving: now < e.moveUntil, dir: Math.cos(e.facing) < 0 ? -1 : 1,
+      });
+    }
     pose.onScreen = p.x > view.x - 150 && p.x < view.x + view.w + 150 && p.y > view.y - 200 && p.y < view.y + view.h + 150;
     pose.xray = occluded && e.id === state.myId;
     if (state.hq && !e.dead) pose.light = lighting.dominant(p.x, p.y - 20);
@@ -198,6 +206,7 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
   for (const [id, v] of actors) {
     if (!state.ents.has(id)) { v.destroy(); actors.delete(id); }
   }
+  state.fx.looks(lookEnts, now);
 
   // 开后期处理时特效画进 Pixi 才能发光；不开时直接画在叠加层上，省掉每帧整屏上传纹理
   const usePost = state.hq && state.post;
@@ -272,6 +281,8 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
     time: now + e.id * 397,
     isSelf: e.id === state.myId,
     blocking: e.blocking && !e.dead,
+    tint: e.dead ? 0xffffff : e.looks & LOOK_FROST ? 0xa8dcff : e.looks & LOOK_HOLY ? 0xfff0c4 : 0xffffff,
+    ghost: blinkGhost(e, p, now),
     knockX: e.knockX * knock,
     knockY: e.knockY * knock * 0.6,
     squash,
@@ -470,4 +481,18 @@ function updateLights(now: number, mp: Point | null, shake: Point): void {
   // 光照跟着世界走，屏幕震动也算进去
   const c = state.cam;
   L.render({ x: c.x - shake.x, y: c.y - shake.y, w: c.w, h: c.h }, state.hq);
+}
+
+const BLINK_GHOST_MS = 380;
+
+// blinkGhost 是闪现残影：起点相对现在位置的偏移和淡出进度，残影放完了就是 undefined。
+function blinkGhost(e: ClientEntity, p: Point, now: number): Pose['ghost'] {
+  const from = e.blinkFrom;
+  if (!from) return undefined;
+  const progress = (now - from.at) / BLINK_GHOST_MS;
+  if (progress >= 1 || progress < 0) {
+    if (progress >= 1) e.blinkFrom = null;
+    return undefined;
+  }
+  return { dx: from.x - p.x, dy: from.y - p.y, k: progress };
 }

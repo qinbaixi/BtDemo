@@ -73,3 +73,9 @@ export const FEEL = {
 // 技能键：右手放在 J K L / U I O 上，左手 WASD 走路。第 1 格是普攻（也可以点左键）。
 export const SKILL_KEYS = ['KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI', 'KeyO'];
 export const SKILL_KEY_LABELS = ['J', 'K', 'L', 'U', 'I', 'O'];
+
+// EntityState.looks 的位：身上 Buff 的外观（和服务端 config.Looks 一致）
+export const LOOK_HASTE = 1;   // 疾风步：脚下风痕
+export const LOOK_HOLY = 2;    // 圣光庇护：金光罩
+export const LOOK_FIRE = 4;    // 烈焰附魔：武器着火
+export const LOOK_FROST = 8;   // 冰冻：身体发蓝、动作变慢

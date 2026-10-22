@@ -5,6 +5,10 @@ import { clamp, hypot } from './game/math';
 import {
   cdRemaining, headY, posOf, QUALITY_NAMES, setQuality, state, type ClientEntity, type Quality,
 } from './game/state';
+import type { ClientMessage } from './net/types';
+import type { Debug } from './ui/debug';
+import { showToast } from './ui/hud';
+import { pickerKey } from './ui/picker';
 
 // 切换画质时提示每一档有什么
 const QUALITY_DETAIL: Record<Quality, string> = {
@@ -12,10 +16,6 @@ const QUALITY_DETAIL: Record<Quality, string> = {
   medium: '描边 + 光照 + 简化泛光调色，粒子减半',
   low: '无着色器和动态光照',
 };
-import type { ClientMessage } from './net/types';
-import type { Debug } from './ui/debug';
-import { showToast } from './ui/hud';
-
 
 export interface InputDeps {
   canvas: HTMLCanvasElement;
@@ -54,9 +54,28 @@ export function resendMove(): void {
 }
 
 export function castSlot(slot: number): void {
-  if (!state.skillBySlot[slot]) return;
+  const skill = state.skillBySlot[slot];
+  if (!skill || state.pickerOpen) return;   // 挑技能时不放技能（放了就不能再换了）
   if (blocking) { showToast('格挡中不能出招'); return; }   // 服务端也会拒绝，这里省一次来回
-  deps.send({ t: 'cast', slot, target: state.target || 0 });
+  const aim = skill.kind === 'dash' || skill.kind === 'line' ? aimFor(skill.kind) : { dx: 0, dy: 0 };
+  deps.send({ t: 'cast', slot, target: state.target || 0, ...aim });
+}
+
+// aimFor 给闪现和飞斧定方向：飞斧优先扔向当前目标；闪现和没有目标时朝按住的方向键，
+// 什么都没按就朝角色面向。
+function aimFor(kind: string): { dx: number; dy: number } {
+  const now = performance.now();
+  const me = state.ents.get(state.myId);
+  if (!me) return { dx: 0, dy: 0 };
+  const target = state.ents.get(state.target);
+  if (kind === 'line' && hostile(target)) {
+    const from = posOf(me, now);
+    const to = posOf(target, now);
+    if (hypot(from.x, from.y, to.x, to.y) > 1) return { dx: to.x - from.x, dy: to.y - from.y };
+  }
+  const move = currentMove();
+  if (move.dx !== 0 || move.dy !== 0) return move;
+  return { dx: Math.cos(me.facing) < 0 ? -1 : 1, dy: 0 };
 }
 
 // 普攻：左键点怪就打它，点空地打当前目标或身边最近的怪；按住左键会一直打。
@@ -95,7 +114,7 @@ function attackTarget(now: number): ClientEntity | null {
 function tryAttack(): void {
   const now = performance.now();
   const sk = state.skillBySlot[ATTACK_SLOT];
-  if (!sk || blocking || cdRemaining(sk.id, now) > 0.03) return;
+  if (!sk || state.pickerOpen || blocking || cdRemaining(sk.id, now) > 0.03) return;
   const t = attackTarget(now);
   if (!t) return;
   if (t.id !== state.target) state.target = t.id;
@@ -156,6 +175,10 @@ function onKeyDown(e: KeyboardEvent): void {
     return;
   }
   if (e.repeat) return;
+  if (state.pickerOpen && pickerKey(e.code)) {
+    e.preventDefault();
+    return;
+  }
   if (e.code === 'KeyG') {
     state.showAOI = !state.showAOI;
     return;

@@ -34,6 +34,8 @@ export interface ClientEntity {
   shield: number;     // 护盾还能吸收的伤害
   shieldMax: number;  // 这层护盾刚加上时的量，用来算剩余比例
   blocking: boolean;  // 正在格挡
+  looks: number;      // 身上 Buff 的外观（LOOK_* 位）
+  blinkFrom: { x: number; y: number; at: number } | null;   // 最近一次闪现的起点（画残影）
   model: string;
   // 动画状态
   facing: number;     // 0 朝右，PI 朝左
@@ -74,6 +76,9 @@ export interface State {
   cell: number;
   skills: SkillInfo[];
   skillBySlot: Record<number, SkillInfo>;
+  skillPool: SkillInfo[];         // 可以挑的技能（welcome 里带的）
+  skillPick: number;              // 要挑几个
+  pickerOpen: boolean;            // 选技能面板开着（这时不放技能）
   ents: Map<number, ClientEntity>;
   self: SelfInfo | null;          // 最近一次同步里的 self
   selfAt: number;                 // 收到那次同步的 performance.now()
@@ -128,6 +133,9 @@ export const state: State = {
   cell: 320,
   skills: [],
   skillBySlot: {},
+  skillPool: [],
+  skillPick: 0,
+  pickerOpen: false,
   ents: new Map(),
   self: null,
   selfAt: 0,
@@ -182,6 +190,8 @@ export function makeEntity(d: Partial<EntityInfo> & { id: number }, now: number)
     shield: 0,
     shieldMax: 0,
     blocking: false,
+    looks: 0,
+    blinkFrom: null,
     model: d.model || '',
     facing: kind === 'player' ? 0 : (Math.random() < 0.5 ? 0 : Math.PI),
     walk: Math.random() * 6,

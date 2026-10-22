@@ -286,8 +286,11 @@ func (sys *System) firstOnLine(
 			if across > reach || along < 0 || along > maxDist+reach {
 				return
 			}
-			// 碰到圆的边缘时飞过的距离
+			// 碰到圆的边缘时飞过的距离；超过 maxDist 说明斧头在那之前已经被挡住或飞到头了
 			touch := math.Max(0, along-math.Sqrt(reach*reach-across*across))
+			if touch > maxDist {
+				return
+			}
 			if touch < hitAt || touch == hitAt && other.ID < hit.ID {
 				hit, hitAt = other, touch
 			}

@@ -8,12 +8,13 @@ export interface SkillInfo {
   slot: number;
   id: string;
   name: string;
-  kind: 'target' | 'aoe' | 'self' | string;
+  kind: 'target' | 'aoe' | 'self' | 'dash' | 'line' | string;
   range?: number;
   radius?: number;
   cooldown?: number;
   color?: string;
   fx?: string;
+  desc?: string;   // 选技能面板上的一句话说明
 }
 
 export interface Obstacle {
@@ -51,6 +52,7 @@ export interface EntityState {
   dead?: boolean;
   shield?: number;     // 护盾还能吸收的伤害
   blocking?: boolean;  // 正在格挡
+  looks?: number;      // Buff 外观的位：LOOK_HASTE 等（见 game/config.ts）
 }
 
 export type EventKind = 'cast' | 'dmg' | 'heal' | 'buff' | 'die' | 'respawn' | 'say' | 'lvl';
@@ -74,6 +76,9 @@ export interface GameEvent {
   dur?: number;
   absorbed?: number; // dmg：被护盾吸收的部分（不含在 v 里）
   blocked?: number;  // dmg：被格挡挡掉的部分（不含在 v 里）
+  immune?: boolean;  // dmg：目标无敌，没受伤
+  tx?: number;       // cast（闪现、飞斧）：终点；起点是 x、y
+  ty?: number;
 }
 
 export interface Attrs { str?: number; agi?: number; int?: number; vit?: number }
@@ -151,6 +156,8 @@ export interface WelcomeMsg {
   aoi: { cell: number };
   skills: SkillInfo[];
   obstacles: Obstacle[];
+  pool: SkillInfo[];   // 可以挑的技能
+  pick: number;        // 要挑几个（放在第 2 格起）
 }
 export interface EnterMsg { t: 'enter'; ents: EntityInfo[] }
 export interface LeaveMsg { t: 'leave'; ids: number[] }
@@ -163,12 +170,14 @@ export interface SyncMsg {
   ai: AiTrace | null;
 }
 export interface ToastMsg { t: 'msg'; text: string }
+export interface SkillBarMsg { t: 'skills'; skills: SkillInfo[] }
 
-export type ServerMessage = WelcomeMsg | EnterMsg | LeaveMsg | SyncMsg | ToastMsg;
+export type ServerMessage = WelcomeMsg | EnterMsg | LeaveMsg | SyncMsg | ToastMsg | SkillBarMsg;
 
 export type ClientMessage =
   | { t: 'move'; dx: number; dy: number }
   | { t: 'target'; target: number }
-  | { t: 'cast'; slot: number; target: number }
+  | { t: 'cast'; slot: number; target: number; dx?: number; dy?: number }
+  | { t: 'loadout'; skills: string[] }
   | { t: 'watch'; id: number }
   | { t: 'block'; on: boolean };

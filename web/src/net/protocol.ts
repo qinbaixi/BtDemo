@@ -98,6 +98,8 @@ export function createProtocol(): Protocol {
           t: 'welcome', id: w.id,
           map: { w: w.mapW, h: w.mapH }, aoi: { cell: w.aoiCell },
           skills: w.skills || [],
+          pool: w.pool || [],
+          pick: w.pick || 0,
           obstacles: (w.obstacles || []).map((o: any): Obstacle => ({ ...o, shape: String(o.shape).toLowerCase() })),
         };
       }
@@ -112,6 +114,7 @@ export function createProtocol(): Protocol {
         };
       }
       case 'toast': return { t: 'msg', text: m.toast.text };
+      case 'skillBar': return { t: 'skills', skills: m.skillBar.skills || [] };
     }
     return null;
   }
@@ -121,7 +124,8 @@ export function createProtocol(): Protocol {
     switch (o.t) {
       case 'move': body = { move: { dx: o.dx, dy: o.dy } }; break;
       case 'target': body = { target: { id: o.target || 0 } }; break;
-      case 'cast': body = { cast: { slot: o.slot, target: o.target || 0 } }; break;
+      case 'cast': body = { cast: { slot: o.slot, target: o.target || 0, dx: o.dx || 0, dy: o.dy || 0 } }; break;
+      case 'loadout': body = { loadout: { skills: o.skills } }; break;
       case 'watch': body = { watch: { id: o.id || 0 } }; break;
       case 'block': body = { block: { on: o.on } }; break;
       default: return null;

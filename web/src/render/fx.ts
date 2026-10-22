@@ -75,12 +75,23 @@ export type Resolve = (id: number) => { x: number; y: number; r: number; facing?
 // Aura 是身上带护盾的实体：位置、身高（脚到头顶的像素）和护盾剩余比例（0..1，按满护盾算）。
 export type Aura = { id: number; x: number; y: number; r: number; h: number; frac: number };
 
+// LookEnt 是身上带 Buff 外观的实体（looks 是 game/config.ts 的 LOOK_* 位），给 looks() 用。
+export type LookEnt = { id: number; x: number; y: number; r: number; h: number; looks: number; moving: boolean; dir: number };
+
+// 和 game/config.ts 的 LOOK_* 一致（这个文件不引用游戏状态）
+const LOOK_HASTE = 1;
+const LOOK_HOLY = 2;
+const LOOK_FIRE = 4;
+const LOOK_FROST = 8;
+
 export class FX {
   resolve: Resolve;
   effects: any[];   // 正在播放的技能特效
   parts: any[];     // 粒子
   shake: number;
   density: number;   // 粒子密度 0..1
+  lookEnts: LookEnt[] = [];               // 这一帧带外观的实体（looks() 记下，drawTrails 画光晕）
+  lookSpawnAt = new Map<string, number>(); // "实体 id:外观" -> 上次冒粒子的时间
 
   // resolve(id) returns the live {x, y, r} of an entity, or null.
   auras: () => Aura[];   // 每帧要画护盾泡泡的实体
@@ -161,6 +172,87 @@ export class FX {
             vy: -Math.sin(a) * d * 0.6 / 420, life: 420, size: rand(2, 3.5), color: i % 3 ? color : '#ffffff', kind: 'glow', born: now + rand(0, 160) });
         }
         return 0;
+      }
+      case 'haste': {
+        // 疾风步：脚下一圈青色气浪，身边几道风线往两边吹开
+        this.effects.push({ ...base, kind: 'buff', life: 700 });
+        for (let i = 0; i < 20; i++) {
+          const side = i % 2 ? 1 : -1;
+          this.spawn({ anchor: ev.src, ox: side * rand(4, 16), oy: -rand(2, 34), vx: side * rand(0.12, 0.32), vy: -rand(0, 0.03),
+            drag: 0.985, life: rand(260, 460), size: rand(1.5, 2.6), color: i % 3 ? color : '#ffffff', kind: 'spark', born: now + rand(0, 160) });
+        }
+        return 0;
+      }
+      case 'holy': {
+        // 圣光庇护：一道金色光柱落下，脚下一圈光环
+        this.effects.push({ ...base, kind: 'pillar', anchor: ev.src, x: src.x, y: src.y, height: 150, life: 650 });
+        // 只是一圈地面光环，不用整套 buff 特效（再叠就把角色照成一团白了）
+        this.effects.push({ ...base, kind: 'ring', x: src.x, y: src.y, radius: 70, life: 600 });
+        for (let i = 0; i < 16; i++) {
+          const a = rand(0, TAU);
+          this.spawn({ anchor: ev.src, ox: Math.cos(a) * rand(8, 20), oy: Math.sin(a) * rand(3, 8) - rand(0, 30),
+            vx: Math.cos(a) * 0.03, vy: -rand(0.05, 0.14), life: rand(500, 900), size: rand(2, 3.6),
+            color: i % 3 ? color : '#ffffff', kind: 'glow', born: now + rand(0, 300) });
+        }
+        return 0;
+      }
+      case 'enchant': {
+        // 烈焰附魔：身上腾起一团火，武器那边火星乱窜
+        this.effects.push({ ...base, kind: 'buff', life: 800 });
+        const dir = Math.cos((src as any).facing ?? 0) < 0 ? -1 : 1;
+        for (let i = 0; i < 30; i++) {
+          this.spawn({ anchor: ev.src, ox: dir * rand(6, 22), oy: -rand(14, 40), vx: rand(-0.04, 0.04), vy: -rand(0.05, 0.16),
+            grav: -0.0001, life: rand(380, 760), size: rand(2.5, 5), color: i % 3 ? color : '#ffd27a',
+            kind: i % 4 ? 'glow' : 'spark', born: now + rand(0, 280) });
+        }
+        return 0;
+      }
+      case 'blink': {
+        // 闪现：起点和终点各爆一团紫光，中间一道光痕（残影在 actorView 里画）
+        const x0 = ev.x ?? src.x;
+        const y0 = ev.y ?? src.y;
+        const x1 = ev.tx ?? src.x;
+        const y1 = ev.ty ?? src.y;
+        this.effects.push({ ...base, kind: 'blink', x0, y0, x1, y1, life: 420 });
+        for (let i = 0; i < 16; i++) {
+          const a = rand(0, TAU);
+          // 起点：往里收的光点；终点：往外炸开的火花
+          this.spawn({ x: x0 + Math.cos(a) * 22, y: y0 - 18 + Math.sin(a) * 14, vx: -Math.cos(a) * 0.05, vy: -Math.sin(a) * 0.04,
+            life: rand(220, 380), size: rand(2, 3.5), color, kind: 'glow', born: now });
+          this.spawn({ x: x1, y: y1 - 18, vx: Math.cos(a) * rand(0.1, 0.25), vy: Math.sin(a) * rand(0.06, 0.15),
+            drag: 0.99, life: rand(260, 420), size: rand(1.5, 2.6), color: i % 3 ? color : '#ffffff', kind: 'spark', born: now + 30 });
+        }
+        this.effects.push({ ...base, kind: 'ring', x: x1, y: y1, radius: 46, life: 360 });
+        return 0;
+      }
+      case 'axe': {
+        // 飞斧：转着飞向终点（命中的敌人或被墙挡住的地方）
+        const x0 = ev.x ?? src.x;
+        const y0 = ev.y ?? src.y;
+        const x1 = ev.tx ?? dst.x;
+        const y1 = ev.ty ?? dst.y;
+        const life = Math.max(120, Math.hypot(x1 - x0, y1 - y0) / 0.85);
+        this.effects.push({ ...base, kind: 'axe', x0, y0, x1, y1, life, hit: !!ev.dst });
+        return life;
+      }
+      case 'frost': {
+        // 冰霜新星：地上一圈冰环往外扩，冰碴往外飞，飘几片雪
+        const cx = ev.x ?? src.x;
+        const cy = ev.y ?? src.y;
+        const radius = ev.radius || 110;
+        this.effects.push({ ...base, kind: 'nova', cx, cy, radius, life: 760, seed: Math.random() * 100 });
+        for (let i = 0; i < 34; i++) {
+          const a = rand(0, TAU);
+          const sp = rand(0.2, 0.42);
+          this.spawn({ x: cx + Math.cos(a) * 10, y: cy - 8 + Math.sin(a) * 5, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.5,
+            drag: 0.993, life: rand(320, 560), size: rand(1.5, 2.8), color: i % 3 ? color : '#ffffff', kind: 'spark', born: now });
+        }
+        for (let i = 0; i < 12; i++) {
+          this.spawn({ x: cx + rand(-radius, radius) * 0.8, y: cy + rand(-radius, radius) * 0.35 - rand(10, 50), vx: rand(-0.01, 0.01),
+            vy: rand(0.01, 0.025), life: rand(900, 1500), size: rand(2.5, 4), color: '#e8f6ff', kind: 'wisp', born: now + rand(0, 400) });
+        }
+        this.shake = Math.max(this.shake, 5);
+        return 90;
       }
       default: { // melee
         const heavy = /heavy|smash|pounce/.test(ev.skill || '');
@@ -333,6 +425,16 @@ export class FX {
           add(p.x, p.y - 10, 20 + 120 * easeOut(k), 6 * (1 - k));
           break;
         }
+        case 'nova': {
+          const k = clamp01(t / 0.6);
+          if (k < 1) add(f.cx, f.cy - 8, f.radius * (0.2 + 1.1 * easeOut(k)), 8 * (1 - k));
+          break;
+        }
+        case 'blink': {
+          const k = clamp01(t / 0.5);
+          if (k < 1) add(f.x1, f.y1 - 18, 10 + 70 * easeOut(k), 6 * (1 - k));
+          break;
+        }
       }
     }
   }
@@ -372,7 +474,19 @@ export class FX {
         case 'ring': add(f.x, f.y, f.radius * 1.5, f.color, fade * 0.6, 0.3); break;
         case 'parry': add(f.x, f.y, 70, f.color, fade, 0.55); break;
         case 'shieldForm': { const p = this.pos(f.src, { x: f.sx, y: f.sy }); add(p.x, p.y - 18, 110, f.color, fade, 0.4); break; }
+        case 'nova': add(f.cx, f.cy, f.radius * 1.7, f.color, fade, 0.45); break;
+        case 'blink': add(f.x1, f.y1 - 18, 130, f.color, fade, 0.5); break;
+        case 'axe': {
+          const k = clamp01(t);
+          add(f.x0 + (f.x1 - f.x0) * k, f.y0 + (f.y1 - f.y0) * k - 22, 60, '#dfe8ff', 0.7, 0.3);
+          break;
+        }
       }
+    }
+    // 身上的外观：圣光和火焰武器会照亮周围
+    for (const e of this.lookEnts) {
+      if (e.looks & LOOK_HOLY) add(e.x, e.y - e.h * 0.5, 140, '#ffe9a0', 0.5, 0.3);
+      if (e.looks & LOOK_FIRE) add(e.x + e.dir * e.r, e.y - e.h * 0.55, 100, '#ff8a3a', 0.55, 0.35);
     }
   }
 
@@ -389,6 +503,7 @@ export class FX {
         case 'buff': this.buffGround(ctx, f, t); break;
         case 'ring': this.ring(ctx, f, t); break;
         case 'pillar': this.pillarGround(ctx, f, t); break;
+        case 'nova': this.novaGround(ctx, f, t); break;
       }
     }
     ctx.restore();
@@ -410,6 +525,7 @@ export class FX {
         case 'buff': { const p = this.pos(f.src, { x: f.sx, y: f.sy }); add(p.x, p.y, 64, 30); break; }
         case 'ring': add(f.x, f.y, f.radius + 6, f.radius * 0.45 + 6); break;
         case 'pillar': { const p = this.pos(f.anchor, f); add(p.x, p.y, 62, 26); break; }
+        case 'nova': add(f.cx, f.cy, f.radius * 1.15 + 8, f.radius * 0.55 + 8); break;
       }
     }
     return x1 > x0 ? [x0, y0, x1, y1] : null;
@@ -423,6 +539,14 @@ export class FX {
         f.landed = true;
         const dp = this.pos(f.dst, { x: f.dx, y: f.dy, r: f.dr });
         this.burst(dp.x, dp.y - (dp.r || 14), f.color, f.kind === 'orb' ? 16 : 8, now);
+      }
+    }
+    for (const f of this.effects) {
+      if (f.kind === 'axe' && !f.landed && now - f.born >= f.life * 0.95) {
+        f.landed = true;
+        // 打中：金属火花；没打中：插在地上扬一团土
+        if (f.hit) this.burst(f.x1, f.y1 - 22, '#e8eef8', 12, now);
+        else this.footDust(f.x1, f.y1, Math.sign(f.x1 - f.x0) || 1, now);
       }
     }
     this.effects = this.effects.filter((f) => now - f.born < f.life);
@@ -457,6 +581,7 @@ export class FX {
         case 'buff': this.buffTop(ctx, f, t); break;
         case 'parry': this.parry(ctx, f, t); break;
         case 'shieldForm': this.shieldForm(ctx, f, t); break;
+        case 'axe': this.axe(ctx, f, t, now); break;
       }
     }
     this.shieldAuras(ctx, now);
@@ -495,6 +620,11 @@ export class FX {
           break;
         }
         case 'parry': add(f.x, f.y, f.r * 3 + 10, f.r * 3 + 10, f.r * 3 + 10); break;
+        case 'axe': {
+          const k = clamp01(t);
+          add(f.x0 + (f.x1 - f.x0) * k, f.y0 + (f.y1 - f.y0) * k - 22, 30, 30, 30);
+          break;
+        }
       }
     }
     for (const a of this.auras()) add(a.x, a.y, a.r * 2.6 + 20, a.h * 1.8 + 30, a.r + 20);
@@ -516,9 +646,155 @@ export class FX {
         case 'whirl': this.whirlBlades(ribbons, f, t); break;
         case 'orb': this.orb(ribbons, sprites, f, t, now); break;
         case 'arrow': this.arrowTrail(ribbons, f, t); break;
+        case 'blink': this.blinkTrail(ribbons, sprites, f, t); break;
+        case 'axe': this.axeTrail(ribbons, f, t); break;
       }
     }
+    this.lookGlows(sprites, now);
     sprites.restore();
+  }
+
+  // blinkTrail 是闪现的光痕：从起点到终点一道紫光，起点那头先淡掉。
+  blinkTrail(ribbons, sprites, f, t) {
+    const fade = 1 - t;
+    const points = [f.x0, f.y0 - 18, (f.x0 + f.x1) / 2, (f.y0 + f.y1) / 2 - 20, f.x1, f.y1 - 18];
+    const width = 26 * fade;
+    ribbons.stroke(points, [width * 0.2, width * 0.8, width], f.color, 0.9 * fade, 'glow');
+    blit(sprites, glow(f.color), f.x1, f.y1 - 18, 30 * (1 - t * 0.5), 0.45 * fade);
+  }
+
+  // axePoint 是飞斧在进度 k（0..1）时的位置（离地 22 像素飞）。
+  axePoint(f, k) {
+    return { x: f.x0 + (f.x1 - f.x0) * k, y: f.y0 + (f.y1 - f.y0) * k - 22 };
+  }
+
+  axeTrail(ribbons, f, t) {
+    const head = clamp01(t);
+    const tail = Math.max(0, head - 0.3);
+    if (head - tail < 0.01) return;
+    const points: number[] = [];
+    const widths: number[] = [];
+    for (let i = 0; i <= 6; i++) {
+      const p = this.axePoint(f, tail + (head - tail) * (i / 6));
+      points.push(p.x, p.y);
+      widths.push(2 + 12 * (i / 6));
+    }
+    ribbons.stroke(points, widths, '#cfe0ff', 0.55, 'glow');
+  }
+
+  // axe 画转着飞的斧头：木柄 + 一片月牙形的斧刃，插地后停一会儿再淡掉。
+  axe(ctx, f, t, now) {
+    const k = clamp01(t / 0.95);
+    const p = this.axePoint(f, k);
+    const flying = t < 0.95;
+    const dir = Math.sign(f.x1 - f.x0) || 1;
+    const spin = flying ? (now - f.born) * 0.028 * dir : dir * 0.6;
+    ctx.save();
+    ctx.translate(p.x, p.y + (flying ? 0 : 10));
+    ctx.rotate(spin);
+    ctx.scale(1.4, 1.4);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = flying ? 1 : 1 - clamp01((t - 0.95) / 0.05);
+    ctx.lineCap = 'round';
+    // 柄
+    ctx.strokeStyle = '#2a1608';
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(11, 0); ctx.stroke();
+    ctx.strokeStyle = '#8a5a2c';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.stroke();
+    // 刃
+    ctx.fillStyle = '#e9eef6';
+    ctx.strokeStyle = '#1a1420';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(6, -2);
+    ctx.quadraticCurveTo(10, -13, 18, -12);
+    ctx.quadraticCurveTo(14, 0, 18, 12);
+    ctx.quadraticCurveTo(10, 13, 6, 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'lighter';
+    blit(ctx, glow('#cfe0ff'), 14, 0, 14, flying ? 0.5 : 0.2);
+    ctx.restore();
+  }
+
+  // novaGround 是冰霜新星在地上的冰环：带一圈冰刺，往外扩到技能半径。
+  novaGround(ctx, f, t) {
+    const k = easeOutCubic(clamp01(t / 0.45));
+    const fade = 1 - clamp01((t - 0.4) / 0.6);
+    const radius = f.radius * k;
+    ctx.save();
+    ctx.translate(f.cx, f.cy);
+    ctx.scale(1, 0.45);
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(0, 0, radius * 0.2, 0, 0, Math.max(1, radius));
+    g.addColorStop(0, rgba(f.rgb, 0.05 * fade));
+    g.addColorStop(0.75, rgba(f.rgb, 0.22 * fade));
+    g.addColorStop(1, rgba(whiten(f.rgb, 0.6), 0.55 * fade));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, TAU);
+    ctx.fill();
+    // 冰刺：一圈长短不一的尖角，朝外
+    ctx.fillStyle = rgba(whiten(f.rgb, 0.7), 0.75 * fade);
+    const spikes = 18;
+    for (let i = 0; i < spikes; i++) {
+      const a = (i / spikes) * TAU + f.seed;
+      const len = (10 + 14 * Math.abs(Math.sin(i * 7.3 + f.seed))) * k;
+      const half = 0.09;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a - half) * radius * 0.92, Math.sin(a - half) * radius * 0.92);
+      ctx.lineTo(Math.cos(a) * (radius + len), Math.sin(a) * (radius + len));
+      ctx.lineTo(Math.cos(a + half) * radius * 0.92, Math.sin(a + half) * radius * 0.92);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // looks 每帧调用：按身上的 Buff 外观冒粒子（疾风的风线、圣光的金点、武器的火星、冰冻的雪花），
+  // 并记下这些实体，drawTrails 时给它们画光晕。
+  looks(ents: LookEnt[], now: number) {
+    this.lookEnts = ents;
+    // 记的时间只是为了控制冒粒子的频率，攒多了直接清掉（实体进出视野会留下旧的）
+    if (this.lookSpawnAt.size > 256) this.lookSpawnAt.clear();
+    const due = (id: number, look: number, every: number) => {
+      const key = id + ':' + look;
+      if (now - (this.lookSpawnAt.get(key) ?? -1e9) < every) return false;
+      this.lookSpawnAt.set(key, now);
+      return true;
+    };
+    for (const ent of ents) {
+      if (ent.looks & LOOK_HASTE && ent.moving && due(ent.id, LOOK_HASTE, 45)) {
+        this.spawn({ x: ent.x - ent.dir * rand(4, 14), y: ent.y - rand(4, ent.h * 0.8), vx: -ent.dir * rand(0.15, 0.3), vy: 0,
+          drag: 0.98, life: rand(220, 360), size: rand(1.2, 2), color: '#9effd8', kind: 'spark', born: now });
+      }
+      if (ent.looks & LOOK_HOLY && due(ent.id, LOOK_HOLY, 70)) {
+        const a = rand(0, TAU);
+        this.spawn({ anchor: ent.id, ox: Math.cos(a) * ent.r * 1.1, oy: -rand(0, ent.h), vx: 0, vy: -rand(0.03, 0.07),
+          life: rand(500, 800), size: rand(1.8, 3), color: '#ffe9a0', kind: 'glow', born: now });
+      }
+      if (ent.looks & LOOK_FIRE && due(ent.id, LOOK_FIRE, 35)) {
+        this.spawn({ anchor: ent.id, ox: ent.dir * rand(ent.r * 0.5, ent.r * 1.3), oy: -rand(ent.h * 0.35, ent.h * 0.8),
+          vx: rand(-0.02, 0.02), vy: -rand(0.05, 0.12), grav: -0.0001, life: rand(280, 520), size: rand(2, 4),
+          color: Math.random() < 0.3 ? '#ffd27a' : '#ff7a2a', kind: 'glow', born: now });
+      }
+      if (ent.looks & LOOK_FROST && due(ent.id, LOOK_FROST, 140)) {
+        this.spawn({ x: ent.x + rand(-ent.r, ent.r), y: ent.y - rand(ent.h * 0.4, ent.h * 1.1), vx: rand(-0.01, 0.01), vy: rand(0.015, 0.03),
+          life: rand(600, 900), size: rand(2, 3), color: '#e8f6ff', kind: 'wisp', born: now });
+      }
+    }
+  }
+
+  // lookGlows 给圣光庇护和火焰武器画常驻的光晕。
+  lookGlows(sprites, now: number) {
+    for (const ent of this.lookEnts) {
+      const pulse = 0.85 + 0.15 * Math.sin(now / 140 + ent.id);
+      // 光晕要淡：叠上泛光以后太亮会把角色本身盖住
+      if (ent.looks & LOOK_HOLY) blit(sprites, glow('#ffd88a'), ent.x, ent.y - ent.h * 0.5, ent.h * 0.85 * pulse, 0.16);
+      if (ent.looks & LOOK_FIRE) blit(sprites, glow('#ff7a2a'), ent.x + ent.dir * ent.r * 0.9, ent.y - ent.h * 0.58, ent.r * 0.9 * pulse, 0.3);
+    }
   }
 
   // slash 是一道弧形刀光：头部最亮、尾部渐隐，下面垫一层墨色，像毛笔扫过。

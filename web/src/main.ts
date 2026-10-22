@@ -24,6 +24,7 @@ import { createDebug } from './ui/debug';
 import {
   initHud, renderDeath, renderSkillBar, renderTarget, setConn, showToast,
 } from './ui/hud';
+import { initPicker } from './ui/picker';
 
 declare global {
   interface Window { btdemo: { state: typeof state; bake?: () => Promise<unknown> } }
@@ -93,6 +94,7 @@ function runPending(now: number): void {
 
 async function init(): Promise<void> {
   initHud(castSlot);
+  initPicker(conn.send);
   await loadArt();   // 美术资源要在建场景、建角色之前就绪
   await initWorld(canvas, document.getElementById('overlay') as HTMLCanvasElement);
   state.fx = new FX(fxResolve, fxAuras);

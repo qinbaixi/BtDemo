@@ -25,7 +25,7 @@ let ui: {
   panelTarget: HTMLElement; tgtName: HTMLElement; tgtLv: HTMLElement;
   tgtHpFill: HTMLElement; tgtHpText: HTMLElement;
   skillbar: HTMLElement; conn: HTMLElement; toast: HTMLElement;
-  death: HTMLElement; deathText: HTMLElement;
+  death: HTMLElement; deathText: HTMLElement; deathPick: HTMLElement;
 };
 const attrEls: Record<string, HTMLElement> = {};
 let skillBtns: Record<number, SkillButton> = {};
@@ -60,7 +60,7 @@ export function initHud(cast: (slot: number) => void): void {
     panelTarget: $('panel-target'), tgtName: $('tgt-name'), tgtLv: $('tgt-lv'),
     tgtHpFill: $('tgt-hp-fill'), tgtHpText: $('tgt-hp-text'),
     skillbar: $('skillbar'), conn: $('conn'), toast: $('toast'),
-    death: $('death'), deathText: $('death-text'),
+    death: $('death'), deathText: $('death-text'), deathPick: $('death-pick'),
   };
   buildAttrRows();
   buildSkillBar();
@@ -89,15 +89,13 @@ function buildAttrRows(): void {
   mk(DERIVED_ATTRS, ui.derivedAttrs, 'der.');
 }
 
-// slotCount 是技能栏的格数：至少 5 格，技能多了就多给，最多 9 格（对应数字键 1～9）。
-function slotCount(): number {
-  return Math.min(9, Math.max(5, ...Object.keys(state.skillBySlot).map(Number)));
-}
+// 技能栏按键盘的样子排成两行：上面 U I O（第 4～6 格），下面 J K L（第 1～3 格）
+const BAR_ORDER = [4, 5, 6, 1, 2, 3];
 
 export function buildSkillBar(): void {
   ui.skillbar.replaceChildren();
   skillBtns = {};
-  for (let slot = 1; slot <= slotCount(); slot++) {
+  for (const slot of BAR_ORDER) {
     const sk = state.skillBySlot[slot] || null;
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -108,7 +106,7 @@ export function buildSkillBar(): void {
     const key = document.createElement('span');
     key.className = 'key';
     const label = SKILL_KEY_LABELS[slot - 1] ?? String(slot);
-    key.textContent = slot === 1 ? `${label} / 左键` : label;   // 1 号技能就是普攻
+    key.textContent = label;   // 1 号技能是普攻，也可以点左键（帮助栏里写了）
     const name = document.createElement('span');
     name.className = 'sname';
     name.textContent = sk ? sk.name : '—';
@@ -191,6 +189,8 @@ export function renderDeath(now: number): void {
   ui.death.classList.toggle('hidden', !dead);
   if (!dead) return;
   const left = (s.respawnIn ?? 0) - (now - state.selfAt) / 1000;
+  // 选技能面板关掉以后，死亡期间还能点这个按钮重新打开（按钮在 picker.ts 里接上）
+  ui.deathPick.classList.toggle('hidden', state.pickerOpen || !state.skillPool.length);
   setText(ui.deathText, left > 0
     ? `你已阵亡，${Math.ceil(left)} 秒后复活`
     : '你已阵亡，即将复活…');

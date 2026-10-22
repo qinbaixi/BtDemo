@@ -45,6 +45,7 @@ func (m *Map) Resolve(p Vec, r float64) Vec   // 把圆推出所有障碍并留�
 - `Free(p, r)`：圆放得下吗。
 - `Clear(a, b, r)`：沿线段每隔几像素采样一次 `Free`，判断能否直线走过去（视线检测）。
 - `NearestFree(p, r)`：离 p 最近的空地。出生、复活、游荡目标、逃跑目标都用它，保证不会把实体放进房子里。
+- `Reach(from, dir, maxDist, radius)`：半径为 radius 的圆从 from 沿单位向量 dir 直线前进，最远 maxDist，返回它能到达的最远位置，碰到障碍或地图边缘就停在前面。闪现（dash）用它算终点，飞斧（line）用它算飞行距离。实现上每隔 2～8 像素（取决于半径）用 `Free` 检查一次，所以停的位置可能离墙差一步。
 
 ## 寻路（grid.go + map.go 的 FindPath）
 

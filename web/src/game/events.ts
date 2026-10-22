@@ -2,7 +2,7 @@
 
 import type { GameEvent } from '../net/types';
 import { cameraKick, cameraPunch } from '../render/camera';
-import { FEEL } from './config';
+import { FEEL, LOOK_FIRE } from './config';
 import { hypot } from './math';
 import { faceToward, headY, posOf, state, type ClientEntity, type FloatOpts } from './state';
 
@@ -15,6 +15,12 @@ export function onEvent(ev: GameEvent, now: number): void {
         src.attackAt = now;
         const dst = ev.dst && ev.dst !== ev.src ? state.ents.get(ev.dst) : null;
         if (dst) { const dp = posOf(dst, now); faceToward(src, dp.x, dp.y, now); }
+        else if (typeof ev.tx === 'number' && typeof ev.x === 'number' && Math.abs(ev.tx - ev.x) > 1) {
+          faceToward(src, ev.tx, ev.ty ?? src.y, now);   // 闪现、没打中的飞斧：朝飞出去的方向
+        }
+        if (ev.fx === 'blink' && typeof ev.tx === 'number') blinkTo(src, ev, now);
+        // 武器着火时，物理技能的刀光和命中火花都换成火焰色
+        if (src.looks & LOOK_FIRE && (ev.fx === 'melee' || ev.fx === 'circle' || ev.fx === 'axe')) ev = { ...ev, color: '#ff7a2a' };
       }
       const delay = fx.cast(ev, now);
       state.lands.set(ev.src, { at: now + delay, color: ev.color });
@@ -42,6 +48,12 @@ export function onEvent(ev: GameEvent, now: number): void {
         }
         // 伤害数字往被推开的方向抛出去（竖着打时随机左右）
         const drift = e ? side * 26 : 0;
+        if (ev.immune) {
+          // 无敌：金色的“免疫”，不推不闪
+          fx.impact(ev.dst, '#ffe9a0', false, t);
+          addFloat(t, ev.dst, '免疫', '#ffe9a0', 18, 900, { pop: true, rise: 46 });
+          return;
+        }
         if (ev.blocked) {
           // 格挡：盾上迸出火花，伤害数字小一号
           fx.block(ev.dst, t);
@@ -157,4 +169,12 @@ export function addFloat(
     drift: opts.drift ?? 0,
     crit: !!opts.crit,
   });
+}
+
+// blinkTo 让闪现的人直接出现在终点（不做插值滑过去），并记下起点画残影。
+function blinkTo(e: ClientEntity, ev: GameEvent, now: number): void {
+  e.blinkFrom = { x: ev.x ?? e.x, y: ev.y ?? e.y, at: now };
+  e.x = e.px = e.rx = ev.tx!;
+  e.y = e.py = e.ry = ev.ty ?? e.y;
+  e.t0 = now;
 }

@@ -84,7 +84,7 @@ type Combat struct {
 	LastAttacker int     // 最近一次攻击者的实体 ID
 	LastHitAt    float64 // 最近一次受击的时间
 
-	// CanPick 为 true 时玩家可以重新挑技能：刚进游戏（还没放过技能）和死亡期间（由 session、combat 管理）
+	// CanPick 为 true 时玩家可以重新挑技能：进游戏或死亡之后、放下一个技能之前（由 session、combat 管理）
 	CanPick bool
 }
 

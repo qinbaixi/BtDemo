@@ -1,10 +1,11 @@
-// 处理服务端消息：welcome / enter / leave / sync / toast，更新本地状态。
+// 处理服务端消息：welcome / enter / leave / sync / toast / skills，更新本地状态。
 
 import type { Debug } from '../ui/debug';
 import { buildSkillBar, renderSelf, setConn, showToast } from '../ui/hud';
+import { closePicker, openPicker } from '../ui/picker';
 import { createScenery } from '../render/scenery';
 import { loadMap } from './map';
-import type { ClientMessage, ServerMessage, SyncMsg, WelcomeMsg } from '../net/types';
+import type { ClientMessage, ServerMessage, SkillInfo, SyncMsg, WelcomeMsg } from '../net/types';
 import { ATTACK_MS, DEATH_MS, LERP_MS, SNAP_DIST } from './config';
 import { onEvent } from './events';
 import { hypot } from './math';
@@ -38,11 +39,24 @@ export function handleMessage(m: ServerMessage, deps: SyncDeps): void {
       break;
     case 'sync': onSync(m, now, deps); break;
     case 'msg': showToast(m.text); break;
+    case 'skills':
+      setSkills(m.skills);
+      buildSkillBar();
+      showToast('技能已更换');
+      break;
   }
+}
+
+// setSkills 换上一套技能栏。
+function setSkills(skills: SkillInfo[]): void {
+  state.skills = (skills || []).slice().sort((a, b) => a.slot - b.slot);
+  state.skillBySlot = {};
+  for (const sk of state.skills) state.skillBySlot[sk.slot] = sk;
 }
 
 // resetOnClose 在连接断开时清掉旧角色的状态。
 export function resetOnClose(): void {
+  closePicker();
   state.ents.clear();
   state.self = null;
   state.target = 0;
@@ -52,9 +66,9 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   state.myId = m.id;
   state.map = m.map || state.map;
   state.cell = (m.aoi && m.aoi.cell) || state.cell;
-  state.skills = (m.skills || []).slice().sort((a, b) => a.slot - b.slot);
-  state.skillBySlot = {};
-  for (const sk of state.skills) state.skillBySlot[sk.slot] = sk;
+  setSkills(m.skills);
+  state.skillPool = m.pool || [];
+  state.skillPick = m.pick || 0;
 
   // welcome 表示一个全新的角色：旧角色的东西全部丢掉。
   state.ents.clear();
@@ -73,6 +87,8 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   state.aiPath = null;
 
   buildSkillBar();
+  closePicker();
+  openPicker('join');   // 新角色：先挑技能
   deps.debug.setTarget(0);
   deps.debug.reset();
   setConn('ok', '已连接');
@@ -116,9 +132,12 @@ function onSync(m: SyncMsg, now: number, deps: SyncDeps): void {
     else if (shield <= 0 && e.shield > 0 && !e.dead) state.fx?.shieldBreak(e.id, performance.now());
     e.shield = shield;
     e.blocking = !!s.blocking && !e.dead;
+    e.looks = e.dead ? 0 : s.looks || 0;
     e.fresh = false;
   }
   if (m.self) {
+    // 刚死：弹出选技能面板，复活后用新技能
+    if (m.self.dead && !state.self?.dead) openPicker('death');
     state.self = m.self;
     state.selfAt = now;
     state.cds = m.self.cds || {};

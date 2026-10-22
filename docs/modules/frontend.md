@@ -37,7 +37,7 @@ web/
   public/.gitkeep       构建时复制到 dist，保证没构建前端也能编译服务端
   src/
     main.ts             入口：把各模块接起来，每帧主循环
-    input.ts            键盘鼠标：移动、选目标、放技能、G/Q/` 开关
+    input.ts            键盘鼠标：移动、选目标、放技能（J K L U I O）、G/Q/` 开关
     net/
       types.ts          前端用的消息类型（Welcome、Sync、事件……）
       protocol.ts       protobuf ⇄ types.ts 的转换，协议收发都经过 tap（调试面板用）
@@ -58,7 +58,7 @@ web/
       art.ts            美术资源：读 art/manifest.json，有图的角色/物件/地表/LUT 用图，没有的继续程序画
       bake.ts           把程序画的模型和物件按美术规范导出成模板（地址带 ?bake 时可用）
       pixi/
-        actorView.ts    一个角色：阴影、自己脚下的印记、身体精灵 + 墨线着色器
+        actorView.ts    一个角色：阴影、自己脚下的印记、身体精灵 + 墨线着色器、染色、闪现残影
         inkFilter.ts    墨线着色器：描边、轮廓光、受击白闪
         sceneView.ts    地表切块贴图、物件精灵、动态物件（火焰）
         canvasSprite.ts 用 Canvas 2D 画内容的精灵（程序化模型、火焰、地面特效用它接进 Pixi）
@@ -67,7 +67,8 @@ web/
       fx.ts             技能和战斗特效、粒子、屏幕震动（Canvas 2D）
       scenery.ts        地表、场景物件、环境光源（Canvas 2D 生成贴图）
     ui/
-      hud.ts            自己 / 目标面板、技能栏、死亡遮罩、提示条、连接状态
+      hud.ts            自己 / 目标面板、两行技能栏、死亡遮罩、提示条、连接状态
+      picker.ts         选技能面板：进游戏和死亡时挑技能，发 Loadout
       debug.ts          调试抽屉：标签页、跟随选中目标、向服务端要追踪
       debug-ai.ts       AI 决策页：整棵行为树（可折叠）叠加每帧结果和判断依据，暂停后逐帧回看，节点详情
       debug-proto.ts    调试抽屉：协议收发列表
@@ -118,6 +119,42 @@ web/
 
 收到消息不在帧里处理，而是 WebSocket 回调里直接改 `state`（`game/sync.ts`）。
 
+## 技能：按键、技能栏和选技能
+
+**按键**（`input.ts` 的 `SKILL_KEYS`）：`J K L U I O` 依次是 1～6 号格，`J` 是普攻。数字键 `1`～`6` 也还能用。放技能前 `castSlot` 会检查：选技能面板开着时不放（普攻也不发）；格挡中不放，提示“格挡中不能出招”。
+
+**技能栏**（`ui/hud.ts`）：两行，`BAR_ORDER = [4, 5, 6, 1, 2, 3]`，上排 U I O（4～6 格），下排 J K L（1～3 格），和键盘上的位置一致。冷却是按钮上的遮罩加秒数，每帧 `renderSkillBar` 刷新。
+
+**选技能面板**（`ui/picker.ts`）：从技能池（`Welcome.pool`）里挑 `pick` 个，放到第 2 格起。
+- 打开：刚进游戏（`welcome` 时 `openPicker('join')`），死亡时（`sync` 里自己从活变成死，`openPicker('death')`，标题写“重新选择技能（复活后生效）”）。
+- 面板上半是一排格子，J 固定是普攻，后面按选的顺序排；下半是技能卡，点一下选上或取消，选满了其余的卡不能再点。
+- 确认：回车，或者按“出发”（新角色）/“确定”（死亡时）。Esc 关掉，不换技能。
+- 确认时，和当前技能栏一样就不发；不一样就发 `loadout`。服务端接受后回 `skillBar`，前端换栏并提示“技能已更换”；被拒绝时服务端只回一条 Toast，技能栏不变。
+- 默认选择：上次确认的，存在浏览器 `localStorage` 的 `btdemo.loadout` 里，只在这个浏览器有效；存的不能用（技能不在池里，或数量不对）就用当前技能栏上的。读写 `localStorage` 都包在 try 里，存不了就算了。
+- 面板开着时，点击不会穿到画布（不选目标、不普攻），技能键也不放技能。
+
+**瞄准**（`input.ts` 的 `aimFor`）：闪现（`dash`）和飞斧（`line`）发 `cast` 时带上方向 `dx`、`dy`。
+- 闪现：朝按住的方向键；什么都没按就朝角色面向（左或右）。
+- 飞斧：有当前目标（活着的怪）就朝它飞，否则同闪现。
+
+## 技能特效和外观
+
+**特效**（`render/fx.ts` 的 `cast()`，按 `fx` 分支）：
+- `haste` 疾风步：脚下一圈青色气浪，身边风线往两边吹开。
+- `holy` 圣光庇护：金色光柱落下，脚下一圈光环。
+- `enchant` 烈焰附魔：身上腾起一团火，火星乱窜。
+- `blink` 闪现：起点和终点各一团紫光，中间一道光痕，终点一圈环。角色直接出现在终点（`events.ts` 的 `blinkTo`，不滑过去），起点留下残影。
+- `axe` 飞斧：转着飞向终点（命中的敌人，或被墙挡住的地方）。
+- `frost` 冰霜新星：地上冰环往外扩，冰碴往外飞，飘几片雪。
+- 武器着火（`LOOK_FIRE`）时，物理技能（`melee`、`circle`、`axe`）的颜色换成火焰色（`events.ts`）。
+- 伤害事件带 `immune`：金色“免疫”飘字，不推不闪。
+
+**外观**（`Buff.look`）：服务端的 `Buff.look` 进入 `EntityState.looks` 的位（1 疾风、2 圣光、4 火焰、8 冰冻），前端存在 `ClientEntity.looks` 里。`LOOK_*` 常量在 `game/config.ts`，要和服务端 `internal/config` 里的 `Looks` 对上。
+- `fx.looks()` 每帧按位冒粒子：疾风的风线（只在移动时）、圣光的金点、火焰的火星、冰冻的雪花。
+- `fx.lookGlows()` 给圣光和火焰画常驻的淡光晕。
+- 角色身体的 `tint`（`world.ts`）：冰冻淡蓝，圣光淡金；死亡时不染色。
+- 闪现残影：`world.ts` 的 `blinkGhost` 从起点记下偏移，`actorView.ts` 在起点到当前位置之间画 3 道半透明紫色身影，380 毫秒淡出。
+
 ## 开发
 
 需要 Node.js 20+。浏览器需要支持 WebGL（不支持时连接状态会提示画面初始化失败）。
@@ -147,6 +184,7 @@ npm run build         # 生成协议代码 + 类型检查 + 输出 web/dist
 
 - 新怪物模型：`render/models.ts` 加画法，`game/config.ts` 的 `MODEL_H` 加头顶高度。
 - 新技能特效：`render/fx.ts` 的 `cast()` 按 `fx` 字段分支。护盾泡泡是常驻效果，由 `game/state.ts` 的 `fxAuras()` 每帧列出带护盾的实体，`fx.shieldAuras()` 画。
+- 新 Buff 外观：服务端 `internal/config` 的 `Looks` 加一个位，`game/config.ts` 加 `LOOK_*` 常量，`render/fx.ts` 的 `looks()` 冒粒子，需要的话在 `lookGlows()` 或 `world.ts` 的 `tint` 里加效果。
 - 鼠标操作在 `input.ts`：左键普攻（1 号技能，冷却中或身边没怪时不发请求，按住连续打），右键按住发 `block`。
 - 新场景物件：`render/scenery.ts` 的 `KINDS`，同时在 `config/map.tmj` 加碰撞形状并摆放（见 [地图](map.md#加一种新物件)）。
 - 新 HUD 元素：`index.html` 加元素，`ui/hud.ts` 取元素并刷新。

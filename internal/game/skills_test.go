@@ -198,3 +198,21 @@ func TestLoadoutOnlyAtJoinAndDeath(t *testing.T) {
 		t.Fatalf("loadout while dead = %v", got)
 	}
 }
+
+func TestAxeStoppedByWall(t *testing.T) {
+	// x = 200..220 的墙挡在玩家和怪物中间
+	wall := nav.Shape{Kind: nav.Rect, A: nav.Vec{X: 200, Y: 0}, B: nav.Vec{X: 220, Y: 1000}}
+	world := testWorld(wall)
+	player := addTestEntity(world, 1, "player", 100, 500, playerBase)
+	monster := addTestEntity(world, 2, "monster", 260, 500, monsterBase)
+	axe := &config.Skill{ID: "axe", Kind: "line", Range: 320, Damage: "physical", Ratio: 1, Base: 5, FX: "axe"}
+	if err := world.Combat.CastAimed(player, axe, 0, 1, 0); err != nil {
+		t.Fatalf("axe: %v", err)
+	}
+	if monster.HP != monster.Attr.MaxHP {
+		t.Fatal("axe went through the wall")
+	}
+	if event := lastCast(world); event.Dst != nil || event.GetTx() > 200 {
+		t.Fatalf("axe ended at x = %v, dst %v", event.GetTx(), event.GetDst())
+	}
+}

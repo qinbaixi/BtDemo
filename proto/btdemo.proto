@@ -23,8 +23,8 @@ message ClientMsg {
 }
 
 // Loadout picks the player's skills for slots 2.. (slot 1, the basic attack,
-// is fixed). Only allowed right after joining (before the first cast) and
-// while dead; the server answers with SkillBar, or a Toast when refused.
+// is fixed). Allowed after joining and after dying, until the next cast; the
+// server answers with SkillBar, or a Toast when refused.
 message Loadout {
   repeated string skills = 1;
 }

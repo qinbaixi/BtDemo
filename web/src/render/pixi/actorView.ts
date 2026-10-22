@@ -31,7 +31,12 @@ export interface Pose {
   turn?: number;        // 转身：身体横向收窄的比例（0..1）
   xray?: boolean;       // 被高物件挡住：在物件上面再画一层剪影
   onScreen?: boolean;   // 在镜头里（不在时程序模型不重画，省 CPU 和上传）
+  tint?: number;        // 身体染色（冰冻发蓝、圣光发金），0xffffff 不染
+  ghost?: { dx: number; dy: number; k: number };   // 闪现残影：起点相对脚底的偏移，k 是淡出进度 0..1
 }
+
+const GHOSTS = 3;               // 闪现残影：起点到终点之间排几个
+const GHOST_TINT = 0xb98cff;
 
 // ActorLight 是照在角色身上的主光源：(dx, dy) 是从光源指向角色的单位向量，amt 是强度 0..1。
 export interface ActorLight { dx: number; dy: number; color: string; amt: number }
@@ -54,6 +59,7 @@ export class ActorView {
   private drawnDead = false;
   private shadowR = 0;
 
+  private ghosts: Sprite[] = [];        // 闪现残影（和身体共用贴图）
   private xray: Sprite | null = null;   // 剪影：挂在身体旁边、但画在剪影层（物件上面）
   private xrayFilter: XrayFilter | null = null;
 
@@ -145,7 +151,34 @@ export class ActorView {
         this.flash.alpha = 0.5 * flash;
       }
     }
+    this.body.tint = pose.tint ?? 0xffffff;
+    this.updateGhosts(pose.ghost);
     this.updateXray(!!pose.xray && !dead, hq, res);
+  }
+
+  // updateGhosts 画闪现残影：从起点往终点排几个半透明的紫色身影，离起点越近越淡，一起淡出。
+  private updateGhosts(ghost: Pose['ghost']): void {
+    if (!ghost) {
+      for (const sprite of this.ghosts) sprite.visible = false;
+      return;
+    }
+    while (this.ghosts.length < GHOSTS) {
+      const sprite = new Sprite();
+      sprite.tint = GHOST_TINT;   // 普通混合：染成紫色的半透明身影（加法混合会糊成一团白）
+      this.root.addChildAt(sprite, 1);   // 影子上面、身体下面
+      this.ghosts.push(sprite);
+    }
+    for (let i = 0; i < GHOSTS; i++) {
+      const sprite = this.ghosts[i];
+      const along = i / GHOSTS;           // 0 是起点
+      sprite.visible = true;
+      sprite.texture = this.body.texture;
+      sprite.scale.copyFrom(this.body.scale);
+      sprite.pivot.copyFrom(this.body.pivot);
+      sprite.anchor.copyFrom(this.body.anchor);
+      sprite.position.set(ghost.dx * (1 - along), ghost.dy * (1 - along));
+      sprite.alpha = (0.2 + 0.3 * along) * (1 - ghost.k);
+    }
   }
 
   private isIdle(pose: Pose): boolean {
@@ -220,6 +253,7 @@ export class ActorView {
   }
 
   destroy(): void {
+    for (const sprite of this.ghosts) sprite.texture = Texture.EMPTY;   // 和身体共用贴图
     if (this.xray) {
       this.xrayLayer?.detach(this.xray);
       this.xray.filters = null;
