@@ -11,8 +11,11 @@ import (
 
 // State 是共享的世界状态，会传给每个系统：包括配置、时钟、随机数、实体表和事件队列。
 type State struct {
-	Cfg    *config.Config
-	Rand   *rand.Rand
+	Cfg  *config.Config
+	Rand *rand.Rand
+	// Luck 是物品特效触发和装备掉落用的随机数。和 Rand 分开，加了装备不会打乱原来的战斗随机序列；
+	// 测试可以换成固定的来源，强制特效触发或不触发。
+	Luck   *rand.Rand
 	Clock  Clock
 	Ents   Entities
 	Events Events
@@ -24,6 +27,7 @@ func NewState(cfg *config.Config, seed int64) *State {
 	return &State{
 		Cfg:   cfg,
 		Rand:  rand.New(rand.NewSource(seed)),
+		Luck:  rand.New(rand.NewSource(seed + 1)),
 		Clock: Clock{Dt: 1 / float64(cfg.World.TickRate)},
 		Ents:  Entities{byID: map[int]*Entity{}},
 	}
@@ -35,6 +39,11 @@ func (state *State) Now() float64 { return state.Clock.Now }
 // Hostile 报告 a 是否会攻击 b。
 func (state *State) Hostile(a, b *Entity) bool {
 	return a != b && state.Cfg.Hostile(a.Faction, b.Faction)
+}
+
+// Lucky 用 Luck 掷一次概率为 chance 的骰子。
+func (state *State) Lucky(chance float64) bool {
+	return state.Luck.Float64() < chance
 }
 
 // Scatter 返回 (x, y) 周围 spread 范围内的一个随机点。

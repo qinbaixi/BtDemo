@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// classesConfig 是只够通过 validate 的最小配置：两个职业，技能齐全。
+// classesConfig 是只够通过 validate 的最小配置：两个职业，技能和皮肤齐全。
 func classesConfig() *Config {
 	cfg := &Config{
 		Skills: map[string]*Skill{
@@ -26,6 +26,7 @@ func classesConfig() *Config {
 			Radius:    16,
 			Skills:    []string{"slash", "bolt"},
 			SkillPool: []string{"bolt"},
+			Skins:     []*Skin{{ID: "paladin", Name: "圣骑士", Color: "#4da3ff"}},
 		},
 		{
 			ID:        "ranger",
@@ -33,6 +34,7 @@ func classesConfig() *Config {
 			Radius:    15,
 			Skills:    []string{"shot", "pierce", "rain"},
 			SkillPool: []string{"pierce", "rain"},
+			Skins:     []*Skin{{ID: "woodland", Name: "林地游侠", Color: "#8fd17a"}},
 		},
 	}
 	return cfg

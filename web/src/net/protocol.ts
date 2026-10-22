@@ -6,12 +6,13 @@
 
 import { btdemo } from './pb';
 import type {
-  AiTrace, ClassInfo, AiTreeDef, AiTreeNode, ClientMessage, EntityInfo, GameEvent, Obstacle, SelfInfo, ServerMessage,
+  AiTrace, ClassInfo, AiTreeDef, AiTreeNode, ClientMessage, EntityInfo, GameEvent, ItemInfo, ItemSlotted, Obstacle, SelfInfo,
+  ServerMessage,
 } from './types';
 
 const EVENT_KIND: Record<string, GameEvent['k']> = {
   CAST: 'cast', DAMAGE: 'dmg', HEAL: 'heal', BUFF: 'buff',
-  DIE: 'die', RESPAWN: 'respawn', SAY: 'say', LEVEL_UP: 'lvl',
+  DIE: 'die', RESPAWN: 'respawn', SAY: 'say', LEVEL_UP: 'lvl', LOOT: 'loot',
 };
 
 const TO_OBJECT = { enums: String, longs: Number, defaults: false, oneofs: true };
@@ -37,8 +38,9 @@ function tidy(v: any): any {
   return v;
 }
 
+// skin、gear 没设置时是空串（默认外观 / 职业默认武器），这样再收到 Enter 时也能把它们清回默认
 function entity(e: any): EntityInfo {
-  return { ...e, kind: String(e.kind || '').toLowerCase() };
+  return { ...e, kind: String(e.kind || '').toLowerCase(), skin: e.skin || '', gear: e.gear || '' };
 }
 
 function event(ev: any): GameEvent {
@@ -82,7 +84,20 @@ function classInfo(c: any): ClassInfo {
   return {
     id: c.id, name: c.name, desc: c.desc || '', model: c.model || '', color: c.color || '#e8b65a',
     skills: c.skills || [], pool: c.pool || [], pick: c.pick || 0, canBlock: !!c.canBlock,
+    skins: (c.skins || []).map((s: any) => ({ id: s.id, name: s.name, desc: s.desc || '', color: s.color || '#e8b65a' })),
   };
+}
+
+function itemInfo(i: any): ItemInfo {
+  return {
+    id: i.id, name: i.name, slot: i.slot, cls: i.class || '', rarity: i.rarity || 'common', desc: i.desc || '',
+    stats: (i.stats || []).map((st: any) => ({ stat: st.stat, value: st.value || 0 })),
+    effect: i.effect || '', look: i.look || '',
+  };
+}
+
+function itemSlotted(i: any): ItemSlotted {
+  return { uid: i.uid, id: i.id, slot: i.slot || '' };
 }
 
 function self(s: any): SelfInfo {
@@ -109,6 +124,7 @@ export function createProtocol(): Protocol {
           pick: w.pick || 0,
           classes: (w.classes || []).map(classInfo),
           playerClass: w.class || '',
+          items: (w.items || []).map(itemInfo),
           obstacles: (w.obstacles || []).map((o: any): Obstacle => ({ ...o, shape: String(o.shape).toLowerCase() })),
         };
       }
@@ -125,6 +141,9 @@ export function createProtocol(): Protocol {
       }
       case 'toast': return { t: 'msg', text: m.toast.text };
       case 'skillBar': return { t: 'skills', skills: m.skillBar.skills || [], playerClass: m.skillBar.class || '' };
+      case 'inventory': return {
+        t: 'inventory', items: (m.inventory.items || []).map(itemSlotted), capacity: m.inventory.capacity || 0,
+      };
     }
     return null;
   }
@@ -138,6 +157,9 @@ export function createProtocol(): Protocol {
       case 'loadout': body = { loadout: { skills: o.skills, class: o.cls || undefined } }; break;
       case 'watch': body = { watch: { id: o.id || 0 } }; break;
       case 'block': body = { block: { on: o.on } }; break;
+      case 'equip': body = { equip: { uid: o.uid } }; break;
+      case 'unequip': body = { unequip: { slot: o.slot } }; break;
+      case 'skin': body = { skin: { skin: o.skin || '' } }; break;
       default: return null;
     }
     const data = btdemo.ClientMsg.encode(btdemo.ClientMsg.create(body)).finish();

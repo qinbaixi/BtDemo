@@ -15,6 +15,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/aoi"
 	"github.com/qinbaixi/BtDemo/internal/game/combat"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
+	"github.com/qinbaixi/BtDemo/internal/game/item"
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
 	"github.com/qinbaixi/BtDemo/internal/game/spawn"
 	"github.com/qinbaixi/BtDemo/internal/pb"
@@ -41,10 +42,12 @@ type System struct {
 	combat   *combat.System
 	aiSys    *ai.System
 	spawn    *spawn.System
+	items    *item.System
 	nav      *nav.Map
 	sessions map[*Session]bool
 
 	obstacles []*pb.Obstacle // 构建一次，并在每条欢迎消息中发送
+	itemInfos []*pb.ItemInfo // 装备图鉴，构建一次，并在每条欢迎消息中发送
 }
 
 // New 创建会话系统。
@@ -55,6 +58,7 @@ func New(
 	combatSys *combat.System,
 	aiSys *ai.System,
 	spawnSys *spawn.System,
+	itemSys *item.System,
 ) *System {
 	sys := &System{
 		state:    state,
@@ -63,13 +67,15 @@ func New(
 		combat:   combatSys,
 		aiSys:    aiSys,
 		spawn:    spawnSys,
+		items:    itemSys,
 		sessions: map[*Session]bool{},
 	}
 	sys.obstacles = obstacles(navMap)
+	sys.itemInfos = itemInfos(state.Cfg.Items)
 	return sys
 }
 
-// Join 为一个连接创建新角色，并向其发送欢迎消息。
+// Join 为一个连接创建新角色，向其发送欢迎消息，再发新手装备的 Inventory。
 func (sys *System) Join() *Session {
 	session := &Session{
 		Player:    sys.spawn.Player(),
@@ -85,6 +91,7 @@ func (sys *System) Join() *Session {
 		MapH:      core.F32(cfg.Map.Height),
 		AoiCell:   core.F32(sys.grid.Cell),
 		Obstacles: sys.obstacles,
+		Items:     sys.itemInfos,
 	}
 	class := cfg.Player.Class(session.Player.Class)
 	welcome.Skills = skillBar(session.Player.Skills)
@@ -96,6 +103,8 @@ func (sys *System) Join() *Session {
 	}
 	session.Player.CanPick = true // 刚进游戏，放第一个技能之前可以挑技能
 	sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Welcome{Welcome: welcome}})
+	sys.items.GiveStarter(session.Player)
+	sys.publishGear()
 	return session
 }
 
@@ -133,6 +142,7 @@ func (sys *System) loadout(entity *core.Entity, classID string, ids []string) st
 	}
 	if class.ID != entity.Class {
 		sys.spawn.ApplyClass(entity, class)
+		sys.items.ClassChanged(entity, class)
 		sys.forgetEntity(entity)
 	}
 	skills := []*config.Skill{entity.Skills[0]}
@@ -144,7 +154,7 @@ func (sys *System) loadout(entity *core.Entity, classID string, ids []string) st
 }
 
 // forgetEntity 把 entity 从每个会话的可见集合里删掉，下次 Flush 会重新发它的 Enter，
-// 让其他玩家看到换了职业后的模型（客户端收到已存在实体的 Enter 时更新外观）。
+// 让其他玩家看到换了职业、皮肤或武器后的样子（客户端收到已存在实体的 Enter 时更新外观）。
 func (sys *System) forgetEntity(entity *core.Entity) {
 	for session := range sys.sessions {
 		delete(session.visible, entity.ID)
@@ -161,8 +171,39 @@ func (sys *System) Leave(session *Session) {
 	close(session.Out)
 }
 
+// publishGear 把物品系统留下的变化发出去：每个玩家的提示（Toast）、变了的背包（Inventory），
+// 外观（皮肤、武器）变了的玩家从所有会话的可见集合里删掉，下次 Flush 重发 Enter。
+// 处理完客户端消息后和每次 Flush 之前调用，所以 Equip 等操作马上就有回应，
+// 战斗里的掉落最晚随下一次同步发出。
+func (sys *System) publishGear() {
+	for session := range sys.sessions {
+		player := session.Player
+		notices := player.Notices
+		player.Notices = nil
+		for _, text := range notices {
+			sys.toast(session, text)
+		}
+		if player.InventoryDirty {
+			player.InventoryDirty = false
+			inventory := inventoryInfo(player, sys.items.Capacity())
+			sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Inventory{Inventory: inventory}})
+		}
+		if player.LookDirty {
+			player.LookDirty = false
+			sys.forgetEntity(player)
+		}
+	}
+}
+
+// toast 给会话发一行提示。
+func (sys *System) toast(session *Session, text string) {
+	toast := &pb.Toast{Text: proto.String(text)}
+	sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Toast{Toast: toast}})
+}
+
 // Input 应用一条客户端消息。
 func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
+	defer sys.publishGear()
 	entity := session.Player
 	switch body := msg.Msg.(type) {
 	case *pb.ClientMsg_Move:
@@ -186,8 +227,7 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 	case *pb.ClientMsg_Loadout:
 		reason := sys.loadout(entity, body.Loadout.GetClass(), body.Loadout.GetSkills())
 		if reason != "" {
-			toast := &pb.Toast{Text: proto.String(reason)}
-			sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Toast{Toast: toast}})
+			sys.toast(session, reason)
 			return
 		}
 		bar := &pb.SkillBar{Skills: skillBar(entity.Skills), Class: proto.String(entity.Class)}
@@ -215,8 +255,19 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 		}
 		aimX, aimY := float64(body.Cast.GetDx()), float64(body.Cast.GetDy())
 		if err := sys.combat.CastAimed(entity, skill, target, aimX, aimY); err != nil {
-			toast := &pb.Toast{Text: proto.String(err.Error())}
-			sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Toast{Toast: toast}})
+			sys.toast(session, err.Error())
+		}
+	case *pb.ClientMsg_Equip:
+		if reason := sys.items.Equip(entity, int(body.Equip.GetUid())); reason != "" {
+			sys.toast(session, reason)
+		}
+	case *pb.ClientMsg_Unequip:
+		if reason := sys.items.Unequip(entity, body.Unequip.GetSlot()); reason != "" {
+			sys.toast(session, reason)
+		}
+	case *pb.ClientMsg_Skin:
+		if reason := sys.items.SetSkin(entity, body.Skin.GetSkin()); reason != "" {
+			sys.toast(session, reason)
 		}
 	}
 }
@@ -263,6 +314,7 @@ func (sys *System) send(session *Session, msg *pb.ServerMsg) {
 // Flush 向每个会话发送 AOI 的进入/离开、可见实体的状态、排队中的事件
 // 以及玩家自身属性，然后清空事件队列。
 func (sys *System) Flush() {
+	sys.publishGear()
 	events := sys.state.Events.List()
 	cells := make([]int, len(events))
 	for i, pending := range events {

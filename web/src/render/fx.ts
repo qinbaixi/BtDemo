@@ -13,6 +13,9 @@ const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
+// 掉落的光在生命周期的这个比例时飞到人身上，剩下的时间在人身上亮一下
+const LOOT_ARRIVE = 0.78;
+
 // 箭雨的时间线（毫秒，从出手算）：先射一箭上天，RAIN_FALL_FROM 后箭开始落，每支落 RAIN_FALL_MS
 const RAIN_UP_MS = 260;
 const RAIN_UP = 220;          // 射上天的那支箭飞多高
@@ -438,6 +441,93 @@ export class FX {
     }
   }
 
+  // loot 是一件掉落：一颗稀有度颜色的光从怪物身上弹起来，划一道弧飞进拿到的人身上，到了闪一下。
+  // start 是怪物的位置（不知道时从拿到的人头顶落下来），返回飞到的时间（毫秒）。
+  loot(start, dstId, color, epic, now) {
+    const dst = this.pos(dstId, start || { x: 0, y: 0 });
+    const from = start || { x: dst.x, y: dst.y - 90 };
+    const life = 760;
+    this.effects.push({ kind: 'loot', dst: dstId, x0: from.x, y0: from.y - 16, dx: dst.x, dy: dst.y, color, rgb: rgbOf(color),
+      epic, born: now, life, arrive: LOOT_ARRIVE });
+    // 怪物身上先迸一圈小光点
+    for (let i = 0; i < (epic ? 16 : 8); i++) {
+      const a = rand(0, TAU);
+      this.spawn({ x: from.x, y: from.y - 16, vx: Math.cos(a) * rand(0.05, 0.16), vy: Math.sin(a) * rand(0.04, 0.12) - 0.05,
+        drag: 0.98, life: rand(260, 460), size: rand(1.5, 2.8), color: i % 3 ? color : '#ffffff', kind: 'spark', born: now });
+    }
+    return Math.round(life * LOOT_ARRIVE);
+  }
+
+  // lootPoint 是掉落的光在进度 k（0..LOOT_ARRIVE）时的位置：先弹起来，再弧线飞向人的胸口。
+  lootPoint(f, k) {
+    const dst = this.pos(f.dst, { x: f.dx, y: f.dy });
+    const hop = clamp01(k / 0.3);
+    const fly = clamp01((k - 0.3) / (LOOT_ARRIVE - 0.3));
+    const upX = f.x0;
+    const upY = f.y0 - 34 * easeOut(hop);
+    const toX = dst.x;
+    const toY = dst.y - 22;
+    const eased = fly * fly;
+    const arc = Math.sin(fly * Math.PI) * 30;
+    return { x: upX + (toX - upX) * eased, y: upY + (toY - upY) * eased - arc };
+  }
+
+  // lootTrail 画掉落的光和它后面的光带。
+  lootTrail(ribbons, sprites, f, t) {
+    if (t >= f.arrive) {
+      // 到了：在人身上亮一下
+      const k = (t - f.arrive) / (1 - f.arrive);
+      const p = this.lootPoint(f, f.arrive);
+      blit(sprites, glow(f.color), p.x, p.y, (f.epic ? 60 : 40) * (0.6 + k), 0.8 * (1 - k));
+      return;
+    }
+    const points: number[] = [];
+    const widths: number[] = [];
+    for (let i = 0; i <= 6; i++) {
+      const p = this.lootPoint(f, Math.max(0, t - 0.12 * (1 - i / 6)));
+      points.push(p.x, p.y);
+      widths.push(1 + 6 * (i / 6));
+    }
+    ribbons.stroke(points, widths, f.color, 0.7, 'glow');
+    const p = this.lootPoint(f, t);
+    const pulse = 1 + Math.sin(t * 40) * 0.15;
+    blit(sprites, glow(f.color), p.x, p.y, (f.epic ? 26 : 18) * pulse, 0.9);
+    blit(sprites, glow('#ffffff'), p.x, p.y, 6, 1);
+  }
+
+  // procHit 是装备特效打出的伤害在目标身上的样子：点燃冒火，反伤迸出一圈尖刺，连射没有额外特效（箭本身就是）。
+  procHit(id, proc, now) {
+    const e = this.resolve(id);
+    if (!e) return;
+    const h = e.r * 1.4;
+    if (proc === 'ignite') {
+      for (let i = 0; i < 14; i++) {
+        this.spawn({ anchor: id, ox: rand(-10, 10), oy: -rand(4, h), vx: rand(-0.02, 0.02), vy: -rand(0.05, 0.12), grav: -0.0001,
+          life: rand(300, 560), size: rand(2.5, 4.5), color: i % 3 ? '#ff7a2a' : '#ffd27a', kind: 'glow', born: now + rand(0, 120) });
+      }
+    } else if (proc === 'thorns') {
+      for (let i = 0; i < 10; i++) {
+        const a = rand(0, TAU);
+        this.spawn({ x: e.x + Math.cos(a) * 6, y: e.y - h * 0.6 + Math.sin(a) * 6, vx: Math.cos(a) * rand(0.15, 0.3), vy: Math.sin(a) * rand(0.1, 0.2),
+          drag: 0.96, life: rand(180, 300), size: rand(1.6, 2.4), color: '#e8eef8', kind: 'spark', born: now });
+      }
+    }
+  }
+
+  // procHeal 是装备特效回的血：吸血是几缕红光收进身体，格挡回血冒两个绿十字。
+  procHeal(id, proc, now) {
+    if (proc === 'lifesteal') {
+      for (let i = 0; i < 8; i++) {
+        const a = rand(0, TAU);
+        const d = rand(18, 30);
+        this.spawn({ anchor: id, ox: Math.cos(a) * d, oy: -18 + Math.sin(a) * d * 0.6, vx: -Math.cos(a) * d / 300,
+          vy: -Math.sin(a) * d * 0.6 / 300, life: 300, size: rand(2, 3.2), color: i % 3 ? '#ff4a5e' : '#ffd0d6', kind: 'glow', born: now + rand(0, 100) });
+      }
+    } else {
+      this.zoneHeal(id, now);
+    }
+  }
+
   // zoneHeal 是站在回血区里回了一次血：身上冒两三个往上飘的小十字。
   zoneHeal(id, now) {
     for (let i = 0; i < 3; i++) {
@@ -671,6 +761,7 @@ export class FX {
           break;
         }
         case 'rain': add(f.cx, f.cy, f.radius * 1.6, f.color, Math.sin(t * Math.PI), 0.3); break;
+        case 'loot': { const p = this.lootPoint(f, Math.min(t, f.arrive)); add(p.x, p.y, f.epic ? 120 : 80, f.color, 0.8, 0.45); break; }
       }
     }
     // 身上的外观：圣光和火焰武器会照亮周围
@@ -759,6 +850,15 @@ export class FX {
         this.burst(f.x1, f.y1, f.color, 10, now);
       }
       if (f.kind === 'rain') this.rainLand(f, now);
+      if (f.kind === 'loot' && !f.landed && now - f.born >= f.life * f.arrive) {
+        f.landed = true;
+        const p = this.lootPoint(f, f.arrive);
+        for (let i = 0; i < (f.epic ? 22 : 12); i++) {
+          const a = rand(0, TAU);
+          this.spawn({ x: p.x, y: p.y, vx: Math.cos(a) * rand(0.06, 0.2), vy: Math.sin(a) * rand(0.05, 0.16) - 0.04, drag: 0.97,
+            life: rand(300, 600), size: rand(1.5, 3), color: i % 3 ? f.color : '#ffffff', kind: 'spark', born: now });
+        }
+      }
     }
     this.effects = this.effects.filter((f) => now - f.born < f.life);
     // 冰霜箭一路掉冰屑
@@ -878,6 +978,7 @@ export class FX {
         case 'axe': this.axeTrail(ribbons, f, t); break;
         case 'bolt': this.boltTrail(ribbons, sprites, f, now - f.born); break;
         case 'rain': this.rainTrails(ribbons, f, now - f.born); break;
+        case 'loot': this.lootTrail(ribbons, sprites, f, t); break;
       }
     }
     this.lookGlows(sprites, now);

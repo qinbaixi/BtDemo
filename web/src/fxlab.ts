@@ -326,6 +326,64 @@ ACTIONS.push(
   ['鹰眼专注', asRanger(() => emit({ k: 'cast', src: ME, fx: 'focus', skill: 'focus', name: '鹰眼专注', color: '#ffd27a' }))],
 );
 
+// 皮肤和武器外观：按一下换下一套（同一套骨骼和动作）
+const SKINS: Record<string, string[]> = { knight: ['', 'obsidian', 'gilded'], ranger: ['', 'nightshade', 'snowfield'] };
+const GEARS: Record<string, string[]> = {
+  knight: ['', 'blood_blade', 'flame_greatsword'],
+  ranger: ['', 'hunter_bow', 'wind_bow', 'frost_bow'],
+};
+function cycle(list: string[], current: string): string {
+  return list[(list.indexOf(current) + 1) % list.length];
+}
+
+// 实验页没有连服务端，掉落要用的装备名自己填几件
+const LAB_ITEMS = [
+  { id: 'blood_blade', name: '渴血之刃', rarity: 'rare' },
+  { id: 'flame_greatsword', name: '炎魔巨剑', rarity: 'epic' },
+  { id: 'life_charm', name: '生命护符', rarity: 'common' },
+];
+
+// procHit 让自己对目标打出一下普攻，再追加一次装备特效伤害（点燃）或者回血（吸血）
+function procAttack(proc: 'ignite' | 'lifesteal'): void {
+  const t = target();
+  if (!t) return;
+  hit(false);
+  if (proc === 'ignite') {
+    emit({ k: 'dmg', src: ME, dst: t.id, v: 14, proc: 'ignite' });
+    damage(t, 14);
+  } else {
+    const me = state.ents.get(ME)!;
+    emit({ k: 'heal', dst: ME, v: 9, proc: 'lifesteal' });
+    me.hp = Math.min(me.maxHp, me.hp + 9);
+  }
+  if (t.hp <= 0) kill(t);
+}
+
+ACTIONS.push(
+  ['换皮肤', () => { const me = state.ents.get(ME)!; me.skin = cycle(SKINS[me.model] || [''], me.skin); }],
+  ['换武器', () => { const me = state.ents.get(ME)!; me.gear = cycle(GEARS[me.model] || [''], me.gear); }],
+  ['掉落', () => {
+    for (const item of LAB_ITEMS) {
+      if (!state.items.has(item.id)) {
+        state.items.set(item.id, { id: item.id, name: item.name, slot: 'weapon', cls: '', rarity: item.rarity, desc: '', stats: [], effect: '', look: '' });
+      }
+    }
+    const t = target();
+    const pick = LAB_ITEMS[Math.floor(Math.random() * LAB_ITEMS.length)];
+    emit({ k: 'loot', src: t?.id, dst: ME, item: pick.id });
+  }],
+  ['点燃', () => procAttack('ignite')],
+  ['吸血', () => procAttack('lifesteal')],
+  ['反伤', () => {
+    const t = target();
+    if (!t) return;
+    emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'bite', color: '#ff5a50' });
+    emit({ k: 'dmg', src: t.id, dst: ME, v: 20 });
+    emit({ k: 'dmg', src: ME, dst: t.id, v: 6, proc: 'thorns' });
+    damage(t, 6);
+  }],
+);
+
 // 滑条：[标签, FEEL 字段, 最小, 最大, 步长]
 const SLIDERS: [string, keyof typeof FEEL, number, number, number][] = [
   ['顿帧 ms', 'hitStopMs', 0, 200, 5],

@@ -1,8 +1,10 @@
-// 处理服务端消息：welcome / enter / leave / sync / toast / skills，更新本地状态。
+// 处理服务端消息：welcome / enter / leave / sync / toast / skills / inventory，更新本地状态。
 
 import type { Debug } from '../ui/debug';
 import { buildSkillBar, renderSelf, setConn, showToast } from '../ui/hud';
+import { closeBag, refreshBag, renderBagStats } from '../ui/bag';
 import { closePicker, openPicker } from '../ui/picker';
+import { rememberedSkin, rememberSkin, takePendingSkin } from '../ui/skins';
 import { forgetBlock } from '../input';
 import { createScenery } from '../render/scenery';
 import { loadMap } from './map';
@@ -30,11 +32,17 @@ export function handleMessage(m: ServerMessage, deps: SyncDeps): void {
         if (!old) {
           state.ents.set(d.id, makeEntity(d, now));
         } else {
-          // 已存在的实体再收到 Enter：对方换了职业，更新模型、名字、颜色和半径
+          // 已存在的实体再收到 Enter：对方换了职业、外观或武器，更新模型、外观、武器、名字、颜色和半径
           if (d.model !== undefined) old.model = d.model;
+          if (d.skin !== undefined) old.skin = d.skin;
+          if (d.gear !== undefined) old.gear = d.gear;
           if (d.name) old.name = d.name;
           if (d.color) old.color = d.color;
           if (d.r) old.r = d.r;
+        }
+        if (d.id === state.myId && d.skin !== undefined && d.skin !== state.mySkin) {
+          state.mySkin = d.skin;
+          refreshBag();
         }
       }
       break;
@@ -51,12 +59,27 @@ export function handleMessage(m: ServerMessage, deps: SyncDeps): void {
       break;
     case 'sync': onSync(m, now, deps); break;
     case 'msg': showToast(m.text); break;
-    case 'skills':
+    case 'skills': {
+      const classChanged = !!m.playerClass && m.playerClass !== state.playerClass;
       setSkills(m.skills);
       if (m.playerClass) setPlayerClass(m.playerClass);
       if (!state.canBlock) forgetBlock();
       buildSkillBar();
       showToast('技能已更换');
+      if (classChanged) {
+        // 服务端换职业时把外观重置成新职业的默认；再选上面板里刚选的，没有就用这个职业上次用的
+        state.mySkin = '';
+        const picked = takePendingSkin(state.playerClass);
+        if (picked) rememberSkin(state.playerClass, picked);
+        const skin = picked || rememberedSkin(state.playerClass);
+        if (skin && skin !== state.skins[0]?.id) deps.send({ t: 'skin', skin });
+      }
+      refreshBag();
+      break;
+    }
+    case 'inventory':
+      state.inventory = { items: m.items || [], capacity: m.capacity || 0 };
+      refreshBag();
       break;
   }
 }
@@ -72,6 +95,7 @@ function setSkills(skills: SkillInfo[]): void {
 function setPlayerClass(id: string): void {
   state.playerClass = id;
   const cls = state.classes.find((c) => c.id === id);
+  state.skins = cls?.skins ?? [];
   if (!cls) return;
   state.skillPool = cls.pool;
   state.skillPick = cls.pick;
@@ -116,6 +140,7 @@ let zonesSeen = false;
 // resetOnClose 在连接断开时清掉旧角色的状态。
 export function resetOnClose(): void {
   closePicker();
+  closeBag();
   state.ents.clear();
   state.self = null;
   state.target = 0;
@@ -129,6 +154,9 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   state.skillPool = m.pool || [];
   state.skillPick = m.pick || 0;
   state.classes = m.classes || [];
+  state.items = new Map((m.items || []).map((item) => [item.id, item]));
+  state.inventory = { items: [], capacity: 0 };   // 服务端随后发 Inventory
+  state.mySkin = '';                               // 以自己的 Enter 为准
   state.canBlock = true;
   setPlayerClass(m.playerClass || '');
   // welcome 里的 pool / pick 就是当前职业的，以它们为准
@@ -154,6 +182,7 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   state.aiPath = null;
 
   buildSkillBar();
+  refreshBag();
   closePicker();
   openPicker('join');   // 新角色：先挑技能
   deps.debug.setTarget(0);
@@ -211,6 +240,7 @@ function onSync(m: SyncMsg, now: number, deps: SyncDeps): void {
     state.cds = m.self.cds || {};
     state.cdsAt = now;
     renderSelf();
+    renderBagStats();
   }
   for (const ev of m.ev || []) onEvent(ev, now);
   if (m.ai) {

@@ -595,3 +595,184 @@ h4 {
   .picker-tip { display: none; }
   .picker-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ======================= skins: swatch cards (picker + bag) ======================= */
+.picker-skins, .bag-skins { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.picker-skins[hidden], .bag-skins[hidden] { display: none; }
+.bag-skin-cards { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+.skin-label {
+  font-family: var(--display);
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--gold);
+  margin-right: 4px;
+}
+.skin-card {
+  flex: 1;
+  min-width: 96px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(224, 178, 90, 0.25);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.skin-card:hover { background: rgba(255, 255, 255, 0.07); opacity: 1; }
+.skin-card.selected {
+  opacity: 1;
+  border-color: var(--gold);
+  background: color-mix(in srgb, var(--swatch) 14%, rgba(9, 6, 12, 0.9));
+  box-shadow: 0 0 10px rgba(232, 182, 90, 0.35);
+}
+.skin-swatch {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  background: var(--swatch);
+  border: 1px solid #000;
+  box-shadow: 0 0 0 1px rgba(224, 178, 90, 0.5);
+}
+.skin-text { display: flex; flex-direction: column; min-width: 0; }
+.skin-name { font-family: var(--display); font-size: 13px; letter-spacing: 1px; color: #fbe9c0; white-space: nowrap; }
+.skin-desc { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ======================= bag / equipment panel ======================= */
+.bag-btn {
+  position: absolute;
+  top: 76px;
+  right: 12px;
+  padding: 4px 12px;
+  border: 1px solid rgba(224, 178, 90, 0.5);
+  background: rgba(9, 6, 12, 0.8);
+  color: #fbe9c0;
+  font: 12px var(--font);
+  letter-spacing: 1px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.bag-btn:hover { border-color: var(--gold); color: #fff; }
+
+/* 在选技能面板下面一层：死亡时弹出的选技能面板盖在装备面板上 */
+.bag {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  pointer-events: none;
+  z-index: 19;
+}
+.bag.hidden { display: none; }
+.bag-panel {
+  pointer-events: auto;
+  width: min(520px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bag-close {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.bag-close:hover { color: #fbe9c0; }
+.bag-equip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.equip-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--rarity, rgba(224, 178, 90, 0.35));
+  background: color-mix(in srgb, var(--rarity, transparent) 10%, rgba(9, 6, 12, 0.9));
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.equip-slot.empty { border-style: dashed; border-color: rgba(224, 178, 90, 0.3); background: rgba(255, 255, 255, 0.02); cursor: default; }
+.equip-slot:hover:not(:disabled) { filter: brightness(1.2); }
+.equip-text { display: flex; flex-direction: column; min-width: 0; }
+.equip-label { font-size: 11px; color: var(--gold); letter-spacing: 1px; }
+.equip-name { font-size: 13px; color: var(--rarity, var(--muted)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.equip-slot.empty .equip-name { color: var(--muted); }
+.item-icon { flex: none; width: 40px; height: 40px; display: block; pointer-events: none; }
+.item-icon.blank { border: 1px dashed rgba(224, 178, 90, 0.25); }
+.bag-stats { grid-template-columns: repeat(3, 1fr); gap: 2px 14px; padding: 6px 0; border-top: 1px solid rgba(224, 178, 90, 0.2); border-bottom: 1px solid rgba(224, 178, 90, 0.2); }
+.bag-stats .kv { font-size: 12px; }
+.bag-sub {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--display);
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--gold);
+}
+.bag-count { color: var(--muted); letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+.bag-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+.bag-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(224, 178, 90, 0.18);
+  background: rgba(0, 0, 0, 0.35);
+  font: inherit;
+}
+.bag-cell.bag-item {
+  border-color: var(--rarity);
+  background: color-mix(in srgb, var(--rarity) 12%, rgba(9, 6, 12, 0.9));
+  box-shadow: inset 0 0 10px color-mix(in srgb, var(--rarity) 30%, transparent);
+  cursor: pointer;
+}
+.bag-cell.bag-item:hover { filter: brightness(1.25); }
+.bag-cell.locked { opacity: 0.4; filter: grayscale(0.7); }
+.bag-cell.locked:hover { filter: grayscale(0.7) brightness(1.2); }
+.bag-tip-line { text-align: center; }
+
+.item-tip {
+  position: fixed;
+  z-index: 30;
+  width: max-content;
+  max-width: min(260px, calc(100vw - 16px));
+  padding: 8px 10px;
+  background: rgba(9, 6, 12, 0.96);
+  border: 1px solid var(--rarity, var(--gold));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.tip-name { font-family: var(--display); font-size: 15px; letter-spacing: 1px; }
+.tip-meta { color: var(--muted); margin-bottom: 4px; }
+.tip-stat { color: var(--text); }
+.tip-desc { color: #ffd88a; margin-top: 4px; }
+.tip-hint { color: var(--muted); margin-top: 4px; font-size: 11px; }
+.tip-hint.locked { color: #ff8a7a; }
+
+@media (max-width: 700px) {
+  .bag { padding: 8px; }
+  .bag-panel { padding: 12px; max-height: calc(100vh - 16px); }
+  .bag-equip { gap: 4px; }
+  .equip-slot { flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 6px 4px; }
+  .equip-text { align-items: center; max-width: 100%; }
+  .bag-stats { grid-template-columns: repeat(2, 1fr); }
+  .bag-grid { gap: 4px; }
+  .bag-tip-line { display: none; }
+  .skin-card { min-width: 84px; }
+  .bag-btn { top: auto; bottom: 150px; right: 8px; }
+}

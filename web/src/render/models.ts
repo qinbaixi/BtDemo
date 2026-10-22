@@ -821,6 +821,60 @@ function knightSweep(ctx, act, front) {
   ctx.restore();
 }
 
+// 骑士的皮肤：同一套骨骼和动作，只换配色和部件。没写的颜色用玩家颜色（paladin 全用玩家颜色）。
+//   steel 盔甲、trim 镶边、legs/boots 腿和靴、hand 手套、cloth 外袍和袖子、cape 披风、
+//   plume 盔顶羽饰（false 不画）、helm 头盔样式、shield 盾面、emblem 盾徽、eye 面甲缝里的眼光
+const KNIGHT_SKINS = {
+  paladin: { steel: '#c3cbd6', trim: '#e2b04a', legs: '#4a5160', boots: '#2b2f3a', hand: '#8a6a4c', helm: 'open', emblem: 'sun' },
+  obsidian: {
+    steel: '#4a4a58', trim: '#c8343a', legs: '#26262e', boots: '#18181e', hand: '#2e2e36',
+    cloth: '#7a1622', cape: '#5c0f18', plume: false, helm: 'horned', shield: '#23232b', emblem: 'cross', eye: '#ff4a3a',
+  },
+  gilded: {
+    steel: '#e6c46c', trim: '#fff1c2', legs: '#8a7656', boots: '#5a4630', hand: '#b0905a',
+    cloth: '#f2efe6', cape: '#efe9da', plume: false, helm: 'winged', shield: '#f4f0e4', emblem: 'sun',
+  },
+};
+
+// drawHornedHelm 是黑曜骑士的全封闭头盔：圆顶、只留一道眼缝（缝里透出红光），两侧一对往前弯的角。
+function drawHornedHelm(ctx, q, B, skin) {
+  const { hx, hy, hr } = B;
+  // 远侧的角先画（在头盔后面）
+  const horn = (side, color) => {
+    const bx = hx + (side < 0 ? -3.5 : 1.5);
+    const by = hy - hr + 2;
+    cel(ctx, (c) => {
+      c.moveTo(bx - 1.6, by + 1);
+      c.quadraticCurveTo(bx - 6, by - 4, bx - 2, by - 10);
+      c.quadraticCurveTo(bx - 3.2, by - 4.5, bx + 2, by - 0.5);
+      c.closePath();
+    }, color, { sd: 1, lw: 1.1 });
+  };
+  horn(-1, '#b8ac94');
+  cel(ctx, (c) => {
+    c.moveTo(hx - hr - 0.8, hy + 4);
+    c.arc(hx, hy - 0.4, hr + 1, PI * 0.95, TAU + 0.12);
+    c.lineTo(hx + hr + 1, hy + 4.6);
+    c.quadraticCurveTo(hx + 3, hy + 7.4, hx - 2, hy + 7);
+    c.lineTo(hx - hr, hy + 6.4);
+    c.closePath();
+  }, skin.steel, { sd: 2 });
+  // 眼缝和透出来的红光
+  flat(ctx, (c) => pRrect(c, hx + 0.5, hy - 0.2, hr + 0.4, 1.8, 0.6), '#0b0710');
+  flat(ctx, (c) => { pEll(c, hx + 3.4, hy + 0.7, 1.1, 0.6); pEll(c, hx + 6.6, hy + 0.7, 0.9, 0.5); }, skin.eye);
+  // 透气孔和中脊
+  line(ctx, [hx - 1, hy - hr - 0.2, hx + 2, hy - hr + 1, hx + hr - 0.5, hy - 2], shade(skin.steel, 0.35), 0.8);
+  horn(1, '#ddd2bc');
+  glint(ctx, hx - 2.5, hy - 5, 2.6, 'rgba(255,255,255,0.35)');
+}
+
+// 骑士的剑（装备的武器外观 gear）：L 剑身长、width 剑身半宽、blade/dark/lit 剑身三色、guard 护手、gem 宝石、edge 刃上的光
+const KNIGHT_SWORDS = {
+  knight_sword: { L: 20, width: 1.9, blade: '#e8eef5', dark: '#8e9bb0', lit: '#ffffff', guard: '', gem: '#ff4a3a', edge: '' },
+  blood_blade: { L: 21, width: 1.8, blade: '#7a1c26', dark: '#3a0a12', lit: '#a8303c', guard: '#2a2228', gem: '#ff2a3a', edge: '#ff5a64' },
+  flame_greatsword: { L: 25, width: 2.6, blade: '#4a2a22', dark: '#24120e', lit: '#8a4a30', guard: '#e2802a', gem: '#ffd27a', edge: '#ff8a2a' },
+};
+
 function drawKnight(ctx, q) {
   // 技能的专属动作（见 knightActions.ts）；没有时是普通斩击（q.ph）或站立、走路
   const act = q.dead >= 0 ? null : actionPose(q.action, q.attack);
@@ -853,11 +907,16 @@ function drawKnight(ctx, q) {
 
 function drawKnightBody(ctx, q) {
   const color = safeColor(q.color, '#4da3ff');
-  const steel = '#c3cbd6';
-  const gold = '#e2b04a';
+  const skin = KNIGHT_SKINS[q.skin] || KNIGHT_SKINS.paladin;
+  const steel = skin.steel;
+  const gold = skin.trim;
+  const cloth = skin.cloth || color;
+  const capeColor = skin.cape || color;
+  const shieldColor = skin.shield || shade(color, -0.3);
+  const sword = KNIGHT_SWORDS[q.gear] || KNIGHT_SWORDS.knight_sword;
   const act = q.act;
   humanoid(ctx, q, {
-    legs: '#4a5160', boots: '#2b2f3a', body: steel, sleeve: color, forearm: steel, hand: '#8a6a4c',
+    legs: skin.legs, boots: skin.boots, body: steel, sleeve: cloth, forearm: steel, hand: skin.hand,
     skin: '#f0c8a0', shoulder: 9, waist: 6, headR: 7.4,
     lean: (q) => (act ? act.lean + (act.jitter ? Math.sin(q.time * 0.07) * act.jitter * 0.03 : 0)
       : q.ph ? arc3(q.ph, 0, -0.22, 0.28) : q.blocking && !(q.dead >= 0) ? 0.14 : 0),
@@ -875,7 +934,7 @@ function drawKnightBody(ctx, q) {
         c.lineTo(-B.sw + 2 - run * 0.4, B.hipY + 13);
         c.quadraticCurveTo(-2, B.hipY + 2, B.sw - 3, B.sy + 2);
         c.closePath();
-      }, shade(color, -0.42), { dark: shade(color, -0.65), lit: shade(color, -0.15), sd: 3 });
+      }, shade(capeColor, -0.42), { dark: shade(capeColor, -0.65), lit: shade(capeColor, -0.15), sd: 3 });
       // 披风的褶皱和金色滚边
       folds(ctx, [
         [-B.sw - 1, B.sy + 4, -B.sw - 4 - run * 0.5, B.sy + 12, -B.sw - 3 - run * 0.8 - sway, B.hipY + 9],
@@ -886,7 +945,7 @@ function drawKnightBody(ctx, q) {
         // 盾背在背上：从侧面看是窄窄的一条，露出身后的边
         const x = -B.sw - 1.5;
         const y = B.sy + 8;
-        cel(ctx, (c) => pEll(c, x, y, 3.4, 9, -0.12), shade(color, -0.3), { sd: 1.4 });
+        cel(ctx, (c) => pEll(c, x, y, 3.4, 9, -0.12), shieldColor, { sd: 1.4 });
         line(ctx, [x - 1.2, y - 7.6, x - 2.4, y, x - 1.4, y + 7.6], gold, 1.1);
       }
     },
@@ -902,26 +961,31 @@ function drawKnightBody(ctx, q) {
       // round shield with a gold sunburst boss
       const x = hand.near ? hand.x + 0.5 : hand.x - 2.5;
       const y = hand.near ? hand.y - 2 : hand.y - 5;
-      cel(ctx, (c) => pEll(c, x, y, 7.2, 9), shade(color, -0.3), { sd: 2.2 });
+      cel(ctx, (c) => pEll(c, x, y, 7.2, 9), shieldColor, { sd: 2.2 });
       ctx.strokeStyle = gold;
       ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.ellipse(x, y, 5.6, 7.3, 0, 0, TAU);
       ctx.stroke();
-      // 盾面上的放射纹和一圈铆钉
-      ctx.strokeStyle = shade(gold, -0.25);
-      ctx.lineWidth = 0.7;
-      ctx.beginPath();
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * TAU + 0.2;
-        ctx.moveTo(x + 0.5 + Math.cos(a) * 3, y + Math.sin(a) * 3.8);
-        ctx.lineTo(x + 0.5 + Math.cos(a) * 5, y + Math.sin(a) * 6.4);
+      if (skin.emblem === 'cross') {
+        // 黑曜骑士：盾面一个血红的十字
+        flat(ctx, (c) => { pRrect(c, x - 0.6, y - 6, 2.4, 12, 0.5); pRrect(c, x - 3.6, y - 2.2, 8.4, 2.4, 0.5); }, gold, 0.9);
+      } else {
+        // 盾面上的放射纹
+        ctx.strokeStyle = shade(gold, -0.25);
+        ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * TAU + 0.2;
+          ctx.moveTo(x + 0.5 + Math.cos(a) * 3, y + Math.sin(a) * 3.8);
+          ctx.lineTo(x + 0.5 + Math.cos(a) * 5, y + Math.sin(a) * 6.4);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
       const rv = [];
       for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU + 0.5; rv.push(x + Math.cos(a) * 6.4, y + Math.sin(a) * 8.2); }
       rivets(ctx, rv, 0.55);
-      cel(ctx, (c) => pEll(c, x + 0.5, y, 2.4, 3), gold, { sd: 1, lw: 1 });
+      if (skin.emblem !== 'cross') cel(ctx, (c) => pEll(c, x + 0.5, y, 2.4, 3), gold, { sd: 1, lw: 1 });
       glint(ctx, x - 0.3, y - 1.2, 2.2, 'rgba(255,240,200,0.8)');
       // 格挡、举盾放护盾时盾沿亮一圈冷光（举盾那下更亮，盾面也泛白）
       const raise = act?.name === 'shield' ? envelope(act.k, 0.12, 0.26, 0.7, 0.95) : 0;
@@ -945,8 +1009,8 @@ function drawKnightBody(ctx, q) {
     },
     torsoDetail(ctx, q, B) {
       // tunic skirt under the cuirass, then a gold-trimmed belt
-      cel(ctx, (c) => pPoly(c, [-B.ww - 0.5, B.hipY - 1, B.ww + 0.5, B.hipY - 1, B.ww + 2, B.hipY + 6, -B.ww - 2, B.hipY + 6]), color, { sd: 1.6 });
-      ctx.strokeStyle = shade(color, -0.45);
+      cel(ctx, (c) => pPoly(c, [-B.ww - 0.5, B.hipY - 1, B.ww + 0.5, B.hipY - 1, B.ww + 2, B.hipY + 6, -B.ww - 2, B.hipY + 6]), cloth, { sd: 1.6 });
+      ctx.strokeStyle = shade(cloth, -0.45);
       ctx.lineWidth = 1;
       ctx.beginPath();
       for (const x of [-3, 0.5, 4]) { ctx.moveTo(x, B.hipY + 1); ctx.lineTo(x * 1.2, B.hipY + 5.6); }
@@ -981,6 +1045,10 @@ function drawKnightBody(ctx, q) {
       const { hx, hy, hr } = B;
       // eye and cheek under the open-faced helm
       eyes(ctx, hx + 2.6, hy + 1, '#16101c', 1.7);
+      if (skin.helm === 'horned') {
+        drawHornedHelm(ctx, q, B, skin);
+        return;
+      }
       if (act?.name === 'buff') {
         // 战吼：张大嘴吼出来
         const open = envelope(act.k, 0.18, 0.28, 0.72, 0.9);
@@ -999,6 +1067,32 @@ function drawKnightBody(ctx, q) {
       }, steel, { sd: 2 });
       line(ctx, [hx - hr + 1, hy - 1.6, hx + hr - 1, hy - 1.6], gold, 1.3);
       rivets(ctx, [hx - hr + 2.2, hy + 1.8, hx - 3.4, hy + 3.4], 0.5);
+      if (skin.helm === 'winged') {
+        // 金辉卫士：头盔侧面一只往后上方扬起的金翼（三层羽毛），远侧那只露出一点在后面
+        const wing = (ox, oy, scale, color) => {
+          const bx = hx - 1.5 + ox;
+          const by = hy - 1.5 + oy;
+          // 翅膀往脑后平伸：上沿一道弧线到翼尖，下沿是三片往后的羽毛尖
+          cel(ctx, (c) => {
+            c.moveTo(bx + 1, by - 1);
+            c.quadraticCurveTo(bx - 3 * scale, by - 10 * scale, bx - 15 * scale, by - 9 * scale);
+            c.lineTo(bx - 11 * scale, by - 5.6 * scale);
+            c.lineTo(bx - 14 * scale, by - 4.4 * scale);
+            c.lineTo(bx - 9.5 * scale, by - 2.6 * scale);
+            c.lineTo(bx - 11.5 * scale, by - 0.6 * scale);
+            c.quadraticCurveTo(bx - 5 * scale, by + 0.4 * scale, bx + 1, by + 2);
+            c.closePath();
+          }, color, { sd: 1.4, lw: 1.1 });
+          folds(ctx, [
+            [bx - 1, by - 1.5, bx - 5 * scale, by - 5.5 * scale, bx - 11 * scale, by - 6 * scale],
+            [bx - 1, by, bx - 5 * scale, by - 2.5 * scale, bx - 9 * scale, by - 2.8 * scale],
+          ], 'rgba(120,80,20,0.6)', 0.7);
+        };
+        wing(-2.5, -1, 0.8, shade(gold, -0.35));
+        wing(0, 0, 1, '#f2d27a');
+      }
+      if (skin.plume === false) return;
+      const plume = skin.plume || shade(color, 0.05);
       // crest plume sweeping back, in the player's colour
       const sway = Math.sin(q.time / 240) * 1.2 + (q.moving ? -1.8 : 0);
       cel(ctx, (c) => {
@@ -1007,12 +1101,12 @@ function drawKnightBody(ctx, q) {
         c.quadraticCurveTo(hx - hr - 1 + sway * 0.5, hy - hr + 1, hx - hr - 6 + sway, hy - 1);
         c.quadraticCurveTo(hx - 4, hy - hr - 1, hx - 1.2, hy - hr + 0.2);
         c.closePath();
-      }, shade(color, 0.05), { sd: 1.6 });
+      }, plume, { sd: 1.6 });
       // 羽饰的发丝
       folds(ctx, [
         [hx + 0.5, hy - hr - 2.5, hx - 4, hy - hr - 4, hx - hr - 2 + sway, hy - hr - 1.5],
         [hx - 1, hy - hr - 0.8, hx - 5, hy - hr - 1, hx - hr - 3.5 + sway, hy - 2],
-      ], shade(color, -0.35), 0.7);
+      ], shade(plume, -0.35), 0.7);
       glint(ctx, hx - 2.5, hy - 5, 3, 'rgba(255,255,255,0.55)');
     },
     weaponBehindHand: true,
@@ -1022,23 +1116,36 @@ function drawKnightBody(ctx, q) {
       const a = act ? act.blade : h.a;
       const dx = Math.sin(a);
       const dy = Math.cos(a);
-      const L = 20;
+      const L = sword.L;
+      const width = sword.width;
       const tipX = h.x + dx * L;
       const tipY = h.y + dy * L;
       const nx = dy;
       const ny = -dx;
       cel(ctx, (c) => pPoly(c, [
-        h.x + nx * 1.9, h.y + ny * 1.9, tipX + nx * 1.4 - dx * 2.6, tipY + ny * 1.4 - dy * 2.6,
-        tipX, tipY, tipX - nx * 1.4 - dx * 2.6, tipY - ny * 1.4 - dy * 2.6, h.x - nx * 1.9, h.y - ny * 1.9,
-      ]), '#e8eef5', { dark: '#8e9bb0', lit: '#ffffff', sd: 1, hl: 0.8, lw: 1.3 });
+        h.x + nx * width, h.y + ny * width, tipX + nx * width * 0.74 - dx * 2.6, tipY + ny * width * 0.74 - dy * 2.6,
+        tipX, tipY, tipX - nx * width * 0.74 - dx * 2.6, tipY - ny * width * 0.74 - dy * 2.6, h.x - nx * width, h.y - ny * width,
+      ]), sword.blade, { dark: sword.dark, lit: sword.lit, sd: 1, hl: 0.8, lw: 1.3 });
       line(ctx, [h.x + dx * 2, h.y + dy * 2, tipX - dx * 4, tipY - dy * 4], 'rgba(120,140,170,0.6)', 0.7);
-      // gold crossguard and pommel
-      inkLine(ctx, [h.x - nx * 4.2 + dx * 0.6, h.y - ny * 4.2 + dy * 0.6, h.x + nx * 4.2 + dx * 0.6, h.y + ny * 4.2 + dy * 0.6], gold, 1.8);
-      flat(ctx, (c) => pEll(c, h.x - dx * 3.4, h.y - dy * 3.4, 1.5, 1.5), gold, 1);
-      // 护手中央的红宝石，剑身上一道高光
-      flat(ctx, (c) => pEll(c, h.x + dx * 0.6, h.y + dy * 0.6, 0.9, 0.9), '#ff4a3a');
+      if (sword.edge) {
+        // 渴血之刃、炎魔巨剑：刃口一道发光的细线
+        line(ctx, [h.x + dx * 3 + nx * width * 0.8, h.y + dy * 3 + ny * width * 0.8, tipX - dx * 2.4 + nx * width * 0.6, tipY - dy * 2.4 + ny * width * 0.6], sword.edge, 0.8);
+        line(ctx, [h.x + dx * 3 - nx * width * 0.8, h.y + dy * 3 - ny * width * 0.8, tipX - dx * 2.4 - nx * width * 0.6, tipY - dy * 2.4 - ny * width * 0.6], sword.edge, 0.8);
+      }
+      if (q.gear === 'flame_greatsword') {
+        // 炎魔巨剑：剑身上几道熔岩裂纹，剑尖冒一小簇火
+        line(ctx, [h.x + dx * 7, h.y + dy * 7, h.x + dx * 9 + nx * 1.2, h.y + dy * 9 + ny * 1.2, h.x + dx * 12 - nx * 0.6, h.y + dy * 12 - ny * 0.6, h.x + dx * 15 + nx * 0.8, h.y + dy * 15 + ny * 0.8], '#ffb050', 0.6);
+        flame(ctx, tipX - dx * 2, tipY - dy * 2, 1.1, q.time, 7);
+      }
+      // crossguard and pommel（巨剑的护手更宽）
+      const guard = sword.guard || gold;
+      const guardWidth = 4.2 + (width - 1.9) * 2;
+      inkLine(ctx, [h.x - nx * guardWidth + dx * 0.6, h.y - ny * guardWidth + dy * 0.6, h.x + nx * guardWidth + dx * 0.6, h.y + ny * guardWidth + dy * 0.6], guard, 1.8);
+      flat(ctx, (c) => pEll(c, h.x - dx * 3.4, h.y - dy * 3.4, 1.5, 1.5), guard, 1);
+      // 护手中央的宝石，剑身上一道高光
+      flat(ctx, (c) => pEll(c, h.x + dx * 0.6, h.y + dy * 0.6, 0.9, 0.9), sword.gem);
       glint(ctx, h.x + dx * 0.6, h.y + dy * 0.6, 1.8, 'rgba(255,90,60,0.7)');
-      line(ctx, [h.x + dx * 5 + nx * 0.6, h.y + dy * 5 + ny * 0.6, h.x + dx * 11 + nx * 0.6, h.y + dy * 11 + ny * 0.6], 'rgba(255,255,255,0.85)', 0.6);
+      line(ctx, [h.x + dx * 5 + nx * 0.6, h.y + dy * 5 + ny * 0.6, h.x + dx * 11 + nx * 0.6, h.y + dy * 11 + ny * 0.6], sword.edge ? 'rgba(255,200,180,0.5)' : 'rgba(255,255,255,0.85)', 0.6);
       knightBladeFx(ctx, q, act, { x: h.x, y: h.y, dx, dy, nx, ny, L });
       if (q.ph && q.ph.strike > 0 && q.ph.back < 0.4) {
         // a crisp crescent trailing the blade: thick at the edge, tapering
@@ -1082,10 +1189,32 @@ function drawKnightBody(ctx, q) {
 // 远程职业游侠：玩家颜色的兜帽和短披风，皮甲、亚麻袖子，背上斜挎箭袋，
 // 近侧手（朝向我们的那只）握一把反曲长弓。动作见 knightActions.ts 里 "ranger:" 开头的那些。
 
-const RANGER_BOW = 13;      // 弓臂从握把到弓梢的长度
 const RANGER_ARROW = 22;    // 箭长
 const RANGER_IDLE_AIM = 1.15;
 const LEATHER = '#7b5434';
+
+// 游侠的皮肤：同一套骨骼和动作，只换配色和部件。hood 不写就用玩家颜色（woodland）。
+//   mask 蒙面的围巾、fur 兜帽和披肩边上的毛、eyeGlow 眼里的光
+const RANGER_SKINS = {
+  woodland: { leather: LEATHER, sleeve: '#cdbb8e', forearm: '#6a4428', legs: '#4d4232', boots: '#3a2616', quiver: '#5e3a1e', hair: '#6a3f22' },
+  nightshade: {
+    hood: '#4a3a66', leather: '#2e2a36', sleeve: '#4a4258', forearm: '#24202c', legs: '#25222c', boots: '#17151c',
+    quiver: '#2a2230', hair: '#1c1824', mask: '#2a2236', eyeGlow: '#c89aff',
+  },
+  snowfield: {
+    hood: '#dfe6ec', leather: '#8a6a4a', sleeve: '#b8c8d6', forearm: '#6a5040', legs: '#5a5650', boots: '#4a3a2c',
+    quiver: '#7a5a3c', hair: '#c8a070', fur: '#f6f4ef',
+  },
+};
+
+// 游侠的弓（装备的武器外观 gear）：wood 弓身、tip 弓梢、grip 握把、length 弓臂长、bulge 往前鼓多少、
+// tassel 弓梢挂的羽毛穗、crystal 弓梢的冰晶
+const RANGER_BOWS = {
+  default: { wood: '#8a5a2e', tip: '#efe6cc', grip: '#3c2412', length: 13, bulge: 4.6 },
+  hunter_bow: { wood: '#a87a48', tip: '#d8c8a0', grip: '#5a3a1e', length: 12, bulge: 3.2 },
+  wind_bow: { wood: '#dfe8cf', tip: '#7fe0c8', grip: '#2f6a5a', length: 14, bulge: 4.2, tassel: '#7fe0c8' },
+  frost_bow: { wood: '#9fd8f0', tip: '#eef9ff', grip: '#3a6a8a', length: 13.5, bulge: 4.8, crystal: true },
+};
 
 // rangerArms 返回 [远侧, 近侧] 手臂角度：技能动作给的，或站立 / 走路时把弓斜提在身前。
 function rangerArms(q, g) {
@@ -1098,6 +1227,22 @@ function rangerArms(q, g) {
 // farHand 是远侧手在模型坐标（上半身已旋转）里的位置，和 humanoid 里的算法一样。
 function farHand(B, arm) {
   return joint(-B.sw + 2.5, B.sy + 2, arm[0], 7.2, arm[0] + arm[1], 6.8);
+}
+
+// furTrim 沿折线 pts 画一道蓬松的毛边（雪原猎人的兜帽和披肩边）：先描一道粗的带墨线的白条，
+// 再沿着它点一串不描边的毛团，让边缘起伏。
+function furTrim(ctx, pts, color) {
+  inkLine(ctx, pts, color, 2.6);
+  for (let i = 0; i + 3 < pts.length; i += 2) {
+    const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
+    const n = Math.max(2, Math.round(Math.hypot(bx - ax, by - ay) / 2.4));
+    for (let j = 0; j < n; j++) {
+      const t = (j + 0.5) / n;
+      const x = ax + (bx - ax) * t;
+      const y = ay + (by - ay) * t;
+      flat(ctx, (c) => pEll(c, x, y, 1.5, 1.5), j % 2 ? color : shade(color, -0.06));
+    }
+  }
 }
 
 function drawRanger(ctx, q) {
@@ -1123,12 +1268,14 @@ function drawRanger(ctx, q) {
 }
 
 function drawRangerBody(ctx, q) {
-  const color = safeColor(q.color, '#8fd17a');
+  const skin = RANGER_SKINS[q.skin] || RANGER_SKINS.woodland;
+  const color = skin.hood || safeColor(q.color, '#8fd17a');
   const hood = shade(color, -0.28);
+  const leather = skin.leather;
   const act = q.act;
   const kind = act ? act.name.slice(7) : '';   // 去掉 "ranger:"
   humanoid(ctx, q, {
-    legs: '#4d4232', boots: '#3a2616', body: LEATHER, sleeve: '#cdbb8e', forearm: '#6a4428', hand: '#e0b48c',
+    legs: skin.legs, boots: skin.boots, body: leather, sleeve: skin.sleeve, forearm: skin.forearm, hand: '#e0b48c',
     skin: '#ecc39c', shoulder: 9, waist: 5.6, headR: 7.1, stride: 0.66,
     lean: (q) => (act ? act.lean + (act.jitter ? Math.sin(q.time * 0.07) * act.jitter * 0.03 : 0) : 0),
     arms: rangerArms,
@@ -1144,7 +1291,7 @@ function drawRangerBody(ctx, q) {
         inkLine(ctx, [x, 0, x + 0.3, -5.5], '#9a7a50', 0.9);
         flat(ctx, (c) => pPoly(c, [x - 1, -4, x + 0.3, -8.4, x + 1.5, -4]), col, 0.9);
       }
-      cel(ctx, (c) => pRrect(c, -3, -1.5, 6, 15, 2), '#5e3a1e', { sd: 1.4 });
+      cel(ctx, (c) => pRrect(c, -3, -1.5, 6, 15, 2), skin.quiver, { sd: 1.4 });
       line(ctx, [-3, 1.5, 3, 1.5], '#c79a4a', 1);
       line(ctx, [-3, 10.5, 3, 10.5], '#c79a4a', 1);
       ctx.restore();
@@ -1174,10 +1321,10 @@ function drawRangerBody(ctx, q) {
       inkLine(ctx, [B.sw - 3, B.sy + 0.5, -B.ww + 0.5, B.hipY - 2], '#4a2c16', 1.6);
       flat(ctx, (c) => pRrect(c, -1.4, B.sy + 6, 2.6, 2.2, 0.6), '#c79a4a', 0.9);
       // 皮甲下摆
-      cel(ctx, (c) => pPoly(c, [-B.ww - 0.5, B.hipY - 1, B.ww + 0.5, B.hipY - 1, B.ww + 2.2, B.hipY + 5, 1, B.hipY + 4, -B.ww - 1.8, B.hipY + 5.4]), shade(LEATHER, -0.1), { sd: 1.4 });
+      cel(ctx, (c) => pPoly(c, [-B.ww - 0.5, B.hipY - 1, B.ww + 0.5, B.hipY - 1, B.ww + 2.2, B.hipY + 5, 1, B.hipY + 4, -B.ww - 1.8, B.hipY + 5.4]), shade(leather, -0.1), { sd: 1.4 });
       flat(ctx, (c) => pRrect(c, -B.ww - 0.8, B.hipY - 2.6, B.ww * 2 + 1.6, 2.8, 1), '#3c2412', 1.1);
       flat(ctx, (c) => pRrect(c, -0.8, B.hipY - 2.9, 2.6, 3.4, 0.7), '#c79a4a', 1);
-      cel(ctx, (c) => pRrect(c, B.ww - 1.2, B.hipY - 1.2, 3.6, 4, 1.2), '#5e3a1e', { sd: 1, lw: 1.1 });
+      cel(ctx, (c) => pRrect(c, B.ww - 1.2, B.hipY - 1.2, 3.6, 4, 1.2), skin.quiver, { sd: 1, lw: 1.1 });
       // 兜帽连着的披肩：盖住两肩，边上剪成叶尖
       cel(ctx, (c) => {
         c.moveTo(-B.sw - 0.5, B.sy + 1);
@@ -1193,13 +1340,26 @@ function drawRangerBody(ctx, q) {
         c.closePath();
       }, color, { dark: shade(color, -0.4), sd: 1.8 });
       line(ctx, [B.sw - 1.2, B.sy + 3.6, B.sw - 2.6, B.sy + 6.6, B.sw - 4.6, B.sy + 4, B.sw - 7, B.sy + 7], shade(color, 0.35), 0.6);
+      if (skin.fur) furTrim(ctx, [B.sw + 1.4, B.sy + 4.2, B.sw - 2.6, B.sy + 6.4, B.sw - 7, B.sy + 6.6, -B.sw + 2, B.sy + 5.8], skin.fur);
     },
     head(ctx, q, B) {
       const { hx, hy, hr } = B;
       // 额前一绺头发、眼睛；鹰眼专注时眼里闪金光
-      flat(ctx, (c) => pPoly(c, [hx - 1, hy - 4, hx + hr - 0.5, hy - 3.6, hx + 4.5, hy - 1.6, hx + 2.2, hy - 2.6, hx + 0.6, hy - 1]), '#6a3f22', 0.9);
+      flat(ctx, (c) => pPoly(c, [hx - 1, hy - 4, hx + hr - 0.5, hy - 3.6, hx + 4.5, hy - 1.6, hx + 2.2, hy - 2.6, hx + 0.6, hy - 1]), skin.hair, 0.9);
       eyes(ctx, hx + 2.8, hy + 1, '#16101c', 1.6);
-      flat(ctx, (c) => pPoly(c, [hx + 1.4, hy - 1.4, hx + 4.4, hy - 1.8, hx + 4.2, hy - 1.2]), '#4a2a14');
+      flat(ctx, (c) => pPoly(c, [hx + 1.4, hy - 1.4, hx + 4.4, hy - 1.8, hx + 4.2, hy - 1.2]), shade(skin.hair, -0.3));
+      if (skin.eyeGlow) flat(ctx, (c) => { pEll(c, hx + 3.1, hy + 0.6, 0.5, 0.6); pEll(c, hx + 6.8, hy + 0.6, 0.45, 0.55); }, skin.eyeGlow);
+      if (skin.mask) {
+        // 夜影猎手：围巾蒙住口鼻，在脑后打个结
+        cel(ctx, (c) => {
+          c.moveTo(hx - 1.5, hy + 2.2);
+          c.lineTo(hx + hr + 0.8, hy + 2.4);
+          c.quadraticCurveTo(hx + hr + 0.4, hy + hr - 0.5, hx + 3, hy + hr + 0.6);
+          c.lineTo(hx - 2.4, hy + hr);
+          c.closePath();
+        }, skin.mask, { sd: 1.2 });
+        folds(ctx, [[hx, hy + 4.2, hx + 3.5, hy + 4.6, hx + hr, hy + 4.2]], 'rgba(0,0,0,0.45)', 0.6);
+      }
       if (kind === 'focus') {
         const eye = envelope(act.k, 0.2, 0.32, 0.7, 0.9);
         if (eye > 0) {
@@ -1222,6 +1382,8 @@ function drawRangerBody(ctx, q) {
       }, color, { dark: shade(color, -0.42), sd: 2 });
       folds(ctx, [[hx + 1, hy - hr - 0.6, hx - 3, hy - hr - 0.2, hx - hr - 3 + sway, hy - 1.2]], shade(color, -0.45), 0.7);
       line(ctx, [hx + hr - 1, hy - 1.4, hx - 0.4, hy - 2.4], shade(color, 0.3), 0.6);
+      // 雪原猎人：兜帽沿着脸一圈白毛
+      if (skin.fur) furTrim(ctx, [hx + hr + 0.4, hy - 1, hx + 3, hy - hr + 0.4, hx - 0.6, hy - 2.6, hx - 1, hy + 2, hx - 2.6, hy + 6], skin.fur);
     },
     weaponBehindHand: true,
     weapon(ctx, q, B, h) {
@@ -1232,6 +1394,7 @@ function drawRangerBody(ctx, q) {
 
 // drawBow 画近侧手里的弓、弦、搭在弦上的箭和拉弦的手指。弓身和箭的方向 aim 垂直。
 function drawBow(ctx, q, B, h, act, kind) {
+  const look = RANGER_BOWS[q.gear] || RANGER_BOWS.default;
   const aim = act ? act.aim : q.dead >= 0 ? h.a + 0.6 : RANGER_IDLE_AIM;
   const draw = act ? act.draw : 0;
   const dx = Math.sin(aim);
@@ -1241,10 +1404,10 @@ function drawBow(ctx, q, B, h, act, kind) {
   const uy = -dx;
   const at = (along, side) => [h.x + ux * along + dx * side, h.y + uy * along + dy * side];
   const back = -draw * 2.6;   // 拉满时弓梢往后弯
-  const [tx, ty] = at(RANGER_BOW, back - 0.6);
-  const [bx, by] = at(-RANGER_BOW, back - 0.6);
-  const [c1x, c1y] = at(7.5, 4.6 + draw * 0.8);
-  const [c2x, c2y] = at(-7.5, 4.6 + draw * 0.8);
+  const [tx, ty] = at(look.length, back - 0.6);
+  const [bx, by] = at(-look.length, back - 0.6);
+  const [c1x, c1y] = at(look.length * 0.58, look.bulge + draw * 0.8);
+  const [c2x, c2y] = at(-look.length * 0.58, look.bulge + draw * 0.8);
   const [gx, gy] = at(0, 1.4);
   // 弦：搭箭时拉到远侧手，否则绷直；刚松手时弦还在抖
   let nock = null;
@@ -1299,12 +1462,26 @@ function drawBow(ctx, q, B, h, act, kind) {
   ctx.beginPath(); bow(ctx);
   ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3.8; ctx.stroke();
   ctx.beginPath(); bow(ctx);
-  ctx.strokeStyle = '#8a5a2e'; ctx.lineWidth = 2.1; ctx.stroke();
+  ctx.strokeStyle = look.wood; ctx.lineWidth = 2.1; ctx.stroke();
   ctx.beginPath(); bow(ctx);
   ctx.strokeStyle = 'rgba(255,220,160,0.45)'; ctx.lineWidth = 0.6; ctx.stroke();
   // 弓梢的骨片
-  flat(ctx, (c) => { pEll(c, tx, ty, 1.2, 1.2); pEll(c, bx, by, 1.2, 1.2); }, '#efe6cc', 0.9);
-  inkLine(ctx, [...at(-2.2, 1.3), ...at(2.2, 1.3)], '#3c2412', 2.4);
+  flat(ctx, (c) => { pEll(c, tx, ty, 1.2, 1.2); pEll(c, bx, by, 1.2, 1.2); }, look.tip, 0.9);
+  inkLine(ctx, [...at(-2.2, 1.3), ...at(2.2, 1.3)], look.grip, 2.4);
+  if (look.tassel) {
+    // 风语长弓：两头弓梢各挂一串羽毛穗，随风飘
+    for (const [px, py] of [[tx, ty], [bx, by]]) {
+      const sway = Math.sin(q.time / 180 + px) * 1.2;
+      flat(ctx, (c) => pPoly(c, [px, py, px - 2.4 + sway, py + 3.4, px - 0.6 + sway, py + 5.6, px + 0.8, py + 2.4]), look.tassel, 0.8);
+    }
+  }
+  if (look.crystal) {
+    // 霜心长弓：弓梢和握把上长着冰晶
+    for (const [px, py, size] of [[tx, ty, 1], [bx, by, 1], [...at(0, -0.6), 0.7]] as [number, number, number][]) {
+      flat(ctx, (c) => pPoly(c, [px, py - 3 * size, px + 1.5 * size, py, px, py + 2.4 * size, px - 1.5 * size, py]), '#d8f4ff', 0.8);
+    }
+    line(ctx, [...at(look.length * 0.3, look.bulge * 0.7), ...at(-look.length * 0.3, look.bulge * 0.7)], 'rgba(220,250,255,0.8)', 0.5);
+  }
 
   // 治愈之泉：举起的弓臂间聚起一团绿光，跪下时顺着下弓梢落进地里
   if (kind === 'zone') {

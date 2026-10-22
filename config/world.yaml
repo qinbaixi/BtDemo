@@ -25,10 +25,14 @@ player:
   level: 1
   respawn: 3
   block: { reduce: 0.8, speed: 0.5 }   # 按住右键格挡（只有 can_block 的职业能格挡）：受到的伤害减少 80%，移动速度减半，不能放技能
+  bag: 24                              # 背包格数（装备着的物品不占格子）
+  starter: [leather_vest, life_charm]  # 每个新玩家背包里都有的物品（不装备），物品见 items.yaml
   # 职业：第一个是新玩家的默认职业；进游戏和死亡时可以换职业（和挑技能一起，见 Loadout）
   #   skills: 默认技能，第 1 个是固定的普攻（J / 左键），后面是默认选择
   #   skill_pool: 可以挑的技能，挑 len(skills)-1 个放到第 2 格起
   #   growth: 每升一级增加的基础属性；can_block: 能不能按住右键格挡
+  #   starter: 第一次当这个职业时放进背包的物品（本职业的普通武器）
+  #   skins: 外观，第一个是默认；color 是选择面板上的色块。皮肤只换配色和部件画法，骨骼和动作不变
   classes:
     - id: knight
       name: 骑士
@@ -42,6 +46,11 @@ player:
       radius: 16
       skills: [slash, fireball, whirlwind, heal, warcry, shield]
       skill_pool: [fireball, whirlwind, heal, warcry, shield, haste, holy_guard, blink, enchant, axe, frost_nova, healing_spring]
+      starter: [recruit_sword]
+      skins:
+        - { id: paladin,  name: 圣骑士,   color: "#4da3ff", desc: 蓝白相间的圣骑士铠甲 }
+        - { id: obsidian, name: 黑曜骑士, color: "#3a3a46", desc: 黑曜石般的暗色重甲，血红披风，带角的全封闭头盔 }
+        - { id: gilded,   name: 金辉卫士, color: "#e6b84a", desc: 金色板甲和白色披风，头盔两侧一对金翼 }
     - id: ranger
       name: 游侠
       desc: 弓箭手，远程输出，灵活走位
@@ -54,8 +63,23 @@ player:
       radius: 15
       skills: [shot, pierce_shot, arrow_rain, roll, frost_arrow, focus]
       skill_pool: [pierce_shot, arrow_rain, roll, frost_arrow, focus, haste, healing_spring]
+      starter: [hunter_bow]
+      skins:
+        - { id: woodland,   name: 林地游侠, color: "#8fd17a", desc: 绿褐相间的林地猎装 }
+        - { id: nightshade, name: 夜影猎手, color: "#5b4a7a", desc: 深紫色的夜行斗篷和面罩 }
+        - { id: snowfield,  name: 雪原猎人, color: "#dfeaf2", desc: 白色毛皮镶边的雪原猎装 }
 
 # 常驻回血区：站在里面的友方（和 faction 互不敌对的阵营）每隔 interval 秒回复 最大生命 × heal
 #   look: 客户端画法 spring 泉水 | rune 法阵
 heal_zones:
   - { name: 生命之泉, x: 520, y: 800, radius: 130, heal: 0.05, interval: 1, faction: player, look: spring, color: "#7dffc4" }
+
+# 装备掉落：怪物死亡时按概率给击杀者（打出致命一击的玩家）一件装备，直接进背包（背包满了就不给）
+#   chance: 普通怪掉落概率；bosses: 单独配置概率的怪物（模板 id: 概率）
+#   rarity: 各稀有度的抽取权重
+#   class_bias: 只从击杀者职业能用的物品（本职业或通用）里抽的概率，其余时候从所有物品里抽
+loot:
+  chance: 0.3
+  bosses: { ogre_chief: 1.0 }
+  rarity: { common: 6, rare: 3, epic: 1 }
+  class_bias: 0.7

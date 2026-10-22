@@ -31,6 +31,7 @@ type Entity struct {
 	Control
 	Steering
 	Brain
+	Inventory
 }
 
 // Identity 描述实体是什么，以及客户端如何绘制它。
@@ -42,7 +43,10 @@ type Identity struct {
 	Color   string
 	Model   string           // 客户端外观，例如 knight、slime
 	Class   string           // 玩家职业 id（config.Class.ID）；怪物和 NPC 为空
+	Skin    string           // 玩家皮肤 id（config.Skin.ID）；怪物和 NPC 为空
 	Tmpl    *config.Template // 玩家为 nil
+	// LookDirty 为 true 表示皮肤或武器外观变了，session 要让所有能看见它的会话重发 Enter
+	LookDirty bool
 }
 
 // Transform 描述实体所在的位置（由 move 和 aoi 管理）。
@@ -73,6 +77,7 @@ type Derived struct {
 	Crit    float64 // 暴击率 0..1
 	CritDmg float64 // 暴击倍率
 	Speed   float64 // 每秒像素数
+	CDR     float64 // 冷却缩减 0..config.MaxCDR：技能冷却 ×(1-CDR)
 }
 
 // Combat 包含实体的技能、Buff，以及它与谁战斗（由 combat 管理）。
@@ -87,6 +92,8 @@ type Combat struct {
 
 	// CanPick 为 true 时玩家可以重新挑技能：进游戏或死亡之后、放下一个技能之前（由 session、combat 管理）
 	CanPick bool
+	// AmbushUntil 之前的下一次伤害必定暴击（ambush 特效，位移技能后设置）
+	AmbushUntil float64
 }
 
 // Buff 是一个生效中的限时修饰效果。
@@ -123,6 +130,75 @@ type Brain struct {
 	AI      *bt.Instance // 玩家为 nil
 	Action  string       // 实体当前正在做的事，用于显示
 	AITicks []*pb.AiTick // 被观察期间，自上次同步以来记录的追踪 tick
+}
+
+// Inventory 是玩家的背包和身上的装备（由 item 管理）。怪物和 NPC 没有物品。
+type Inventory struct {
+	Items   []*OwnedItem // 玩家拥有的所有物品，按 UID 从小到大；Slot 不空的是装备着的
+	NextUID int          // 上一个分配出去的 UID
+	// StartersGiven 记下已经发过哪些职业的新手装备（config.Class.Starter），每个职业只发一次
+	StartersGiven map[string]bool
+	// InventoryDirty 为 true 表示背包或装备变了，session 要给玩家发一份完整的 Inventory
+	InventoryDirty bool
+	// Notices 是要以 Toast 发给玩家的提示（比如背包满了），session 发完后清空
+	Notices []string
+}
+
+// OwnedItem 是玩家拥有的一件物品。
+type OwnedItem struct {
+	UID  int          // 在这个玩家的物品里唯一
+	Cfg  *config.Item // 物品定义
+	Slot string       // 装备在哪个槽位；空 = 在背包里
+}
+
+// Equipped 返回装备在槽位 slot 里的物品，没有返回 nil。
+func (inventory *Inventory) Equipped(slot string) *OwnedItem {
+	for _, owned := range inventory.Items {
+		if owned.Slot == slot {
+			return owned
+		}
+	}
+	return nil
+}
+
+// Owned 按 UID 找物品，找不到返回 nil。
+func (inventory *Inventory) Owned(uid int) *OwnedItem {
+	for _, owned := range inventory.Items {
+		if owned.UID == uid {
+			return owned
+		}
+	}
+	return nil
+}
+
+// BagCount 是背包里（没装备的）物品数量。
+func (inventory *Inventory) BagCount() int {
+	count := 0
+	for _, owned := range inventory.Items {
+		if owned.Slot == "" {
+			count++
+		}
+	}
+	return count
+}
+
+// GearLook 是装备着的武器的外观（config.Item.Look）；没有武器时为空。
+func (inventory *Inventory) GearLook() string {
+	if weapon := inventory.Equipped("weapon"); weapon != nil {
+		return weapon.Cfg.Look
+	}
+	return ""
+}
+
+// Effects 返回装备着的物品里种类为 kind 的特效。
+func (inventory *Inventory) Effects(kind string) []*config.ItemEffect {
+	var effects []*config.ItemEffect
+	for _, owned := range inventory.Items {
+		if owned.Slot != "" && owned.Cfg.Effect != nil && owned.Cfg.Effect.Kind == kind {
+			effects = append(effects, owned.Cfg.Effect)
+		}
+	}
+	return effects
 }
 
 // MaxRadius 为判断边缘距离的范围查询设定实体半径的上限。

@@ -8,6 +8,7 @@ import {
 import type { ClientMessage, SkillInfo } from './net/types';
 import type { Debug } from './ui/debug';
 import { showToast } from './ui/hud';
+import { bagKey, toggleBag } from './ui/bag';
 import { pickerKey } from './ui/picker';
 
 // 切换画质时提示每一档有什么
@@ -55,7 +56,7 @@ export function resendMove(): void {
 
 export function castSlot(slot: number): void {
   const skill = state.skillBySlot[slot];
-  if (!skill || state.pickerOpen) return;   // 挑技能时不放技能（放了就不能再换了）
+  if (!skill || state.pickerOpen || state.bagOpen) return;   // 挑技能时不放技能（放了就不能再换了），开着装备面板时也不放
   if (blocking) { showToast('格挡中不能出招'); return; }   // 服务端也会拒绝，这里省一次来回
   const aim = skill.kind === 'dash' || skill.kind === 'line' || skill.kind === 'rain' ? aimFor(skill.kind) : { dx: 0, dy: 0 };
   deps.send({ t: 'cast', slot, target: state.target || 0, ...aim });
@@ -134,7 +135,7 @@ function attackTarget(now: number): ClientEntity | null {
 function tryAttack(): void {
   const now = performance.now();
   const sk = state.skillBySlot[ATTACK_SLOT];
-  if (!sk || state.pickerOpen || blocking || cdRemaining(sk.id, now) > 0.03) return;
+  if (!sk || state.pickerOpen || state.bagOpen || blocking || cdRemaining(sk.id, now) > 0.03) return;
   const t = attackTarget(now);
   if (!t) return;
   if (t.id !== state.target) state.target = t.id;
@@ -204,6 +205,14 @@ function onKeyDown(e: KeyboardEvent): void {
   if (e.repeat) return;
   if (state.pickerOpen && pickerKey(e.code)) {
     e.preventDefault();
+    return;
+  }
+  if (state.bagOpen && bagKey(e.code)) {
+    e.preventDefault();
+    return;
+  }
+  if (e.code === 'KeyE') {
+    if (!state.pickerOpen) toggleBag();   // 选技能面板开着时先选完技能
     return;
   }
   if (e.code === 'KeyG') {

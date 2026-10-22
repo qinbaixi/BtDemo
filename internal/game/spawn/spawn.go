@@ -82,12 +82,13 @@ func (sys *System) Player() *core.Entity {
 	return entity
 }
 
-// ApplyClass 把玩家 entity 换成职业 class：外观、半径、移速、成长和技能换成职业的，
+// ApplyClass 把玩家 entity 换成职业 class：外观（皮肤重置为职业默认）、半径、移速、成长和技能换成职业的，
 // 基础属性按职业的初始值加上当前等级的成长重新算出，血量按比例保留。
 // 冷却和格挡状态被清掉（不能格挡的职业不会留在格挡里）；位置不变，所以 AOI 格子不用动。
 func (sys *System) ApplyClass(entity *core.Entity, class *config.Class) {
 	entity.Class = class.ID
 	entity.Model, entity.Color = class.Model, class.Color
+	entity.Skin = class.DefaultSkin()
 	entity.Radius = class.Radius
 	entity.Base, entity.Growth, entity.Speed = class.Attrs, class.Growth, class.Speed
 	for level := 1; level < entity.Level; level++ {

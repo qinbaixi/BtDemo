@@ -34,6 +34,8 @@ export interface Pose {
   onScreen?: boolean;   // 在镜头里（不在时程序模型不重画，省 CPU 和上传）
   tint?: number;        // 身体染色（冰冻发蓝、圣光发金），0xffffff 不染
   looks?: number;       // Buff 外观位（game/config.ts 的 LOOK_*），模型上画附魔的火等
+  skin?: string;        // 玩家皮肤（同一套骨骼换装，见 models.ts 的 KNIGHT_SKINS / RANGER_SKINS）
+  gear?: string;        // 装备武器的外观（KNIGHT_SWORDS / RANGER_BOWS）
   ghost?: { dx: number; dy: number; k: number };   // 闪现残影：起点相对脚底的偏移，k 是淡出进度 0..1
 }
 

@@ -6,7 +6,8 @@
 //	nav      来自 map.tmj 的障碍物、碰撞与 A* 寻路
 //	attr     属性公式、经验与升级
 //	move     移动：玩家输入、路径跟随、碰撞
-//	combat   技能、伤害、增益、死亡
+//	item     物品：背包、穿脱装备、皮肤、怪物掉落
+//	combat   技能、伤害、增益、死亡、装备特效
 //	ai       来自 BtTree 的行为树与调试跟踪
 //	spawn    创建怪物、NPC 和玩家，复活
 //	zone     地上的回血区：出生点泉水、技能放的法阵
@@ -23,6 +24,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/attr"
 	"github.com/qinbaixi/BtDemo/internal/game/combat"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
+	"github.com/qinbaixi/BtDemo/internal/game/item"
 	"github.com/qinbaixi/BtDemo/internal/game/move"
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
 	"github.com/qinbaixi/BtDemo/internal/game/session"
@@ -42,6 +44,7 @@ type World struct {
 	Nav      *nav.Map
 	Attr     *attr.System
 	Move     *move.System
+	Items    *item.System
 	Combat   *combat.System
 	AI       *ai.System
 	Spawn    *spawn.System
@@ -64,7 +67,14 @@ func newWorld(cfg *config.Config, seed int64, obstacles []nav.Shape) (*World, er
 	world.Attr = attr.New(world.State)
 	world.Nav = nav.New(cfg.World.Map.Width, cfg.World.Map.Height, obstacles)
 	world.Move = move.New(world.State, world.Grid, world.Nav)
-	world.Combat = combat.New(world.State, world.Grid, world.Attr, world.Nav)
+	world.Items = item.New(world.State)
+	world.Combat = combat.New(
+		world.State,
+		world.Grid,
+		world.Attr,
+		world.Nav,
+		world.Items,
+	)
 	world.Zone = zone.New(world.State, world.Grid)
 	var err error
 	if world.AI, err = ai.New(world.State, world.Combat, world.Move); err != nil {
@@ -78,6 +88,7 @@ func newWorld(cfg *config.Config, seed int64, obstacles []nav.Shape) (*World, er
 		world.Combat,
 		world.AI,
 		world.Spawn,
+		world.Items,
 	)
 	world.Spawn.SpawnConfigured()
 	return world, nil

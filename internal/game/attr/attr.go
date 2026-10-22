@@ -20,11 +20,29 @@ import (
 //	CritDmg = 1.5 + Agi*0.005
 //	Speed   = 基础移速
 //
+// 装备的加成（config.StatBonus）分两步加：str/agi/int/vit 先加到基础属性上再套公式；
+// max_hp、atk 等派生属性的加成直接加在公式的结果上（暴击率的 0.6 上限只管公式那部分），
+// cdr 求和后限制在 config.MaxCDR 以内。
+//
 // 随后 Buff 会对结果进行缩放：Atk 和 MAtk 按 (1+ΣAtkPct) 缩放，Def 和 MDef 按
-// (1+ΣDefPct) 缩放，Speed 按 (1+ΣSpeedPct) 缩放。
+// (1+ΣDefPct) 缩放，Speed 按 (1+ΣSpeedPct) 缩放（装备加的那部分也一起缩放）。
 
-// Compute 根据基础属性、基础移动速度和生效中的 Buff 计算派生属性。
+// Compute 根据基础属性、基础移动速度和生效中的 Buff 计算派生属性（不算装备）。
 func Compute(base config.Attrs, speed float64, buffs []*core.Buff) core.Derived {
+	return ComputeWithGear(base, speed, buffs, config.StatBonus{})
+}
+
+// ComputeWithGear 和 Compute 一样，另外加上装备的属性加成 gear。
+func ComputeWithGear(
+	base config.Attrs,
+	speed float64,
+	buffs []*core.Buff,
+	gear config.StatBonus,
+) core.Derived {
+	base.Str += gear.Attrs.Str
+	base.Agi += gear.Attrs.Agi
+	base.Int += gear.Attrs.Int
+	base.Vit += gear.Attrs.Vit
 	derived := core.Derived{
 		MaxHP:   80 + base.Vit*12 + base.Str*2,
 		Atk:     8 + base.Str*2 + base.Agi*0.5,
@@ -35,6 +53,15 @@ func Compute(base config.Attrs, speed float64, buffs []*core.Buff) core.Derived 
 		CritDmg: 1.5 + base.Agi*0.005,
 		Speed:   speed,
 	}
+	derived.MaxHP += gear.MaxHP
+	derived.Atk += gear.Atk
+	derived.MAtk += gear.MAtk
+	derived.Def += gear.Def
+	derived.MDef += gear.MDef
+	derived.Crit += gear.Crit
+	derived.CritDmg += gear.CritDmg
+	derived.Speed += gear.Speed
+	derived.CDR = math.Max(0, math.Min(config.MaxCDR, gear.CDR))
 	var atkPct, defPct, speedPct float64
 	for _, buff := range buffs {
 		if buff.Cfg == nil {
@@ -52,11 +79,22 @@ func Compute(base config.Attrs, speed float64, buffs []*core.Buff) core.Derived 
 	return derived
 }
 
-// Recalc 根据 entity.Base、entity.Speed 和 entity.Buffs 重新计算 entity.Attr。MaxHP 变化时，HP 保持与
+// GearBonus 是 entity 身上所有装备着的物品的属性加成之和。
+func GearBonus(entity *core.Entity) config.StatBonus {
+	var bonus config.StatBonus
+	for _, owned := range entity.Items {
+		if owned.Slot != "" {
+			bonus.Add(owned.Cfg.Bonus)
+		}
+	}
+	return bonus
+}
+
+// Recalc 根据 entity.Base、entity.Speed、entity.Buffs 和装备重新计算 entity.Attr。MaxHP 变化时，HP 保持与
 // MaxHP 的比例不变（若旧的 MaxHP 为 0，则 HP 保持不变）。随后 HP 被限制在 [0, MaxHP] 之内。
 func Recalc(entity *core.Entity) {
 	old := entity.Attr.MaxHP
-	entity.Attr = Compute(entity.Base, entity.Speed, entity.Buffs)
+	entity.Attr = ComputeWithGear(entity.Base, entity.Speed, entity.Buffs, GearBonus(entity))
 	if old > 0 && entity.Attr.MaxHP != old {
 		entity.HP = entity.HP / old * entity.Attr.MaxHP
 	}

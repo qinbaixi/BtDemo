@@ -23,6 +23,7 @@ import { createDebug } from './ui/debug';
 import {
   initHud, renderDeath, renderSkillBar, renderTarget, setConn, showToast,
 } from './ui/hud';
+import { initBag } from './ui/bag';
 import { initPicker } from './ui/picker';
 
 declare global {
@@ -94,6 +95,7 @@ function runPending(now: number): void {
 async function init(): Promise<void> {
   initHud(castSlot);
   initPicker(conn.send);
+  initBag(conn.send);
   await loadArt();   // 美术资源要在建场景、建角色之前就绪
   await initWorld(canvas, document.getElementById('overlay') as HTMLCanvasElement);
   state.fx = new FX(fxResolve, fxAuras);

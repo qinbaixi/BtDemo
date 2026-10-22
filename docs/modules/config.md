@@ -1,6 +1,6 @@
 # config：配置
 
-代码：`internal/config/config.go`、`internal/config/layout.go`；数据：`config/*.yaml`
+代码：`internal/config/config.go`、`internal/config/items.go`、`internal/config/layout.go`；数据：`config/*.yaml`
 
 ## 职责
 
@@ -10,9 +10,10 @@
 
 | 文件 | Go 类型 | 内容 |
 | --- | --- | --- |
-| `world.yaml` | `World` | `addr` 监听地址、`map` 尺寸、`aoi.cell`、`tick_rate`、`sync_rate`、`hostile` 阵营敌对表、`player` 玩家模板（公共字段 + `classes` 职业列表） |
+| `world.yaml` | `World` | `addr` 监听地址、`map` 尺寸、`aoi.cell`、`tick_rate`、`sync_rate`、`hostile` 阵营敌对表、`player` 玩家模板（公共字段 + `classes` 职业列表）、`loot` 装备掉落 |
 | `skills.yaml` | `map[string]*Skill` | 技能，key 是技能 id |
 | `monsters.yaml` | `map[string]*Template` + `[]Spawn` | 怪物 / NPC 模板和刷怪点 |
+| `items.yaml` | `[]*Item` | 装备，按文件里的顺序（`Config.Item(id)` 按 id 查），详见 [item](items.md) |
 | `map.tmj` | `Layout` | Tiled 地图：物件摆放和碰撞形状（JSON，不是 YAML；详见 [地图](map.md)） |
 
 YAML 字段和 Go 字段的对应写在结构体标签里，例如：
@@ -33,7 +34,7 @@ type Skill struct {
 cfg, err := config.Load("config", game.TreeNames())
 ```
 
-1. 读三个 YAML 和 `map.tmj`（`map.tmj` 缺失时视为空地图）。
+1. 读四个 YAML 和 `map.tmj`（`map.tmj` 缺失时视为空地图）。
 2. `validate` 补默认值并检查：
    - 地图尺寸、AOI 格子为正；`tick_rate` 默认 20、`sync_rate` 默认 10、`addr` 默认 `:8080`（只写端口时补冒号）。
    - 敌对表里引用的阵营都存在，且必须有 `player`。
@@ -43,6 +44,10 @@ cfg, err := config.Load("config", game.TreeNames())
    - `player.classes` 至少一个职业：`id` 非空且不重复，`speed`、`radius` 为正，`model` 不写时默认用 `id`；每个职业的 `skills` 至少一个，第 2 个起的默认技能都在 `skill_pool` 里，`skills` 和 `skill_pool` 里的技能都存在。
    - 模板引用的技能都存在，且怪物不能用 `dash`、`line`、`rain`（行为树放技能不给方向）；模板的 `kind` 是 monster 或 npc；`tree` 是编译进程序的行为树（由调用方传入 `knownTrees`）；`faction` 在敌对表里。
    - 刷怪点引用的模板存在。
+   - 每个职业的 `skins` 至少一个（第一个是默认），`id`、`name`、`color` 都有，`id` 不重复。
+   - `items.yaml`：`id`、`name` 都有且 `id` 不重复；`slot` 是 weapon、armor、trinket 之一；`class` 为空或是已有职业；`rarity` 是 common、rare、epic 之一；`stats` 的名字在 `config.StatNames` 里（换算成 `Item.Bonus`）；`effect` 的 `kind` 已知且参数齐（概率在 (0, 1]，比例、时长为正，chill 的 `speed` 在 -1 和 0 之间；chill 的减速 Buff 在这里生成）。
+   - `player.bag` 默认 24；`player.starter` 和职业的 `starter` 里的物品存在，职业的还要本职业能用。
+   - `loot`：`chance`、`bosses` 的概率、`class_bias` 在 0..1，`bosses` 的模板存在，`rarity` 的 key 是已知稀有度、权重不为负且有物品时至少一个为正。
    - `map.tmj` 的尺寸和 `world.yaml` 的 `map` 一致，地图物件都在地图范围内。
 3. `loadLayout` 检查 `map.tmj`：每个 `shape.*` 属性格式正确、数值合法；`props` 里每个物件的种类都有 `shape.*`（`none` 表示不挡路的装饰）；缩放为正；物件是点或两点折线，墙必须是折线；不允许 NaN、无穷大。
 
@@ -50,7 +55,7 @@ cfg, err := config.Load("config", game.TreeNames())
 
 ## 职业、技能和技能池
 
-`world.yaml` 的 `player` 保留公共字段（`name_prefix`、`spawn`、`level`、`respawn`、`block`），职业相关的都在 `player.classes` 里。它是有序列表，**第一个是新玩家的默认职业**（`Player.DefaultClass()`，`Player.Class(id)` 按 id 查）。每个职业（`config.Class`）有：`id`、`name`、`desc`、`model`、`color`、`can_block`（能不能右键格挡）、`attrs`、`growth`（每级增长）、`speed`、`radius`、`skills`、`skill_pool`。现在有 `knight`（骑士，能格挡）和 `ranger`（游侠，不能格挡）。
+`world.yaml` 的 `player` 保留公共字段（`name_prefix`、`spawn`、`level`、`respawn`、`block`），职业相关的都在 `player.classes` 里。它是有序列表，**第一个是新玩家的默认职业**（`Player.DefaultClass()`，`Player.Class(id)` 按 id 查）。每个职业（`config.Class`）有：`id`、`name`、`desc`、`model`、`color`、`can_block`（能不能右键格挡）、`attrs`、`growth`（每级增长）、`speed`、`radius`、`skills`、`skill_pool`、`skins`（外观，第一个是默认，`Class.DefaultSkin()`、`Class.Skin(id)`）、`starter`（第一次当这个职业时放进背包的物品）。`player` 的公共字段还有 `bag`（背包格数）和 `starter`（每个新玩家都有的物品）。现在有 `knight`（骑士，能格挡）和 `ranger`（游侠，不能格挡）。
 
 每个职业有两组技能：
 

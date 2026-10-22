@@ -1,0 +1,71 @@
+# 装备
+#   slot:   weapon 武器 | armor 护甲 | trinket 饰品
+#   class:  能用的职业 id；不写 = 所有职业都能用
+#   rarity: common 普通 | rare 稀有 | epic 史诗（掉落权重见 world.yaml 的 loot）
+#   desc:   背包面板上的一句话说明
+#   stats:  属性加成。str agi int vit 加在基础属性上，再算派生属性；
+#           max_hp atk matk def mdef crit crit_dmg speed 直接加在派生属性上；
+#           cdr 冷却缩减，所有技能冷却 ×(1 - cdr)，合计最多 0.4。crit、crit_dmg、cdr 是小数（0.06 = 6%）
+#   effect: 特效，kind 和参数：
+#           lifesteal  pct            造成伤害后回复 伤害 × pct
+#           thorns     pct            被 120 内的敌人打中时，反弹 实际受到的伤害 × pct（物理，不会再触发反伤）
+#           ignite     chance ratio   造成伤害时 chance 概率追加 攻击 × ratio 的魔法伤害
+#           block_heal pct            格挡住一次攻击时回复 最大生命 × pct
+#           multishot  chance         普攻命中后 chance 概率对射程内另一个敌人再射一箭（没有就打同一个）
+#           chill      chance dur speed  命中时 chance 概率让目标 dur 秒内移速 ×(1 + speed)（speed 为负）
+#           ambush     dur            位移技能后 dur 秒内的下一次伤害必定暴击
+#           regen      pct            活着时每秒回复 最大生命 × pct
+#   look:   装备这把武器时客户端画的武器外观；不写 = 职业默认武器
+items:
+  # 骑士
+  - { id: recruit_sword, name: 新兵长剑, slot: weapon, class: knight, rarity: common, look: knight_sword,
+      desc: 新兵训练用的长剑，朴实可靠,
+      stats: { atk: 4 } }
+  - { id: blood_blade, name: 渴血之刃, slot: weapon, class: knight, rarity: rare, look: blood_blade,
+      desc: 造成伤害后回复伤害的 10%,
+      stats: { atk: 6 },
+      effect: { kind: lifesteal, pct: 0.10 } }
+  - { id: flame_greatsword, name: 炎魔巨剑, slot: weapon, class: knight, rarity: epic, look: flame_greatsword,
+      desc: 造成伤害时 25% 概率追加一次攻击 ×0.6 的魔法伤害,
+      stats: { atk: 10, str: 3 },
+      effect: { kind: ignite, chance: 0.25, ratio: 0.6 } }
+  - { id: thorn_plate, name: 荆棘板甲, slot: armor, class: knight, rarity: rare,
+      desc: 被近处的敌人打中时，反弹所受伤害的 30%,
+      stats: { def: 6, vit: 2 },
+      effect: { kind: thorns, pct: 0.3 } }
+  - { id: guardian_mail, name: 守护者胸甲, slot: armor, class: knight, rarity: epic,
+      desc: 格挡住一次攻击时回复 4% 最大生命,
+      stats: { def: 8, max_hp: 40 },
+      effect: { kind: block_heal, pct: 0.04 } }
+
+  # 游侠
+  - { id: hunter_bow, name: 猎人短弓, slot: weapon, class: ranger, rarity: common, look: hunter_bow,
+      desc: 猎人常用的短弓，轻便顺手,
+      stats: { atk: 4 } }
+  - { id: wind_bow, name: 风语长弓, slot: weapon, class: ranger, rarity: rare, look: wind_bow,
+      desc: 普攻命中后 30% 概率对附近另一个敌人再射一箭,
+      stats: { atk: 6, agi: 3 },
+      effect: { kind: multishot, chance: 0.3 } }
+  - { id: frost_bow, name: 霜心长弓, slot: weapon, class: ranger, rarity: epic, look: frost_bow,
+      desc: 命中时 35% 概率冻住目标，2 秒内减速 30%,
+      stats: { atk: 8, int: 3 },
+      effect: { kind: chill, chance: 0.35, dur: 2, speed: -0.3 } }
+  - { id: shadow_leather, name: 影猎皮甲, slot: armor, class: ranger, rarity: rare,
+      desc: 翻滚后 3 秒内的下一次伤害必定暴击,
+      stats: { def: 4, agi: 3 },
+      effect: { kind: ambush, dur: 3 } }
+
+  # 通用
+  - { id: leather_vest, name: 皮革护甲, slot: armor, rarity: common,
+      desc: 结实的皮革护甲，谁都能穿,
+      stats: { def: 3, vit: 1 } }
+  - { id: life_charm, name: 生命护符, slot: trinket, rarity: common,
+      desc: 活着时每秒回复 1% 最大生命,
+      stats: { vit: 3 },
+      effect: { kind: regen, pct: 0.01 } }
+  - { id: hawk_pendant, name: 鹰羽坠饰, slot: trinket, rarity: rare,
+      desc: 暴击率 +6%，暴击伤害 +30%,
+      stats: { crit: 0.06, crit_dmg: 0.3 } }
+  - { id: sage_ring, name: 贤者之戒, slot: trinket, rarity: epic,
+      desc: 所有技能冷却缩短 15%,
+      stats: { int: 3, cdr: 0.15 } }

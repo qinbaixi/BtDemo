@@ -69,7 +69,9 @@ web/
       scenery.ts        地表、场景物件、环境光源（Canvas 2D 生成贴图）
     ui/
       hud.ts            自己 / 目标面板、两行技能栏、死亡遮罩、提示条、连接状态
-      picker.ts         选技能面板：进游戏和死亡时挑技能，发 Loadout
+      picker.ts         选技能面板：进游戏和死亡时挑职业、外观和技能，发 Loadout（和 SetSkin）
+      bag.ts            装备面板：E 键开关，装备槽、属性、外观、背包格子，发 equip / unequip / skin
+      skins.ts          外观卡和“每个职业上次选的外观”的读写（选技能面板和装备面板共用）
       debug.ts          调试抽屉：标签页、跟随选中目标、向服务端要追踪
       debug-ai.ts       AI 决策页：整棵行为树（可折叠）叠加每帧结果和判断依据，暂停后逐帧回看，节点详情
       debug-proto.ts    调试抽屉：协议收发列表
@@ -153,6 +155,34 @@ web/
 弓身和箭的方向 `aim` 垂直；搭箭时（`nocked`）弦拉到远侧手，箭搭在弦上，穿云箭的箭头蓄力发金光、冰霜箭的箭头结冰。
 动作在 `knightActions.ts` 里以 `ranger:` 开头（`ranger:arrow` 普攻射击、`ranger:pierce`、`ranger:rain`、`ranger:frostarrow`、`ranger:roll`、`ranger:focus`，
 共用技能 `ranger:haste`、`ranger:zone`）；`events.ts` 按施法者模型拼动作名。翻滚的 `tumble` 让整个人绕身体中心转一圈。
+
+## 装备面板（ui/bag.ts）
+
+协议：`Welcome.items` 是全部装备种类，存进 `state.items`（id → `ItemInfo`；协议里的 `class` 在前端叫 `cls`）；
+服务端在进游戏后和每次变化时发整份 `Inventory`，存进 `state.inventory`（`{ items: ItemSlotted[], capacity }`，`slot` 空的在背包里，不空的穿在身上）。
+
+- 开关：`E` 键或右上角的“装备 (E)”按钮（手机上在技能栏右上方）；`Esc`、`E`、右上角 × 关闭。选技能面板开着时 `E` 不起作用。
+- 面板开着时技能键和左键普攻都不放（`input.ts` 的 `castSlot` / `tryAttack` 检查 `state.bagOpen`），按技能键提示“先关闭装备面板”；移动照常。
+- 布局从上到下：
+  1. 三个装备槽（武器 / 护甲 / 饰品）：图标 + 名字（稀有度颜色），空槽虚线框；
+  2. 派生属性（和自己面板一样的格式），身上装备带冷却缩减时多一行“冷却缩减”（按装备加起来，上限 40%）；每次收到自己的属性时刷新（`renderBagStats`）；
+  3. 外观（见下节）；
+  4. 背包：`capacity` 个格子（默认 24），空格也画出来，右上角是“已用 / 格数”。
+- 说明框：鼠标悬停显示；触屏上第一次点只显示说明，再点同一格才执行。内容是名字（稀有度颜色）、稀有度 · 槽位 · 职业限制（“游侠专用”或“通用”）、每条属性（暴击率、暴击伤害、冷却缩减显示成百分比）、特效说明，最后一行提示点了会怎样。
+- 点背包里的装备发 `equip`（`uid`），点身上的发 `unequip`（槽位）。别的职业的装备变暗，点了只提示“××专用，当前职业不能装备”，不发请求。
+- 面板只显示服务端的结果：换装后等新的 `Inventory` 再重画（`sync.ts` 收到时调 `refreshBag`），被拒绝时服务端只回 Toast。掉落提示和特效飘字由 `events.ts` 处理，面板不另外弹提示。
+- 图标：`render/itemIcons.ts` 的 `drawItemIcon(ctx, item, size)`，画到 40 × 40（CSS 像素）的小画布上，`ctx` 已按设备像素比缩放。稀有度颜色是 `game/config.ts` 的 `RARITY_COLOR`。
+- 面板在选技能面板下面一层：死亡时弹出的选技能面板盖在上面。
+
+## 外观（皮肤）选择
+
+`ClassInfo.skins` 是每个职业的外观（第一个是默认），换职业时 `state.skins` 换成新职业的；自己现在的外观 `state.mySkin` 以服务端发来的自己的 `Enter`（`EntityInfo.skin`）为准，空串表示默认。
+所有实体的 `skin`、`gear`（当前武器的 `look`）在 `Enter` 时写进 `ClientEntity`，已存在的实体再收到 `Enter` 时也更新；渲染层按它们换配色和武器。
+
+- 选技能面板：职业卡下面一排外观卡（名字 + 色块，选中的高亮），跟着选中的职业换。确认时：职业没换、外观和现在的不一样就在 `loadout` 之后发 `skin`；职业换了就先不发，等服务端回 `skillBar`（职业确实变了）后，`sync.ts` 再发这个职业记住的外观（服务端换职业时把外观重置成默认）。
+- 装备面板：同样一排外观卡，点了直接发 `skin`（当前职业）。
+- 记忆：每个职业上次选的外观存在 `localStorage` 的 `btdemo.loadout` 里，新加的 `skins` 字段（`{ cls, skills: { 职业: [技能] }, skins: { 职业: 外观 id } }`）；老数据没有 `skins` 也照常读，写的时候保留其他字段（`ui/skins.ts`）。记住的外观已经不存在时当作默认。
+- 只有一套外观（或服务端没发）时两处的外观行都不显示。
 
 ## 技能特效和外观
 

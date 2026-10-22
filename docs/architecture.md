@@ -41,7 +41,7 @@ w.Do(func() { w.Input(s, msg) })   // 把“要做的事”丢进 inbox
 ```go
 w.State.Clock.Advance()        // 时间前进 Dt = 1/20 秒
 w.Spawn.Tick()                 // 1. 复活时间到了的实体
-w.Combat.Tick()                // 2. 去掉过期的 Buff，重算属性
+w.Combat.Tick()                // 2. 去掉过期的 Buff，重算属性；装备的持续回血
 w.Zone.Tick()                  // 3. 回血区：去掉到时间的，给站在里面的友方回血
 w.Move.Tick()                  // 4. 玩家按方向键移动（带碰撞）
 w.AI.Tick(w.Sessions.Watched())// 5. 每个怪物 / NPC 跑一次行为树：选目标、追击、放技能……
@@ -73,10 +73,11 @@ cmd/server ──► config, game, server, web
 server     ──► game, pb, proto
 game(world)──► 所有系统包，只负责创建和按顺序调用
 
-session ──► combat, ai, spawn, aoi, nav, core
+session ──► combat, ai, spawn, item, aoi, nav, core
 spawn   ──► move, ai, aoi, attr, core
 ai      ──► combat, move, bt, ai/trees, core
-combat  ──► attr, aoi, core
+combat  ──► item, attr, aoi, core
+item    ──► attr, core
 move    ──► nav, aoi, core
 zone    ──► aoi, core
 attr, aoi, nav ──► core / config
@@ -100,6 +101,7 @@ bt      ──► 无（纯行为树运行时，不认识游戏）
 | `Control` | 玩家输入方向 | session 写，move 读 |
 | `Steering` | 当前路径、寻路状态 | move |
 | `Brain` | 行为树实例、当前动作、调试追踪 | ai |
+| `Inventory` | 玩家的物品（背包和装备）、待发的提示 | item（session 读标记并发消息） |
 
 ## 配置与数据从哪来
 
@@ -108,6 +110,7 @@ bt      ──► 无（纯行为树运行时，不认识游戏）
 | `config/world.yaml` | 端口、地图尺寸、AOI 格子、帧率、阵营敌对表、玩家模板 | config → 各系统 |
 | `config/skills.yaml` | 技能 | combat |
 | `config/monsters.yaml` | 怪物 / NPC 模板和刷怪点 | spawn、ai |
+| `config/items.yaml` | 装备 | item、attr、combat、session |
 | `config/map.tmj` | Tiled 地图：场景物件、碰撞形状、地表区域和道路 | nav；server 原样提供给前端（`/map.tmj`） |
 | `bt/trees/*.json` → `internal/ai/trees/*.go` | 行为树（BtTree 编辑、导出） | bt、ai |
 | `proto/btdemo.proto` → `internal/pb` | 协议 | session、server、前端 |

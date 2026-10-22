@@ -5,7 +5,7 @@ import type { Aura, FX } from '../render/fx';
 import type { createScenery } from '../render/scenery';
 import type {
   ClassInfo,
-  EntityInfo, EntityKind, Obstacle, SelfInfo, SkillInfo, ZoneInfo,
+  EntityInfo, EntityKind, ItemInfo, ItemSlotted, Obstacle, SelfInfo, SkillInfo, SkinInfo, ZoneInfo,
 } from '../net/types';
 import { ATTACK_MS, KIND_COLOR, LERP_MS, MODEL_H, MODEL_SCALE } from './config';
 import { clamp, lerp } from './math';
@@ -39,6 +39,8 @@ export interface ClientEntity {
   blinkFrom: { x: number; y: number; at: number } | null;   // 最近一次闪现的起点（画残影）
   slide: { x0: number; y0: number; x1: number; y1: number; at: number; ms: number } | null;   // 翻滚：从起点滑到终点
   model: string;
+  skin: string;       // 玩家外观 id（空 = 职业默认外观）
+  gear: string;       // 当前武器的外观（ItemInfo.look，空 = 职业默认武器）
   // 动画状态
   facing: number;     // 0 朝右，PI 朝左
   walk: number;       // 走路循环的相位
@@ -86,6 +88,11 @@ export interface State {
   playerClass: string;            // 当前职业 id
   canBlock: boolean;              // 当前职业能不能格挡（右键）
   pickerOpen: boolean;            // 选技能面板开着（这时不放技能）
+  bagOpen: boolean;               // 装备面板开着（这时也不放技能）
+  items: Map<string, ItemInfo>;   // 全部装备种类（welcome 里带的），id -> ItemInfo
+  inventory: { items: ItemSlotted[]; capacity: number };   // 自己的背包和身上的装备（服务端 Inventory 整份）
+  skins: SkinInfo[];              // 当前职业的外观（从 classes 里取，第一个是默认）
+  mySkin: string;                 // 自己现在的外观 id（空 = 默认），以服务端发来的自己的 Enter 为准
   ents: Map<number, ClientEntity>;
   self: SelfInfo | null;          // 最近一次同步里的 self
   selfAt: number;                 // 收到那次同步的 performance.now()
@@ -156,6 +163,11 @@ export const state: State = {
   playerClass: '',
   canBlock: true,
   pickerOpen: false,
+  bagOpen: false,
+  items: new Map(),
+  inventory: { items: [], capacity: 0 },
+  skins: [],
+  mySkin: '',
   ents: new Map(),
   self: null,
   selfAt: 0,
@@ -215,6 +227,8 @@ export function makeEntity(d: Partial<EntityInfo> & { id: number }, now: number)
     blinkFrom: null,
     slide: null,
     model: d.model || '',
+    skin: d.skin || '',
+    gear: d.gear || '',
     facing: kind === 'player' ? 0 : (Math.random() < 0.5 ? 0 : Math.PI),
     walk: Math.random() * 6,
     moveUntil: 0,

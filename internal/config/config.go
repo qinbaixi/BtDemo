@@ -34,6 +34,10 @@ type Player struct {
 	Level      int     `yaml:"level"`
 	Respawn    float64 `yaml:"respawn"`
 	Block      Block   `yaml:"block"`
+	// Bag 是背包格数（装备着的物品不占格子），默认 DefaultBagSize。
+	Bag int `yaml:"bag"`
+	// Starter 是每个新玩家背包里都有的物品（不分职业），职业相关的见 Class.Starter。
+	Starter []string `yaml:"starter"`
 	// Classes 是玩家可以选的职业，第一个是新玩家的默认职业。
 	Classes []*Class `yaml:"classes"`
 }
@@ -54,6 +58,10 @@ type Class struct {
 	Skills []string `yaml:"skills"`
 	// SkillPool 是玩家可以挑选的技能（进游戏和死亡时挑），挑 Pick() 个放到第 2 格起。
 	SkillPool []string `yaml:"skill_pool"`
+	// Skins 是职业的外观，第一个是默认皮肤。
+	Skins []*Skin `yaml:"skins"`
+	// Starter 是第一次当这个职业时放进背包的物品（比如本职业的普通武器）。
+	Starter []string `yaml:"starter"`
 }
 
 // Pick 是玩家要挑几个技能（第 1 格普攻固定，不用挑）。
@@ -94,6 +102,8 @@ type World struct {
 	Player   Player              `yaml:"player"`
 	// HealZones 是地图上常驻的回血区（比如出生点的泉水）。
 	HealZones []*Zone `yaml:"heal_zones"`
+	// Loot 是怪物死亡时的装备掉落。
+	Loot Loot `yaml:"loot"`
 }
 
 // ZoneAspect 是回血区纵向半径和横向半径之比：地面上画成压扁的椭圆（和其他地面特效一样），
@@ -191,10 +201,13 @@ type Config struct {
 	Skills    map[string]*Skill
 	Templates map[string]*Template
 	Spawns    []Spawn
-	Layout    Layout // 对应 map.tmj
+	Layout    Layout  // 对应 map.tmj
+	Items     []*Item // 对应 items.yaml，按文件里的顺序
+
+	itemsByID map[string]*Item // 由 validate 建立
 }
 
-// Load 从 dir 读取 world.yaml、skills.yaml、monsters.yaml 和 map.tmj，并检查每个引用都能解析。
+// Load 从 dir 读取 world.yaml、skills.yaml、monsters.yaml、items.yaml 和 map.tmj，并检查每个引用都能解析。
 // knownTrees 列出编译进二进制文件的行为树。
 func Load(dir string, knownTrees map[string]bool) (*Config, error) {
 	cfg := &Config{}
@@ -216,6 +229,13 @@ func Load(dir string, knownTrees map[string]bool) (*Config, error) {
 		return nil, err
 	}
 	cfg.Templates, cfg.Spawns = monsters.Templates, monsters.Spawns
+	var items struct {
+		Items []*Item `yaml:"items"`
+	}
+	if err := readYAML(filepath.Join(dir, "items.yaml"), &items); err != nil {
+		return nil, err
+	}
+	cfg.Items = items.Items
 	var err error
 	if cfg.Layout, err = loadLayout(dir); err != nil {
 		return nil, err
@@ -365,6 +385,12 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 				return fmt.Errorf("%s: default skill %q is not in skill_pool", owner, id)
 			}
 		}
+		if err := validateSkins(owner, class); err != nil {
+			return err
+		}
+	}
+	if err := cfg.validateItems(); err != nil {
+		return err
 	}
 	for id, template := range cfg.Templates {
 		template.ID = id
@@ -438,7 +464,7 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 			)
 		}
 	}
-	return nil
+	return cfg.validateGear()
 }
 
 // checkZone 检查回血区的半径和回血量，并补上默认的回血间隔和画法。

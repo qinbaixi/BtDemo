@@ -50,6 +50,7 @@ let sceneView: SceneView | null = null;
 let sceneFor: Scenery | null = null;
 let sceneRes = 0;               // 场景按这个像素密度画的，变了要重建
 const actors = new Map<number, ActorView>();
+const actorLooks = new Map<number, string>();   // 每个 ActorView 建的时候的 模型|皮肤|武器，变了就重建
 let baseLut: TextureSource;
 const zoneLuts = new Map<string, TextureSource>();     // 区域种类 -> LUT，第一次用到时生成
 const zoneWeights = new Map<string, number>();         // 平滑过的各区域权重
@@ -191,8 +192,9 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
     const p = posOf(e, now);
     ents.push({ e, p });
     let v = actors.get(e.id);
-    if (v && v.model !== e.model) {
-      // 换了职业（模型变了）：旧的视图扔掉重建
+    const look = `${e.model}|${e.skin}|${e.gear}`;
+    if (v && actorLooks.get(e.id) !== look) {
+      // 换了职业、皮肤或武器：旧的视图扔掉重建（不等闲置重画）
       v.destroy();
       actors.delete(e.id);
       v = undefined;
@@ -200,6 +202,7 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
     if (!v) {
       v = new ActorView(e.model, RIM[e.kind], depth, xrayLayer);
       actors.set(e.id, v);
+      actorLooks.set(e.id, look);
     }
     const pose = poseOf(e, p, now, dt);
     if (e.looks && !e.dead) {
@@ -218,7 +221,7 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
     v.update(pose, p.y - (e.dead ? 30 : 0), state.dpr, state.hq, now);
   }
   for (const [id, v] of actors) {
-    if (!state.ents.has(id)) { v.destroy(); actors.delete(id); }
+    if (!state.ents.has(id)) { v.destroy(); actors.delete(id); actorLooks.delete(id); }
   }
   state.fx.looks(lookEnts, now);
 
@@ -297,6 +300,8 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
     isSelf: e.id === state.myId,
     blocking: e.blocking && !e.dead,
     looks: e.dead ? 0 : e.looks,
+    skin: e.skin,
+    gear: e.gear,
     tint: e.dead ? 0xffffff : e.looks & LOOK_FROST ? 0xa8dcff : e.looks & LOOK_HOLY ? 0xfff0c4 : 0xffffff,
     ghost: blinkGhost(e, p, now),
     knockX: e.knockX * knock,

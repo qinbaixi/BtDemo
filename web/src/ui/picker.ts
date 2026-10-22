@@ -3,16 +3,19 @@
 // 点技能卡选上 / 取消，点上面的格子也能取消；回车确认，Esc 关掉（不换技能）。
 // 确认后发 Loadout（带职业和技能）给服务端，服务端回 SkillBar 才真正换上（见 game/sync.ts）。
 // 上次选的职业和每个职业的技能记在浏览器里，下次进游戏默认选好。
+// 职业卡下面是该职业的外观卡，确认时外观和现在的不一样就再发 SetSkin（换了职业的话，等服务端确认换职业后由 sync.ts 发）。
 
 import { SKILL_KEY_LABELS } from '../game/config';
 import { state } from '../game/state';
 import type { ClassInfo, ClientMessage, SkillInfo } from '../net/types';
 import { showToast } from './hud';
+import { rememberedSkin, rememberSkin, setPendingSkin, skinCards, skinKey, skinsOf } from './skins';
 
 const STORE_KEY = 'btdemo.loadout';
 
 // 浏览器里存的东西：上次的职业，和每个职业各自选的技能
-interface SavedLoadout { cls?: string; skills?: Record<string, string[]> }
+// （skins 是每个职业的外观，由 ui/skins.ts 读写）
+interface SavedLoadout { cls?: string; skills?: Record<string, string[]>; skins?: Record<string, string> }
 
 // 技能类型在卡片上的叫法
 const KIND_NAMES: Record<string, string> = {
@@ -27,7 +30,9 @@ let slotsBox: HTMLElement;
 let grid: HTMLElement;
 let confirmBtn: HTMLButtonElement;
 let classBox: HTMLElement;
+let skinBox: HTMLElement;
 let chosen: string[] = [];
+let chosenSkin = '';      // 面板上选中的外观 id（空 = 默认）
 let selectedClass = '';   // 面板上选中的职业 id（没有职业列表时是空）
 let reason: 'join' | 'death' = 'join';
 
@@ -39,6 +44,7 @@ export function initPicker(sendMsg: (msg: ClientMessage) => void): void {
     <div class="picker-panel panel">
       <div class="picker-head"><span class="picker-title"></span><span class="picker-count"></span></div>
       <div class="picker-classes"></div>
+      <div class="picker-skins"></div>
       <div class="picker-slots"></div>
       <div class="picker-grid"></div>
       <div class="picker-foot">
@@ -49,6 +55,7 @@ export function initPicker(sendMsg: (msg: ClientMessage) => void): void {
   title = root.querySelector('.picker-title')!;
   count = root.querySelector('.picker-count')!;
   classBox = root.querySelector('.picker-classes')!;
+  skinBox = root.querySelector('.picker-skins')!;
   slotsBox = root.querySelector('.picker-slots')!;
   grid = root.querySelector('.picker-grid')!;
   confirmBtn = root.querySelector('.picker-ok')!;
@@ -70,6 +77,7 @@ export function openPicker(why: 'join' | 'death'): void {
   if (pickOf() <= 0) return;
   reason = why;
   chosen = initialChoice();
+  chosenSkin = initialSkin();
   state.pickerOpen = true;
   root.classList.remove('hidden');
   render();
@@ -153,11 +161,20 @@ function initialChoice(): string[] {
   return usable(saved) ?? usable(current) ?? current.filter((id) => valid.has(id)).slice(0, pick);
 }
 
+// initialSkin 是选中职业默认选好的外观：上次选的；没有的话当前职业用现在穿的，别的职业用默认。
+function initialSkin(): string {
+  const remembered = rememberedSkin(selectedClass);
+  if (remembered) return remembered;
+  if (selectedClass === state.playerClass) return state.mySkin;
+  return '';
+}
+
 // selectClass 切换面板上的职业：技能池、个数、固定普攻和默认选择都换成该职业的。
 function selectClass(id: string): void {
   if (id === selectedClass || !state.classes.some((c) => c.id === id)) return;
   selectedClass = id;
   chosen = initialChoice();
+  chosenSkin = initialSkin();
   render();
 }
 
@@ -167,7 +184,7 @@ function confirm(): void {
   const saved = loadSaved();
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
-      cls: selectedClass || undefined, skills: { ...saved.skills, [selectedClass]: chosen },
+      ...saved, cls: selectedClass || undefined, skills: { ...saved.skills, [selectedClass]: chosen },
     }));
   } catch {
     // 存不了就算了，下次用默认的
@@ -175,6 +192,18 @@ function confirm(): void {
   const same = chosen.every((id, i) => state.skillBySlot[i + 2]?.id === id);
   if (changedClass || !same) {
     send({ t: 'loadout', skills: chosen.slice(), cls: changedClass ? selectedClass : undefined });
+  }
+  // 外观：职业没换时记下来，和现在的不一样就直接发；
+  // 换了职业的先挂着，等服务端回 SkillBar 确认换了职业后由 sync.ts 发出去并记住（服务端拒绝换职业时就不记）
+  if (skinsOf(selectedClass).length) {
+    if (changedClass) {
+      setPendingSkin(selectedClass, chosenSkin);
+    } else {
+      rememberSkin(selectedClass, chosenSkin);
+      if (skinKey(selectedClass, chosenSkin) !== skinKey(selectedClass, state.mySkin)) {
+        send({ t: 'skin', skin: chosenSkin });
+      }
+    }
   }
   closePicker();
 }
@@ -188,6 +217,7 @@ function toggle(id: string): void {
 
 function render(): void {
   renderClasses();
+  renderSkins();
   title.textContent = reason === 'join' ? '选择技能' : '重新选择技能（复活后生效）';
   count.textContent = `已选 ${chosen.length} / ${pickOf()}`;
   confirmBtn.textContent = reason === 'join' ? '出发' : '确定';
@@ -235,6 +265,19 @@ function renderClasses(): void {
     card.querySelector('.class-desc')!.textContent = cls.desc;
     card.addEventListener('click', () => selectClass(cls.id));
     return card;
+  }));
+}
+
+// renderSkins 画选中职业的外观卡；只有一套外观（或服务端没发）时整排不显示。
+function renderSkins(): void {
+  const skins = skinsOf(selectedClass);
+  skinBox.hidden = skins.length < 2;
+  const label = document.createElement('span');
+  label.className = 'skin-label';
+  label.textContent = '外观';
+  skinBox.replaceChildren(label, ...skinCards(skins, skinKey(selectedClass, chosenSkin), (skin) => {
+    chosenSkin = skin.id;
+    render();
   }));
 }
 

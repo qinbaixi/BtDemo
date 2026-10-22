@@ -3,7 +3,7 @@
 import type { GameEvent } from '../net/types';
 import { cameraKick, cameraPunch } from '../render/camera';
 import { ACTIONS, muzzleOffset } from '../render/knightActions';
-import { ATTACK_MS, FEEL, LOOK_FIRE, MODEL_SCALE } from './config';
+import { ATTACK_MS, FEEL, LOOK_FIRE, MODEL_SCALE, RARITY_COLOR } from './config';
 import { hypot } from './math';
 import { faceToward, headY, posOf, state, type ClientEntity, type FloatOpts } from './state';
 
@@ -17,12 +17,15 @@ export function onEvent(ev: GameEvent, now: number): void {
       let lead = 0;
       let origin: { x: number; y: number } | null = null;
       if (src) {
-        src.attackAt = now;
         // 玩家的每个技能有自己的动作（见 render/knightActions.ts，游侠的动作名前面加 "ranger:"），怪物都是普通攻击动作
         const actionName = src.model === 'ranger' ? `ranger:${ev.fx}` : ev.fx;
         const action = src.kind === 'player' && ev.fx ? ACTIONS[actionName!] : undefined;
-        src.action = action ? actionName! : '';
-        src.attackMs = action ? action.ms : ATTACK_MS;
+        // 装备特效追加的一箭（连射）和正常那一箭同时射出，不重新播一遍拉弓动作
+        if (!ev.proc) {
+          src.attackAt = now;
+          src.action = action ? actionName! : '';
+          src.attackMs = action ? action.ms : ATTACK_MS;
+        }
         lead = action ? action.lead : 0;
         const dst = ev.dst && ev.dst !== ev.src ? state.ents.get(ev.dst) : null;
         if (dst) { const dp = posOf(dst, now); faceToward(src, dp.x, dp.y, now); }
@@ -53,9 +56,11 @@ export function onEvent(ev: GameEvent, now: number): void {
     }
     case 'dmg': {
       if (!ev.dst) break;
-      const land = state.lands.get(ev.src);
+      // 荆棘反伤：等攻击者那一下打到身上再弹回去（攻击者的出手时刻记在 lands 里）
+      const land = state.lands.get(ev.proc === 'thorns' ? ev.dst : ev.src);
       const at = land && land.at > now ? land.at : now;
-      const color = land ? land.color : '#ffd166';
+      const proc = PROC_DAMAGE[ev.proc || ''];
+      const color = proc ? proc.color : land ? land.color : '#ffd166';
       const hit = () => {
         const t = performance.now();
         const e = state.ents.get(ev.dst);
@@ -86,6 +91,12 @@ export function onEvent(ev: GameEvent, now: number): void {
           addFloat(t, ev.dst, `吸收 ${ev.absorbed}`, '#7fd8ff', 15, 900, { rise: 30 });
         }
         if (v <= 0) return;   // 全被挡下或吸收
+        if (proc) {
+          // 装备特效打出的伤害：带特效名的小一号数字，配一个特效
+          fx.procHit(ev.dst, ev.proc!, t);
+          addFloat(t, ev.dst, `${proc.label} ${v}`, proc.color, ev.crit ? 20 : 15, 900, { rise: 34, drift });
+          return;
+        }
         const mine = ev.dst === state.myId;
         // 自己挨的暴击用大号红字，金色暴击留给自己打出去的
         if (ev.crit && !mine) addFloat(t, ev.dst, `${v}`, '#ffe14d', ev.blocked ? 22 : 30, 1200, { pop: true, rise: 58, crit: true, drift: drift * 0.5 });
@@ -103,9 +114,16 @@ export function onEvent(ev: GameEvent, now: number): void {
         fx.zoneHeal(ev.dst, now);
         break;
       }
-      // 自己放的治疗：等动作出手、绿光亮起来再飘数字
+      // 自己放的治疗：等动作出手、绿光亮起来再飘数字；吸血、格挡回血等装备特效等那一下打中
       const land = state.lands.get(ev.dst);
-      const show = () => addFloat(performance.now(), ev.dst, `+${ev.v}`, '#7cff9b', 18, 1000);
+      const proc = PROC_HEAL[ev.proc || ''];
+      const show = proc
+        ? () => {
+          const t = performance.now();
+          fx.procHeal(ev.dst, ev.proc!, t);
+          addFloat(t, ev.dst, `${proc.label} +${ev.v}`, proc.color, 14, 900, { rise: 30 });
+        }
+        : () => addFloat(performance.now(), ev.dst, `+${ev.v}`, '#7cff9b', 18, 1000);
       if (land && land.at > now) state.pending.push({ at: land.at, fn: show });
       else show();
       break;
@@ -129,12 +147,39 @@ export function onEvent(ev: GameEvent, now: number): void {
     case 'say':
       state.bubbles.set(ev.id, { text: String(ev.text || ''), until: now + 3000 });
       break;
+    case 'loot': {
+      // 掉落：一颗稀有度颜色的光从怪物身上飞到拿到的人身上，头顶报装备名
+      const item = ev.item ? state.items.get(ev.item) : undefined;
+      const color = RARITY_COLOR[item?.rarity || 'common'] || RARITY_COLOR.common;
+      const from = ev.src ? state.ents.get(ev.src) : undefined;
+      const start = from ? posOf(from, now) : null;
+      const flight = fx.loot(start, ev.dst, color, item?.rarity === 'epic', now);
+      if (item) {
+        const mine = ev.dst === state.myId;
+        state.pending.push({
+          at: now + flight,
+          fn: () => addFloat(performance.now(), ev.dst, `获得 ${item.name}`, color, mine ? 17 : 13, 1500, { pop: mine, rise: 54 }),
+        });
+      }
+      break;
+    }
     case 'lvl':
       fx.levelUp(ev.id, now);
       addFloat(now, ev.id, `升级! Lv ${ev.lv}`, '#ffd54a', 26, 1600, { pop: true, rise: 60 });
       break;
   }
 }
+
+// 装备特效打出的伤害和治疗：飘字前缀和颜色（特效本身在 render/fx.ts 的 procHit / procHeal）
+const PROC_DAMAGE: Record<string, { label: string; color: string }> = {
+  thorns: { label: '反伤', color: '#d8dde6' },
+  ignite: { label: '点燃', color: '#ff8a3a' },
+  multishot: { label: '连射', color: '#f0e2b6' },
+};
+const PROC_HEAL: Record<string, { label: string; color: string }> = {
+  lifesteal: { label: '吸血', color: '#ff7a8a' },
+  block_heal: { label: '格挡', color: '#7cff9b' },
+};
 
 // feelHit 处理一次命中的打击感：双方顿帧、受击方向、镜头冲击、连击数。
 // 返回受击方向的横向分量（伤害数字往这边飘）。

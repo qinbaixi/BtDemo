@@ -32,6 +32,8 @@ func entityInfo(entity *core.Entity) *pb.EntityInfo {
 		Hp:    core.F32(math.Ceil(entity.HP)),
 		MaxHp: core.F32(math.Ceil(entity.Attr.MaxHP)),
 		Model: proto.String(entity.Model),
+		Skin:  proto.String(entity.Skin),
+		Gear:  proto.String(entity.GearLook()),
 	}
 }
 
@@ -102,7 +104,64 @@ func classInfo(cfg *config.Config, class *config.Class) *pb.ClassInfo {
 		Pool:     skillPool(cfg, class),
 		Pick:     core.I32(class.Pick()),
 		CanBlock: proto.Bool(class.CanBlock),
+		Skins:    skinInfos(class.Skins),
 	}
+}
+
+// skinInfos 是职业的皮肤列表（第一个是默认）。
+func skinInfos(skins []*config.Skin) []*pb.SkinInfo {
+	infos := make([]*pb.SkinInfo, 0, len(skins))
+	for _, skin := range skins {
+		infos = append(infos, &pb.SkinInfo{
+			Id:    proto.String(skin.ID),
+			Name:  proto.String(skin.Name),
+			Desc:  proto.String(skin.Desc),
+			Color: proto.String(skin.Color),
+		})
+	}
+	return infos
+}
+
+// itemInfos 是装备图鉴：每件物品的定义，属性按 config.StatNames 的顺序，只列不为 0 的。
+func itemInfos(items []*config.Item) []*pb.ItemInfo {
+	infos := make([]*pb.ItemInfo, 0, len(items))
+	for _, item := range items {
+		info := &pb.ItemInfo{
+			Id:     proto.String(item.ID),
+			Name:   proto.String(item.Name),
+			Slot:   proto.String(item.Slot),
+			Class:  proto.String(item.Class),
+			Rarity: proto.String(item.Rarity),
+			Desc:   proto.String(item.Desc),
+			Look:   proto.String(item.Look),
+		}
+		for _, stat := range config.StatNames {
+			if value := item.Stats[stat]; value != 0 {
+				info.Stats = append(info.Stats, &pb.ItemStat{
+					Stat:  proto.String(stat),
+					Value: proto.Float32(float32(value)),
+				})
+			}
+		}
+		if item.Effect != nil {
+			info.Effect = proto.String(item.Effect.Kind)
+		}
+		infos = append(infos, info)
+	}
+	return infos
+}
+
+// inventoryInfo 是玩家完整的背包和装备，按 UID 排好；capacity 是背包格数。
+func inventoryInfo(entity *core.Entity, capacity int) *pb.Inventory {
+	inventory := &pb.Inventory{Capacity: core.I32(capacity)}
+	for _, owned := range entity.Items {
+		inventory.Items = append(inventory.Items, &pb.ItemSlotted{
+			Uid:  core.I32(owned.UID),
+			Id:   proto.String(owned.Cfg.ID),
+			Slot: proto.String(owned.Slot),
+		})
+	}
+	return inventory
 }
 
 // skillBar 是按格子排好的技能栏。

@@ -29,6 +29,44 @@ export interface ClassInfo {
   pool: SkillInfo[];     // 可以挑的技能
   pick: number;          // 要挑几个（放在第 2 格起）
   canBlock: boolean;     // 右键格挡是否有效
+  skins: SkinInfo[];     // 这个职业的外观，第一个是默认
+}
+
+// SkinInfo 是职业的一套外观：骨骼和动作不变，只换配色和部件画法。
+export interface SkinInfo {
+  id: string;
+  name: string;
+  desc: string;
+  color: string;   // 选择面板上的色块
+}
+
+// 装备槽位
+export type ItemSlot = 'weapon' | 'armor' | 'trinket' | string;
+
+// ItemStat 是装备上的一条属性加成；crit、crit_dmg、cdr 是小数（0.05 = 5%）。
+export interface ItemStat {
+  stat: string;    // str | agi | int | vit | max_hp | atk | matk | def | mdef | crit | crit_dmg | speed | cdr
+  value: number;
+}
+
+// ItemInfo 是一种装备（config/items.yaml，welcome 里一次发全）。
+export interface ItemInfo {
+  id: string;
+  name: string;
+  slot: ItemSlot;
+  cls: string;      // 限定职业 id，空 = 通用（协议里的 class）
+  rarity: 'common' | 'rare' | 'epic' | string;
+  desc: string;     // 特效的一句话说明
+  stats: ItemStat[];
+  effect: string;   // 特效种类，如 lifesteal；空 = 没有
+  look: string;     // 装备武器时画的外观；空 = 职业默认武器
+}
+
+// ItemSlotted 是玩家拥有的一件装备：在背包里，或穿在某个槽位上。
+export interface ItemSlotted {
+  uid: number;      // 每个玩家内唯一
+  id: string;       // ItemInfo.id
+  slot: string;     // 穿在这个槽位；空 = 在背包里
 }
 
 export interface Obstacle {
@@ -52,6 +90,8 @@ export interface EntityInfo {
   hp?: number;
   maxHp?: number;
   model?: string;
+  skin?: string;   // 玩家外观 id（空 = 默认）
+  gear?: string;   // 当前武器的 ItemInfo.look（空 = 职业默认武器）
 }
 
 export interface EntityState {
@@ -69,7 +109,7 @@ export interface EntityState {
   looks?: number;      // Buff 外观的位：LOOK_HASTE 等（见 game/config.ts）
 }
 
-export type EventKind = 'cast' | 'dmg' | 'heal' | 'buff' | 'die' | 'respawn' | 'say' | 'lvl';
+export type EventKind = 'cast' | 'dmg' | 'heal' | 'buff' | 'die' | 'respawn' | 'say' | 'lvl' | 'loot';
 
 export interface GameEvent {
   k: EventKind;
@@ -94,6 +134,8 @@ export interface GameEvent {
   tx?: number;       // cast（闪现、飞斧）：终点；起点是 x、y
   ty?: number;
   zone?: number;     // heal：站在这个回血区里回的血（Zone.id）
+  item?: string;     // loot：掉落的 ItemInfo.id（src = 死掉的怪，dst = 拿到的玩家）
+  proc?: string;     // dmg / heal：由装备特效触发时是特效种类（lifesteal、thorns、ignite……）
 }
 
 // ZoneInfo 是地上的一块回血区：出生点的常驻泉水，或技能放下的法阵。
@@ -191,6 +233,7 @@ export interface WelcomeMsg {
   pick: number;        // 要挑几个（放在第 2 格起）
   classes: ClassInfo[];   // 可选职业，第一个是默认
   playerClass: string;    // 当前职业 id
+  items: ItemInfo[];      // 全部装备种类（装备图鉴）
 }
 export interface EnterMsg { t: 'enter'; ents: EntityInfo[] }
 export interface LeaveMsg { t: 'leave'; ids: number[] }
@@ -206,7 +249,10 @@ export interface SyncMsg {
 export interface ToastMsg { t: 'msg'; text: string }
 export interface SkillBarMsg { t: 'skills'; skills: SkillInfo[]; playerClass: string }   // playerClass 空 = 职业没变
 
-export type ServerMessage = WelcomeMsg | EnterMsg | LeaveMsg | SyncMsg | ToastMsg | SkillBarMsg;
+// InventoryMsg 是整份背包和身上的装备：进游戏后和每次变化时发。
+export interface InventoryMsg { t: 'inventory'; items: ItemSlotted[]; capacity: number }   // capacity 是背包格数（穿着的不算）
+
+export type ServerMessage = WelcomeMsg | EnterMsg | LeaveMsg | SyncMsg | ToastMsg | SkillBarMsg | InventoryMsg;
 
 export type ClientMessage =
   | { t: 'move'; dx: number; dy: number }
@@ -214,4 +260,7 @@ export type ClientMessage =
   | { t: 'cast'; slot: number; target: number; dx?: number; dy?: number }
   | { t: 'loadout'; skills: string[]; cls?: string }   // cls 空 = 不换职业
   | { t: 'watch'; id: number }
-  | { t: 'block'; on: boolean };
+  | { t: 'block'; on: boolean }
+  | { t: 'equip'; uid: number }      // 穿上背包里的一件（ItemSlotted.uid）
+  | { t: 'unequip'; slot: string }   // 把这个槽位的卸回背包
+  | { t: 'skin'; skin: string };     // 换当前职业的外观（空 = 默认）

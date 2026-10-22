@@ -12,6 +12,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/aoi"
 	"github.com/qinbaixi/BtDemo/internal/game/attr"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
+	"github.com/qinbaixi/BtDemo/internal/game/item"
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
@@ -36,19 +37,33 @@ type System struct {
 	state *core.State
 	grid  *aoi.Grid
 	attr  *attr.System
-	nav   *nav.Map // 闪现和投掷物要知道障碍物在哪
+	nav   *nav.Map     // 闪现和投掷物要知道障碍物在哪
+	items *item.System // 玩家打死怪物时掉落装备
 }
 
 // New 创建战斗系统。
-func New(state *core.State, grid *aoi.Grid, attrSys *attr.System, navMap *nav.Map) *System {
-	return &System{state: state, grid: grid, attr: attrSys, nav: navMap}
+func New(
+	state *core.State,
+	grid *aoi.Grid,
+	attrSys *attr.System,
+	navMap *nav.Map,
+	itemSys *item.System,
+) *System {
+	return &System{
+		state: state,
+		grid:  grid,
+		attr:  attrSys,
+		nav:   navMap,
+		items: itemSys,
+	}
 }
 
-// Tick 清除已过期的 Buff。
+// Tick 清除已过期的 Buff，并结算装备的持续回血（regen）。
 func (sys *System) Tick() {
 	sys.state.Ents.Each(func(entity *core.Entity) {
 		if !entity.Dead {
 			sys.UpdateBuffs(entity)
+			sys.regen(entity)
 		}
 	})
 }
@@ -126,6 +141,10 @@ func (sys *System) CalcDamage(src, dst *core.Entity, skill *config.Skill) (float
 		}
 	}
 	crit := sys.state.Rand.Float64() < src.Attr.Crit
+	// 伏击（ambush 特效）：位移后限定时间内的下一次伤害必定暴击，打中（没被免疫）才算用掉，见 damage
+	if src.AmbushUntil > sys.state.Now() {
+		crit = true
+	}
 	if crit {
 		dmg *= src.Attr.CritDmg
 	}
@@ -208,6 +227,7 @@ func (sys *System) CastAimed(
 		entity.X, entity.Y = end.X, end.Y
 		sys.grid.Moved(entity)
 		sys.state.Events.Emit(entity, event)
+		sys.startAmbush(entity)
 	case "line":
 		dir, ok := unit(aimX, aimY)
 		if !ok {
@@ -273,7 +293,8 @@ func (sys *System) CastAimed(
 	default:
 		return ErrBadSkill
 	}
-	entity.Cooldowns[skill.ID] = now + skill.Cooldown
+	// 冷却缩减（装备的 cdr）让冷却变短
+	entity.Cooldowns[skill.ID] = now + skill.Cooldown*(1-entity.Attr.CDR)
 	entity.CanPick = false // 放过技能就不能再换技能了，等下次死亡
 	return nil
 }
@@ -387,8 +408,8 @@ func (sys *System) castRain(
 	return nil
 }
 
-// addBuff 给 entity 加上 Buff（同名的会被刷新，不叠加），并通知客户端。
-func (sys *System) addBuff(entity *core.Entity, cfg *config.Buff) {
+// addBuff 给 entity 加上 Buff（同名的会被刷新，不叠加），并通知客户端；返回发出的 BUFF 事件。
+func (sys *System) addBuff(entity *core.Entity, cfg *config.Buff) *core.Event {
 	filterBuffs(entity, func(buff *core.Buff) bool { return buff.Cfg.Name != cfg.Name })
 	entity.Buffs = append(
 		entity.Buffs,
@@ -399,43 +420,83 @@ func (sys *System) addBuff(entity *core.Entity, cfg *config.Buff) {
 		},
 	)
 	attr.Recalc(entity)
-	sys.state.Events.Emit(
-		entity,
-		&core.Event{
-			Kind: pb.EventKind_BUFF.Enum(),
-			Dst:  core.I32(entity.ID),
-			Name: &cfg.Name,
-			Dur:  core.F32(cfg.Duration),
-		},
-	)
+	event := &core.Event{
+		Kind: pb.EventKind_BUFF.Enum(),
+		Dst:  core.I32(entity.ID),
+		Name: &cfg.Name,
+		Dur:  core.F32(cfg.Duration),
+	}
+	sys.state.Events.Emit(entity, event)
+	return event
 }
 
-// applyDamage 从 dst 中扣除 dmg，记录攻击者，并在 HP 归零时击杀 dst。
-// 无敌时整个免掉；否则先按格挡减伤，再由护盾吸收，剩下的才扣生命。
-// 技能带 Debuff 时，没被免掉、也没被打死的目标会挂上它。
+// applyDamage 结算技能 skill 的一次命中：src 对 dst 造成 dmg 点伤害（见 damage），
+// 然后触发双方装备的特效（见 effects.go 的 afterHit）。
+// 技能带 Debuff 时，没被免掉、也没被打死的目标会挂上它。施法者已经死了时什么都不做。
 func (sys *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, skill *config.Skill) {
+	// 施法者可能在同一次范围技能里被前面目标的反伤打死了，死了就不再打后面的目标
+	if !src.Alive() {
+		return
+	}
+	result := sys.damage(src, dst, dmg, crit, skill.ID, "")
+	if result.immune {
+		return
+	}
+	sys.afterHit(src, dst, skill, result)
+	if dst.Alive() && skill.Debuff != nil {
+		sys.addBuff(dst, skill.Debuff)
+	}
+}
+
+// damageResult 是一次伤害结算的结果。
+type damageResult struct {
+	immune  bool    // 目标无敌，整次伤害被免掉
+	blocked float64 // 被格挡掉的伤害
+	taken   float64 // 实际扣掉的生命
+}
+
+// damage 从 dst 中扣除 dmg，记录攻击者，发 DAMAGE 事件（skillID、proc 不空时写进事件），
+// 并在 HP 归零时击杀 dst。无敌时整个免掉；否则先按格挡减伤，再由护盾吸收，剩下的才扣生命。
+// 它不触发任何装备特效，特效自己造成的伤害（proc 不空）也走这里，所以特效不会连锁触发。
+func (sys *System) damage(
+	src, dst *core.Entity,
+	dmg float64,
+	crit bool,
+	skillID string,
+	proc string,
+) damageResult {
 	event := &core.Event{
-		Kind:  pb.EventKind_DAMAGE.Enum(),
-		Src:   core.I32(src.ID),
-		Dst:   core.I32(dst.ID),
-		Crit:  &crit,
-		Skill: &skill.ID,
+		Kind: pb.EventKind_DAMAGE.Enum(),
+		Src:  core.I32(src.ID),
+		Dst:  core.I32(dst.ID),
+		Crit: &crit,
+	}
+	if skillID != "" {
+		event.Skill = proto.String(skillID)
+	}
+	if proc != "" {
+		event.Proc = proto.String(proc)
 	}
 	if dst.Invulnerable() {
 		event.Value = core.F32(0)
 		event.Immune = proto.Bool(true)
 		sys.state.Events.Emit(dst, event)
-		return
+		return damageResult{immune: true}
 	}
+	if crit && src.AmbushUntil > 0 {
+		src.AmbushUntil = 0 // 伏击的必暴用掉了
+	}
+	result := damageResult{}
 	if dst.Blocking {
-		blocked := math.Round(dmg * sys.state.Cfg.World.Player.Block.Reduce)
-		dmg -= blocked
-		event.Blocked = core.F32(blocked)
+		result.blocked = math.Round(dmg * sys.state.Cfg.World.Player.Block.Reduce)
+		dmg -= result.blocked
+		event.Blocked = core.F32(result.blocked)
 	}
 	if absorbed := sys.absorb(dst, dmg); absorbed > 0 {
 		dmg -= absorbed
 		event.Absorbed = core.F32(absorbed)
 	}
+	result.taken = dmg
 	event.Value = core.F32(dmg)
 	dst.HP -= dmg
 	dst.LastAttacker = src.ID
@@ -443,11 +504,8 @@ func (sys *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, sk
 	sys.state.Events.Emit(dst, event)
 	if dst.HP <= 0 {
 		sys.Kill(dst, src)
-		return
 	}
-	if skill.Debuff != nil {
-		sys.addBuff(dst, skill.Debuff)
-	}
+	return result
 }
 
 // absorb 用 entity 身上的护盾吸收至多 dmg 点伤害，返回吸收了多少；吸收完的护盾 Buff 被移除。
@@ -494,6 +552,9 @@ func (sys *System) Kill(entity, killer *core.Entity) {
 		delay = entity.Tmpl.Respawn
 		if killer != nil && killer.Kind == core.KindPlayer {
 			sys.attr.GainExp(killer, entity.Tmpl.Exp)
+			if entity.Kind == core.KindMonster {
+				sys.items.Loot(entity, killer)
+			}
 		}
 	}
 	entity.RespawnAt = sys.state.Now() + delay

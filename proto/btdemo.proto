@@ -19,7 +19,26 @@ message ClientMsg {
     Watch watch = 4;
     Block block = 5;
     Loadout loadout = 6;
+    Equip equip = 7;
+    Unequip unequip = 8;
+    SetSkin skin = 9;
   }
+}
+
+// Equip puts a bag item on; whatever was in that slot goes back to the bag.
+// Allowed any time; refused (Toast) when the item is not in the bag or is for another class.
+message Equip {
+  required int32 uid = 1;   // ItemSlotted.uid from Inventory
+}
+
+// Unequip takes the item in a slot off and puts it in the bag.
+message Unequip {
+  required string slot = 1;   // weapon | armor | trinket
+}
+
+// SetSkin changes the player's look for the current class (cosmetic, allowed any time).
+message SetSkin {
+  required string skin = 1;   // SkinInfo.id of the current class; empty = default
 }
 
 // Loadout picks the player's class and skills for slots 2.. (slot 1, the
@@ -75,7 +94,39 @@ message ServerMsg {
     Sync sync = 4;
     Toast toast = 5;
     SkillBar skill_bar = 6;
+    Inventory inventory = 7;
   }
+}
+
+// ItemInfo is one kind of equipment, from config/items.yaml (sent once in Welcome).
+message ItemInfo {
+  required string id = 1;
+  required string name = 2;
+  required string slot = 3;        // weapon | armor | trinket
+  optional string class = 4;       // empty = any class
+  optional string rarity = 5;      // common | rare | epic
+  optional string desc = 6;        // what the special effect does, one line
+  repeated ItemStat stats = 7;     // flat stat bonuses, in display order
+  optional string effect = 8;      // special effect kind, e.g. lifesteal (empty = none)
+  optional string look = 9;        // weapon look the client draws when equipped (empty = class default)
+}
+
+message ItemStat {
+  required string stat = 1;   // str | agi | int | vit | max_hp | atk | matk | def | mdef | crit | crit_dmg | speed | cdr
+  required float value = 2;   // crit, crit_dmg, cdr are fractions (0.05 = 5%)
+}
+
+// ItemSlotted is one item the player owns: in the bag, or equipped in a slot.
+message ItemSlotted {
+  required int32 uid = 1;    // unique per player
+  required string id = 2;    // ItemInfo.id
+  optional string slot = 3;  // equipped in this slot; empty = in the bag
+}
+
+// Inventory is the player's whole bag and equipment, sent after join and on every change.
+message Inventory {
+  repeated ItemSlotted items = 1;
+  optional int32 capacity = 2;   // bag size (equipped items do not count)
 }
 
 // SkillBar is the player's new skill bar after a Loadout was accepted.
@@ -109,6 +160,15 @@ message ClassInfo {
   repeated SkillInfo pool = 7;     // skills to pick from (slot is 0)
   optional int32 pick = 8;         // how many to pick (slots 2..pick+1)
   optional bool can_block = 9;     // right-click block works (knight has a shield, ranger does not)
+  repeated SkinInfo skins = 10;    // looks for this class; the first is the default
+}
+
+// SkinInfo is one look of a class: same skeleton and actions, different outfit.
+message SkinInfo {
+  required string id = 1;
+  required string name = 2;
+  optional string desc = 3;
+  optional string color = 4;   // swatch colour for the picker
 }
 
 // Welcome is the first message after connecting: a new character was created.
@@ -124,6 +184,7 @@ message Welcome {
   optional int32 pick = 9;            // how many to pick (slots 2..pick+1)
   repeated ClassInfo classes = 10;    // classes to choose from; the first is the default
   optional string class = 11;         // the player's current class (pool/pick above are for it)
+  repeated ItemInfo items = 12;       // every item kind (equipment catalogue)
 }
 
 enum ObstacleShape {
@@ -161,6 +222,8 @@ message EntityInfo {
   optional float hp = 9;
   optional float max_hp = 10;
   optional string model = 11;  // which look the client draws, e.g. knight, slime
+  optional string skin = 12;   // player skin id (empty = default look)
+  optional string gear = 13;   // equipped weapon's ItemInfo.look (empty = class default weapon)
 }
 
 message Enter {
@@ -196,6 +259,7 @@ enum EventKind {
   RESPAWN = 6;
   SAY = 7;
   LEVEL_UP = 8;
+  LOOT = 9;
 }
 
 // Event is a one-off thing that happened inside the AOI. Which fields are set
@@ -223,6 +287,8 @@ message Event {
   optional float tx = 20;       // CAST of a dash or line skill: where it ended (x, y is where it started)
   optional float ty = 21;
   optional int32 zone = 22;     // HEAL: from standing in this zone (Zone.id)
+  optional string item = 23;    // LOOT: ItemInfo.id that dropped (src = the slain monster, dst = who got it)
+  optional string proc = 24;    // DAMAGE / HEAL caused by an item effect: the effect kind (lifesteal, thorns, ignite, ...)
 }
 
 message Attrs {

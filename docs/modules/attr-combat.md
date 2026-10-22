@@ -1,6 +1,6 @@
 # attr 和 combat：属性与战斗
 
-代码：`internal/game/attr/attr.go`，`internal/game/combat/combat.go`
+代码：`internal/game/attr/attr.go`，`internal/game/combat/combat.go`，`internal/game/combat/effects.go`（装备特效，见 [item](items.md)）
 
 ## attr：属性
 
@@ -19,22 +19,26 @@ Crit    = min(0.6, 0.05 + Agi×0.004)   暴击率
 CritDmg = 1.5 + Agi×0.005              暴击伤害倍数
 Speed   = 配置的移速
 
-Buff：Atk、MAtk ×(1+ΣAtkPct)，Def、MDef ×(1+ΣDefPct)，Speed ×(1+ΣSpeedPct)
+装备：str/agi/int/vit 先加到基础属性上再套上面的公式；max_hp、atk 等直接加在结果上；
+      CDR = min(0.4, Σcdr)，技能冷却 ×(1 − CDR)
+Buff：Atk、MAtk ×(1+ΣAtkPct)，Def、MDef ×(1+ΣDefPct)，Speed ×(1+ΣSpeedPct)（装备加的部分也一起缩放）
 ```
 
 ### 关键函数
 
 | 函数 | 作用 |
 | --- | --- |
-| `Compute(base, speed, buffs)` | 纯函数：输入基础属性、移速和 Buff，返回派生属性。方便单独测试 |
-| `Recalc(entity)` | 重算 `entity.Attr`。最大生命变化时**保持血量百分比**，而不是保持血量数值 |
+| `Compute(base, speed, buffs)` | 纯函数：输入基础属性、移速和 Buff，返回派生属性（不算装备）。方便单独测试 |
+| `ComputeWithGear(base, speed, buffs, gear)` | 同上，另外加上装备的属性加成 `config.StatBonus` |
+| `GearBonus(entity)` | 实体身上所有装备着的物品的加成之和 |
+| `Recalc(entity)` | 重算 `entity.Attr`（含装备）。最大生命变化时**保持血量百分比**，而不是保持血量数值 |
 | `Init(entity)` | 重算并回满血（出生、复活、升级） |
 | `LevelUp(entity)` | 等级 +1，基础属性加上成长值 |
 | `System.GainExp(entity, n)` | 加经验，够了就连续升级，每升一级发 `LEVEL_UP` 事件 |
 
 升级所需经验：`100 × 当前等级`。
 
-属性只在会变化的时候重算（Buff 增减、升级、复活），不是每帧算。
+属性只在会变化的时候重算（Buff 增减、升级、复活、穿脱装备），不是每帧算。
 
 ## combat：技能与伤害
 
@@ -87,7 +91,7 @@ CastAimed(e, skill, targetID, aimX, aimY)
   │          发 CAST（fx rain，x、y 是落点，radius，dst 是目标或空），再按 id 顺序给落点 radius 内的敌人结算
   ├─ self：  发 CAST 事件 → 治疗（HEAL 事件）/ 加 Buff（BUFF 事件，重放刷新不叠加；
   │          Buff 有 shield_pct 时带一个护盾，能吸收 最大生命 × shield_pct 的伤害）
-  └─ 成功后：Cooldowns[技能] = 现在 + cooldown；CanPick = false（放过技能就不能再换技能了）
+  └─ 成功后：Cooldowns[技能] = 现在 + cooldown × (1 − CDR)；CanPick = false（放过技能就不能再换技能了）
 ```
 
 返回的 error 是给玩家看的中文提示，session 会把它作为 `Toast` 发给客户端；行为树里失败就让节点返回 Failure。
@@ -100,7 +104,7 @@ AOE 先收集目标再结算，是因为结算可能杀死目标，而遍历 AOI
 原始伤害 = 攻击 × ratio + base               （法术技能用 MAtk 对 MDef）
 减伤后   = 原始伤害 × (1 − 防御 / (防御 + 100))
 附魔     = 物理技能才有：身上每个带 bonus_magic 的 Buff，各加 法强 × bonus_magic × (1 − 目标法防/(目标法防+100))
-暴击     = 随机 < 暴击率 时 × CritDmg （附魔那份也一起乘）
+暴击     = 随机 < 暴击率 时 × CritDmg （附魔那份也一起乘）；ambush 特效生效时必定暴击
 浮动     = × 0.95 ~ 1.05
 最终     = max(1, 四舍五入)
 ```
@@ -119,6 +123,8 @@ AOE 先收集目标再结算，是因为结算可能杀死目标，而遍历 AOI
 
 剩下的才扣生命（`Event.v`），可能是 0。
 
+扣血、发事件、击杀都在 `damage` 里做；`applyDamage` 是技能命中的入口：先 `damage`，没被无敌免掉的话再 `afterHit` 触发双方的装备特效（吸血、点燃、冰冻、多重射击、格挡回血、反伤，见 [item](items.md)），最后挂 debuff。特效自己造成的伤害也走 `damage`（事件带 `proc`），但不再触发特效。
+
 扣完血如果目标还活着，且技能配了 `debuff`，就把它加到目标身上（同名刷新，同 `addBuff`）。被无敌免掉、或者这一下把目标打死的，都不加。
 
 ### 死亡
@@ -128,12 +134,12 @@ AOE 先收集目标再结算，是因为结算可能杀死目标，而遍历 AOI
 - 标记死亡，清空目标和 Buff，发 `DIE` 事件。
 - 玩家的 `CanPick` 设为真，死亡期间可以重新挑技能（挑的规则见 [session 和 server](session-server.md)）；怪物不会。
 - 安排复活时间：怪物用模板的 `respawn`，玩家用 `world.yaml` 的 `player.respawn`。真正的复活由 spawn 系统在时间到时执行。
-- 怪物被**玩家**击杀时，给玩家加模板配置的经验。
+- 怪物被**玩家**击杀时，给玩家加模板配置的经验，并由 `item.Loot` 按 `world.yaml` 的 `loot` 掉落装备（见 [item](items.md)）。
 - 尸体留在 AOI 格子里，周围的人能看到倒地动画。
 
 ### 其他接口
 
-- `Tick()`：每帧清掉过期的 Buff，有变化就重算属性。
+- `Tick()`：每帧清掉过期的 Buff，有变化就重算属性；给带 regen 装备的实体回血。
 - `NearestHostile(entity, r)`：半径内最近的敌对单位（行为树找目标用）。距离相同时选 id 小的，保证结果稳定。
 - `NearestMonster(entity, r)`：玩家没选目标就放技能时，自动选最近的怪。
 - 敌对关系来自 `world.yaml` 的 `hostile` 表，按阵营判断，`State.Hostile(a, b)`。

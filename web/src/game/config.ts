@@ -84,3 +84,6 @@ export const LOOK_HASTE = 1;   // 疾风步：脚下风痕
 export const LOOK_HOLY = 2;    // 圣光庇护：金光罩
 export const LOOK_FIRE = 4;    // 烈焰附魔：武器着火
 export const LOOK_FROST = 8;   // 冰冻：身体发蓝、动作变慢
+
+// 装备稀有度的颜色：名字、图标边框、掉落光
+export const RARITY_COLOR: Record<string, string> = { common: '#d8d0c0', rare: '#5fa8ff', epic: '#c77dff' };

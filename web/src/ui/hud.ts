@@ -40,6 +40,10 @@ function fmtMult(v: unknown): string {
   if (typeof v !== 'number') return '-';
   return (Math.round(v * 100) / 100) + '×';
 }
+// formatDerived 把一项派生属性写成界面上的样子（暴击率是百分比，暴击伤害是倍数）。装备面板也用。
+export function formatDerived(key: string, v: unknown): string {
+  return key === 'crit' ? fmtCrit(v) : key === 'critDmg' ? fmtMult(v) : fmt(v as number);
+}
 function setText(el: HTMLElement | undefined, s: string): void {
   if (el && el.textContent !== s) el.textContent = s;
 }
@@ -155,9 +159,7 @@ export function renderSelf(): void {
 
   for (const [k] of BASE_ATTRS) setText(attrEls['base.' + k], fmt((s.base as any)?.[k]));
   for (const [k] of DERIVED_ATTRS) {
-    const v = (s.attr as any)?.[k];
-    const text = k === 'crit' ? fmtCrit(v) : k === 'critDmg' ? fmtMult(v) : fmt(v);
-    setText(attrEls['der.' + k], text);
+    setText(attrEls['der.' + k], formatDerived(k, (s.attr as any)?.[k]));
   }
   renderBuffs(s.buffs || []);
 }
