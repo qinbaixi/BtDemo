@@ -1,0 +1,168 @@
+{
+  "type": "Selector",
+  "label": "火灵",
+  "comment": "回到主人身边 > 战斗（爆燃 > 保持距离放火球）> 跟随",
+  "services": [
+    {
+      "type": "GuardOwner",
+      "label": "守护主人",
+      "properties": [
+        {
+          "name": "Range",
+          "value": 300
+        },
+        {
+          "name": "Leash",
+          "value": 450
+        }
+      ],
+      "timeBetweenTicks": 0.3
+    }
+  ],
+  "childNodes": [
+    {
+      "type": "Sequence",
+      "label": "回到主人身边",
+      "decorators": [
+        {
+          "type": "OwnerFar",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 350
+            }
+          ]
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "ClearTarget"
+        },
+        {
+          "type": "FollowOwner",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 60
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Selector",
+      "label": "战斗",
+      "decorators": [
+        {
+          "type": "HasTarget"
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "CastSkill",
+          "label": "爆燃",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 2
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 90
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Sequence",
+          "label": "远程输出",
+          "childNodes": [
+            {
+              "type": "KeepDistance",
+              "properties": [
+                {
+                  "name": "Min",
+                  "value": 120
+                },
+                {
+                  "name": "Max",
+                  "value": 220
+                }
+              ]
+            },
+            {
+              "type": "CastSkill",
+              "label": "火球",
+              "properties": [
+                {
+                  "name": "Slot",
+                  "value": 1
+                }
+              ],
+              "decorators": [
+                {
+                  "type": "ForceSuccess",
+                  "comment": "技能冷却时也留在战斗分支，不跑回主人身边"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "跟随",
+      "childNodes": [
+        {
+          "type": "FollowOwner",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 60
+            }
+          ]
+        },
+        {
+          "type": "Wait",
+          "properties": [
+            {
+              "name": "Seconds",
+              "value": 0.5
+            }
+          ]
+        },
+        {
+          "type": "Say",
+          "properties": [
+            {
+              "name": "Text",
+              "value": "噼啪～"
+            }
+          ],
+          "decorators": [
+            {
+              "type": "Cooldown",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 20
+                }
+              ]
+            },
+            {
+              "type": "ForceSuccess",
+              "comment": "说话冷却中也继续执行后面的节点"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

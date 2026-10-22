@@ -184,6 +184,14 @@ web/
 - 记忆：每个职业上次选的外观存在 `localStorage` 的 `btdemo.loadout` 里，新加的 `skins` 字段（`{ cls, skills: { 职业: [技能] }, skins: { 职业: 外观 id } }`）；老数据没有 `skins` 也照常读，写的时候保留其他字段（`ui/skins.ts`）。记住的外观已经不存在时当作默认。
 - 只有一套外观（或服务端没发）时两处的外观行都不显示。
 
+## 宠物
+
+- 装备面板（E）的「宠物」一栏：外观下面一排宠物卡加一张「不带」（`bag.ts` 的 `renderPets`，卡片复用外观卡的 `skin-card`，加 `pet-card` 变体）。点卡发 `SetPet`（`{ t: 'pet', pet }`），空串 = 收回。换宠物有冷却：`state.petCooldownUntil` 没到时卡片加 `cooling`（变暗）、显示剩余秒数，点了只提示。
+- 选择记在 localStorage `btdemo.pet`（空串 = 不带，没存过是 null）。Welcome 后，服务端默认召唤第一只；记住的选择不同就发一次 `SetPet`（`sync.ts` 的 `onWelcome`）。
+- 服务端 `PetStatus`（`state.myPet`、`petEntity`、`petRespawnAt`、`petCooldownUntil`）由 `sync.ts` 的 `onPetStatus` 记下；`hud.ts` 的 `renderPetHud` 在自己面板末尾画宠物小卡（`.pet-hud`）：名字、等级、血条；死了显示复活倒计时，不带时显示「不带宠物」。
+- 宠物实体的 `kind` 是 `pet`，`owner` 是主人的实体 id；名牌由 `state.ts` 的 `refreshPetNames` 拼成「主人名 的 宠物名」，颜色在 `overlay.ts`（自己的金色，别人的青绿）。
+- 不能被选为目标：`input.ts` 的 `pickEntity` 跳过宠物，自动普攻只打怪物。调试模式下点宠物只让 BT 面板看它（`debug.ts` 的 `pickPet`），不改游戏里的目标。
+
 ## 技能特效和外观
 
 **特效**（`render/fx.ts` 的 `cast()`，按 `fx` 分支）：

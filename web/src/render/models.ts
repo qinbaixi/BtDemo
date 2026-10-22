@@ -27,7 +27,7 @@ const TAU = Math.PI * 2;
 const PI = Math.PI;
 const OUTLINE = '#0b0710';
 
-export const MODELS = ['knight', 'ranger', 'slime', 'wolf', 'skeleton_archer', 'ogre_chief', 'guard', 'villager'];
+export const MODELS = ['knight', 'ranger', 'slime', 'wolf', 'skeleton_archer', 'ogre_chief', 'guard', 'villager', 'wolf_pup', 'ember', 'sprout'];
 
 /* ------------------------------ colour ------------------------------ */
 
@@ -2389,6 +2389,339 @@ function drawOgre(ctx, q) {
 
 /* ------------------------------ fallback ---------------------------- */
 
+/* ------------------------------- pets ------------------------------- */
+// 宠物：比怪物小一圈、圆一点、表情友好，脖子上都有一样东西表明是有主人的（项圈 / 铃铛 / 花环）。
+// 动作名就是宠物技能的 fx（见 config/skills.yaml）：攻击走 q.ph，其他技能走 q.action。
+
+// petCast 返回施放类动作（嚎叫、治疗）的进度：举起 → 保持 → 放下，没有动作时是 0。
+function petCast(q) {
+  if (!q.ph || !['buff', 'circle', 'heal'].includes(q.action)) return 0;
+  return q.ph.strike === 0 ? q.ph.wind * 0.6 : 0.6 + 0.4 * q.ph.strike * (1 - q.ph.back) - 0.6 * q.ph.back;
+}
+
+// petAttack 返回普通攻击的蓄力和出手（施放类动作时都是 0）。
+function petAttack(q) {
+  if (!q.ph || petCast(q) > 0) return { gather: 0, strike: 0 };
+  return {
+    gather: q.ph.strike === 0 ? q.ph.wind : 1 - q.ph.strike,
+    strike: q.ph.strike * (1 - q.ph.back),
+  };
+}
+
+// 小狼：圆滚滚的幼崽，大脑袋短腿，红色项圈挂一个金铃铛。攻击是扑咬，嚎叫时仰头张嘴。
+function drawWolfPup(ctx, q) {
+  const color = safeColor(q.color, '#c9a27a');
+  const dark = shade(color, -0.35);
+  const cream = shade(color, 0.5);
+  const time = q.time / 1000;
+  const moving = q.moving && q.dead < 0;
+  const phase = q.walk || 0;
+  const { gather, strike } = petAttack(q);
+  const howl = petCast(q);
+  const deadK = q.dead >= 0 ? ease(q.dead) : 0;
+  const lunge = -2 * gather + 9 * strike;
+  const hop = moving ? Math.abs(Math.sin(phase)) * 2.4 : 0;
+  const bodyY = -11 - hop + gather * 2 + deadK * 5 - Math.sin(time * 2.2) * 0.4;
+
+  ctx.save();
+  ctx.translate(lunge * 0.7, 0);
+  if (q.dead >= 0) ctx.rotate(-0.15 * deadK);
+
+  const leg = (x, swing, legColor) => {
+    const angle = swing * (1 - deadK) + deadK * 1.2;
+    const footX = x + Math.sin(angle) * 6;
+    const footY = bodyY + 3 + Math.cos(angle) * 6 + hop;
+    cel(ctx, (c) => pTaper(c, x, bodyY + 2, footX, Math.min(footY, -1), 2.8, 2.4), legColor, { sd: 1, lw: 1.3 });
+    flat(ctx, (c) => pEll(c, footX + 1, Math.min(footY, -1) + 0.4, 2.6, 1.7), shade(legColor, 0.15), 1.2);
+  };
+  const stride = moving ? Math.sin(phase) * 0.7 : 0;
+  const pounce = -0.5 * strike + 0.3 * gather;
+
+  // 尾巴：毛茸茸地摇
+  const wag = moving ? Math.sin(phase * 2) * 0.2 : Math.sin(time * (howl ? 3 : 7)) * 0.45;
+  ctx.save();
+  ctx.translate(-10, bodyY - 3);
+  ctx.rotate(-0.9 + wag + deadK * 0.8);
+  cel(ctx, (c) => {
+    c.moveTo(0, -2.4);
+    c.quadraticCurveTo(-5, -6, -10, -3.5);
+    c.quadraticCurveTo(-8, 0, -10.5, 1.5);
+    c.quadraticCurveTo(-5, 3.5, 0, 2.4);
+    c.closePath();
+  }, color, { sd: 1.4 });
+  flat(ctx, (c) => pEll(c, -9.4, -1, 2, 1.8), cream);
+  ctx.restore();
+
+  leg(-6, stride + pounce, dark);
+  leg(6, -stride - pounce * 1.4, dark);
+
+  // 身体：一颗圆面包
+  cel(ctx, (c) => pEll(c, 0, bodyY - 1, 11, 7.5), color, { sd: 2.6 });
+  flat(ctx, (c) => pEll(c, 2, bodyY + 3, 7, 3), cream);
+  folds(ctx, [[-8, bodyY - 3, -6, bodyY - 1.6], [-3, bodyY - 6.4, -1, bodyY - 5.4]], shade(color, -0.4), 0.8);
+
+  leg(-4, -stride + pounce * 0.6, color);
+  leg(8, stride - pounce * 1.6, color);
+
+  // 项圈和铃铛：脖子上一圈红带子，头会压住它的上半截
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(4.2, bodyY - 7.5);
+  ctx.quadraticCurveTo(9.5, bodyY - 5, 10, bodyY - 0.6);
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 4.2;
+  ctx.stroke();
+  ctx.strokeStyle = '#c8323c';
+  ctx.lineWidth = 2.4;
+  ctx.stroke();
+  ctx.restore();
+  const bellSwing = moving ? Math.sin(phase * 2) * 1.2 : Math.sin(time * 3) * 0.4;
+  cel(ctx, (c) => pEll(c, 10 + bellSwing * 0.3, bodyY + 1.4, 1.9, 1.9), '#f0c850', { sd: 0.7, lw: 1.1 });
+
+  // 头：比身体还大一点，嚎叫时往上仰
+  ctx.save();
+  ctx.translate(9 + strike * 2, bodyY - 7 - howl * 2);
+  ctx.rotate(-0.9 * howl - 0.1 * gather + deadK * 0.5 + (moving ? Math.sin(phase * 2) * 0.04 : Math.sin(time * 1.3) * 0.05));
+  // 耳朵：大三角，尖上颜色深；扑咬时往后贴
+  const earTilt = strike > 0 ? -0.6 : howl ? -0.3 : Math.sin(time * 1.7) * 0.08;
+  for (const [earX, earColor] of [[-5, dark], [0, color]] as [number, string][]) {
+    ctx.save();
+    ctx.translate(earX, -7);
+    ctx.rotate(earTilt - 0.15);
+    cel(ctx, (c) => pPoly(c, [-3, 1, 0.2, -8, 3.2, 1]), earColor, { sd: 1, lw: 1.2 });
+    flat(ctx, (c) => pPoly(c, [-1.4, 0, 0.2, -5, 1.8, 0]), '#e89a9a');
+    ctx.restore();
+  }
+  cel(ctx, (c) => pEll(c, -1, -2, 8, 7), color, { sd: 2 });
+  // 嘴筒子：短短圆圆，浅色
+  const jaw = 0.1 + gather * 0.5 + howl * 0.7 - strike * 0.3;
+  ctx.save();
+  ctx.translate(4.5, 1.6);
+  ctx.rotate(Math.max(0, jaw));
+  cel(ctx, (c) => pEll(c, 2.6, 0.8, 3.6, 1.6), cream, { sd: 0.6, lw: 1.2 });
+  ctx.restore();
+  cel(ctx, (c) => pEll(c, 5.6, -0.2, 4.2, 2.6), cream, { sd: 0.8, lw: 1.3 });
+  flat(ctx, (c) => pEll(c, 9.4, -1, 1.6, 1.2), '#1a1218');
+  if (jaw > 0.3) flat(ctx, (c) => pEll(c, 6.6, 2.4, 2.4, 1.4 * jaw), '#6a1a24', 1);
+  // 眼睛：大而亮，死了画叉
+  if (q.dead < 0) {
+    const blink = Math.sin(time * 0.9) > 0.985 || howl > 0.5;
+    if (blink) {
+      line(ctx, [-0.6, -3, 1.8, -2.4, 3.4, -3], OUTLINE, 1.2);
+    } else {
+      flat(ctx, (c) => pEll(c, 1.6, -3, 1.8, 2.3), '#1a1218');
+      flat(ctx, (c) => pEll(c, 2.2, -3.9, 0.7, 0.8), '#ffffff');
+    }
+    flat(ctx, (c) => pEll(c, 1, 0.4, 1.4, 0.8), 'rgba(240,120,130,0.55)');
+  } else {
+    line(ctx, [0, -4.4, 3, -1.6], OUTLINE, 1.1);
+    line(ctx, [3, -4.4, 0, -1.6], OUTLINE, 1.1);
+  }
+  ctx.restore();
+
+  ctx.restore();
+}
+
+// 火灵：飘在半空的一团火，圆脸大眼，身后拖着火舌。攻击时往前一冲吐火，爆燃时整团火胀大。
+function drawEmber(ctx, q) {
+  const color = safeColor(q.color, '#ff8a3a');
+  const core = '#ffe08a';
+  const deep = shade(color, -0.3);
+  const time = q.time / 1000;
+  const moving = q.moving && q.dead < 0;
+  const { gather, strike } = petAttack(q);
+  const flare = petCast(q);
+  const deadK = q.dead >= 0 ? ease(q.dead) : 0;
+  const float = -20 - Math.sin(time * 2.6) * 2 + deadK * 14;
+  const lean = moving ? 0.25 : 0.05;
+  const swell = 1 + flare * 0.35 + strike * 0.12 - gather * 0.08 - deadK * 0.5;
+  const pushX = -2 * gather + 6 * strike;
+
+  // 地上的小影子提示它是飘着的
+  ctx.save();
+  ctx.globalAlpha *= 0.25 * (1 - deadK);
+  flat(ctx, (c) => pEll(c, 0, -0.5, 6, 2), '#000000');
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(pushX, float);
+  ctx.scale(swell, swell);
+  ctx.globalAlpha *= 1 - deadK * 0.6;
+
+  // 火舌：两条往身后飘的火苗，按时间抖动，走动时拉长
+  const tongue = (offsetY, length, fill) => {
+    const wave = Math.sin(time * 9 + offsetY * 3) * 1.4;
+    const tipX = -5 - length;
+    const tipY = -8 + offsetY - lean * 5 + wave;
+    flat(ctx, (c) => {
+      c.moveTo(-3, -6 + offsetY * 0.4);
+      c.quadraticCurveTo(tipX * 0.6, tipY - 1, tipX, tipY);
+      c.quadraticCurveTo(tipX * 0.5, tipY + 6, -2, 4);
+      c.closePath();
+    }, fill, 1.3);
+  };
+  tongue(-2, 7 + (moving ? 5 : 0), color);
+  tongue(3, 5 + (moving ? 4 : 0), shade(color, 0.25));
+
+  // 主体：上尖下圆的火苗
+  const tip = Math.sin(time * 7) * 1.5;
+  const body = (c) => {
+    c.moveTo(0, 8);
+    c.bezierCurveTo(-9, 8, -10, -1, -5, -6);
+    c.quadraticCurveTo(-2, -10, -2 - lean * 4 + tip, -16);
+    c.quadraticCurveTo(4, -10, 7, -5);
+    c.bezierCurveTo(10, 0, 8, 8, 0, 8);
+    c.closePath();
+  };
+  cel(ctx, body, color, { dark: deep, lit: core, sd: 2.4, hl: 1.4 });
+  // 内焰
+  flat(ctx, (c) => {
+    c.moveTo(0, 6);
+    c.bezierCurveTo(-5, 6, -5.6, 0, -2, -4);
+    c.quadraticCurveTo(0, -7, 0.4 + tip * 0.5, -9);
+    c.quadraticCurveTo(3, -5, 4.4, -2);
+    c.bezierCurveTo(6, 2, 4, 6, 0, 6);
+    c.closePath();
+  }, core);
+
+  // 脸
+  if (q.dead < 0) {
+    const blink = Math.sin(time * 1.1) > 0.985;
+    for (const eyeX of [-0.6, 3.6]) {
+      if (blink) {
+        line(ctx, [eyeX - 1, 0, eyeX + 1, 0], '#5a1a08', 1.1);
+      } else {
+        flat(ctx, (c) => pEll(c, eyeX, 0, 1.2, 1.9), '#5a1a08');
+        flat(ctx, (c) => pEll(c, eyeX + 0.4, -0.8, 0.5, 0.6), '#ffffff');
+      }
+    }
+    if (strike > 0.2 || flare > 0.3) {
+      flat(ctx, (c) => pEll(c, 1.6, 3.4, 1.6, 1.4), '#5a1a08');
+    } else {
+      ctx.strokeStyle = '#5a1a08';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.arc(1.6, 2.4, 1.3, 0.3, PI - 0.3);
+      ctx.stroke();
+    }
+  } else {
+    line(ctx, [-1.6, -1, 0.4, 1, 2.6, -1, 4.6, 1], '#5a1a08', 1);
+  }
+
+  // 绕着转的两颗火星（实心小块，不画柔光）
+  for (let index = 0; index < 2; index++) {
+    const angle = time * 3 + index * PI;
+    const sparkX = Math.cos(angle) * 11;
+    const sparkY = -2 + Math.sin(angle) * 3.5;
+    if (Math.sin(angle) < 0 && index === 0) continue;
+    flat(ctx, (c) => pPoly(c, [sparkX, sparkY - 1.6, sparkX + 1, sparkY, sparkX, sparkY + 1.6, sparkX - 1, sparkY]), core, 0.8);
+  }
+  // 金色小环：有主人的标记
+  line(ctx, [-4.6, 6.2, 0, 7.6, 4.6, 6.2], '#f0c850', 1.2);
+  ctx.restore();
+}
+
+// 林精：一截小树桩似的木头身子，头顶冒两片嫩叶，戴一圈小花环。攻击时甩出刺，治疗时举起双手、叶子张开。
+function drawSprout(ctx, q) {
+  const color = safeColor(q.color, '#8fd17a');
+  const wood = '#a07a50';
+  const woodDark = '#6e4e30';
+  const time = q.time / 1000;
+  const moving = q.moving && q.dead < 0;
+  const phase = q.walk || 0;
+  const { gather, strike } = petAttack(q);
+  const mend = petCast(q);
+  const deadK = q.dead >= 0 ? ease(q.dead) : 0;
+  const hop = moving ? Math.abs(Math.sin(phase)) * 2 : 0;
+  const bodyY = -hop + deadK * 3;
+  const sway = moving ? Math.sin(phase) * 0.08 : Math.sin(time * 1.6) * 0.04;
+
+  ctx.save();
+  if (q.dead >= 0) ctx.rotate(-0.5 * deadK);
+  ctx.translate(0, bodyY);
+  ctx.rotate(sway - 0.1 * gather + 0.15 * strike);
+
+  // 小短腿（两根树根）
+  for (const [legX, legPhase] of [[-3, 0], [3, PI]] as [number, number][]) {
+    const lift = moving ? Math.max(0, Math.sin(phase + legPhase)) * 2.4 : 0;
+    cel(ctx, (c) => pTaper(c, legX, -4, legX + 1, -lift - 0.5, 2.2, 1.8), woodDark, { sd: 0.8, lw: 1.2 });
+  }
+  // 身子：圆肚子树桩
+  cel(ctx, (c) => {
+    c.moveTo(-7, -3);
+    c.bezierCurveTo(-8.5, -10, -7, -17, 0, -17.5);
+    c.bezierCurveTo(7, -17, 8.5, -10, 7, -3);
+    c.quadraticCurveTo(0, -0.8, -7, -3);
+    c.closePath();
+  }, wood, { dark: woodDark, sd: 2.2 });
+  // 木纹
+  folds(ctx, [[-4.6, -6, -5, -12], [4.8, -5, 5.4, -11], [-1, -4, -0.6, -7]], 'rgba(60,36,18,0.55)', 0.8);
+  // 手：两根小树枝，治疗时举过头顶，攻击时前手往前甩
+  const arm = (shoulderX, raise, armColor, front) => {
+    // 角度从水平朝外量，正的往下：平时垂在两侧，治疗时举过头顶往外张；攻击时前手往后蓄力再往前甩
+    const outward = front ? 1 : -1;
+    let angle = 0.7 - raise * 2.6;
+    if (front) angle += -1.2 * gather + 0.9 * strike;
+    const handX = shoulderX + outward * Math.cos(angle) * 8;
+    const handY = -11 + Math.sin(angle) * 8;
+    line(ctx, [shoulderX, -11, handX, handY], OUTLINE, 3.4);
+    line(ctx, [shoulderX, -11, handX, handY], armColor, 1.8);
+    cel(ctx, (c) => pEll(c, handX, handY, 2, 1.4, angle * outward), color, { sd: 0.6, lw: 1.1 });
+  };
+  // 脸
+  if (q.dead < 0) {
+    const blink = Math.sin(time * 0.8) > 0.985 || mend > 0.4;
+    for (const eyeX of [0.8, 4.4]) {
+      if (blink) {
+        ctx.strokeStyle = '#2a1a0c';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(eyeX, -11.4, 1.1, PI + 0.3, TAU - 0.3);
+        ctx.stroke();
+      } else {
+        flat(ctx, (c) => pEll(c, eyeX, -11, 1.1, 1.6), '#2a1a0c');
+        flat(ctx, (c) => pEll(c, eyeX + 0.4, -11.7, 0.45, 0.5), '#ffffff');
+      }
+    }
+    flat(ctx, (c) => pEll(c, -0.8, -9, 1.3, 0.7), 'rgba(240,130,120,0.6)');
+    ctx.strokeStyle = '#2a1a0c';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.arc(2.6, -8.6, 1.1, 0.3, PI - 0.3);
+    ctx.stroke();
+  } else {
+    line(ctx, [0, -12, 1.8, -10, 3.6, -12, 5.4, -10], '#2a1a0c', 0.9);
+  }
+  // 花环：几朵白花一圈
+  for (let index = 0; index < 4; index++) {
+    const flowerX = -5 + index * 3.4;
+    const flowerY = -15.8 + Math.abs(index - 1.5) * 0.6;
+    flat(ctx, (c) => pEll(c, flowerX, flowerY, 1.5, 1.2), '#fff4f0', 0.9);
+    flat(ctx, (c) => pEll(c, flowerX, flowerY, 0.5, 0.5), '#f0c850');
+  }
+  // 头顶两片叶子：治疗时张开，平时轻轻晃
+  const open = 0.35 + mend * 0.6 + Math.sin(time * 2.2) * 0.06;
+  for (const side of [-1, 1]) {
+    ctx.save();
+    ctx.translate(0, -17);
+    ctx.rotate(side * open);
+    line(ctx, [0, 0, 0, -3], '#4a7a3a', 1.2);
+    cel(ctx, (c) => {
+      c.moveTo(0, -2.6);
+      c.quadraticCurveTo(side * 5, -4, side * 8, -10);
+      c.quadraticCurveTo(side * 2, -9, 0, -2.6);
+      c.closePath();
+    }, color, { sd: 1, lw: 1.2 });
+    line(ctx, [side * 0.6, -3.4, side * 5.6, -8.4], shade(color, -0.35), 0.6);
+    ctx.restore();
+  }
+  // 手最后画：举起来时盖在花环和叶子前面
+  arm(-5, mend, woodDark, false);
+  arm(5, mend, wood, true);
+  ctx.restore();
+}
+
 function drawBlob(ctx, q) {
   const color = safeColor(q.color, '#cccccc');
   const bob = q.moving ? Math.abs(Math.sin(q.walk || 0)) * 3 : Math.sin(q.time / 400) * 0.8;
@@ -2407,5 +2740,8 @@ const SPECS = {
   wolf: { draw: drawWolf, fall: 0 },
   skeleton_archer: { draw: drawSkeleton, fall: 0 },
   ogre_chief: { draw: drawOgre, fall: 1 },
+  wolf_pup: { draw: drawWolfPup, fall: 0 },
+  ember: { draw: drawEmber, fall: 0 },
+  sprout: { draw: drawSprout, fall: 0 },
   blob: { draw: drawBlob, fall: -1 },
 };

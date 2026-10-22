@@ -648,6 +648,31 @@ export class FX {
       height: 150, born: now, life: 900 });
   }
 
+  // petSummon 是宠物出现（召唤、复活、传送到主人身边）：脚下一圈宠物色的环，光点从四周旋进来再往上飘。
+  // 传送时 teleport 为 true：效果小一点、快一点，不立光柱。
+  // 宠物可能比事件晚一点才进视野，找不到实体时用事件里的位置 (x, y)。
+  petSummon(id, x, y, color, now, teleport = false) {
+    const p = this.pos(id, { x, y, r: 12 });
+    const tint = color || '#ffe08a';
+    this.effects.push({ kind: 'ring', x: p.x, y: p.y, color: tint, rgb: rgbOf(tint), radius: teleport ? 34 : 56, born: now,
+      life: teleport ? 320 : 520 });
+    if (!teleport) {
+      this.effects.push({ kind: 'pillar', x: p.x, y: p.y, color: tint, rgb: rgbOf(tint), height: 70, born: now,
+        life: 650 });
+    }
+    const count = teleport ? 10 : 22;
+    for (let index = 0; index < count; index++) {
+      const angle = (index / count) * TAU + rand(-0.2, 0.2);
+      const distance = rand(22, 34);
+      // 从外圈往里收（速度朝圆心偏一点切向），再被往上带
+      const speed = rand(0.05, 0.09);
+      this.spawn({ x: p.x + Math.cos(angle) * distance, y: p.y + Math.sin(angle) * distance * 0.45 - 4,
+        vx: (-Math.cos(angle) - Math.sin(angle) * 0.6) * speed, vy: -Math.sin(angle) * speed * 0.45 - rand(0.03, 0.08),
+        drag: 0.985, life: rand(380, 620), size: rand(1.6, 3), color: index % 3 ? tint : '#fff6c9', kind: 'spark',
+        born: now + rand(0, teleport ? 60 : 160) });
+    }
+  }
+
   levelUp(id, now) {
     const p = this.pos(id, null);
     if (!p) return;

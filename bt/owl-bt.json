@@ -83,6 +83,39 @@
       "icon": "comment",
       "description": "说：{{Text}}",
       "properties": [{ "name": "Text", "type": "string", "default": "" }]
+    },
+    {
+      "name": "FollowOwner",
+      "icon": "paw",
+      "color": "#5fae7a",
+      "description": "宠物：走到主人身边 {{Distance}} 以内（超过传送距离直接瞬移）",
+      "properties": [{ "name": "Distance", "type": "number", "min": 0, "default": 60 }]
+    },
+    {
+      "name": "KeepDistance",
+      "icon": "arrows-left-right",
+      "color": "#5fae7a",
+      "description": "宠物：和目标保持 {{Min}} 到 {{Max}} 的距离（太近后退，太远靠近）",
+      "properties": [
+        { "name": "Min", "type": "number", "min": 0, "default": 120 },
+        { "name": "Max", "type": "number", "min": 0, "default": 220 }
+      ]
+    },
+    {
+      "name": "CastOnOwner",
+      "icon": "hand-holding-heart",
+      "color": "#5fae7a",
+      "description": "宠物：对主人释放技能槽 {{Slot}} 的友方技能",
+      "properties": [
+        {
+          "name": "Slot",
+          "type": "number",
+          "min": 1,
+          "max": 8,
+          "default": 1,
+          "description": "宠物模板 skills 列表中的序号，从 1 开始"
+        }
+      ]
     }
   ],
   "decorators": [
@@ -125,6 +158,26 @@
       "icon": "clock",
       "description": "成功后冷却 {{Seconds}} 秒",
       "properties": [{ "name": "Seconds", "type": "seconds", "min": 0, "default": 5 }]
+    },
+    {
+      "name": "OwnerFar",
+      "icon": "route",
+      "color": "#5fae7a",
+      "description": "宠物：离主人超过 {{Distance}}",
+      "properties": [{ "name": "Distance", "type": "number", "min": 0, "default": 350 }]
+    },
+    {
+      "name": "OwnerHpBelow",
+      "icon": "heart-crack",
+      "color": "#5fae7a",
+      "description": "宠物：主人生命低于 {{Percent}}%",
+      "properties": [{ "name": "Percent", "type": "number", "min": 0, "max": 100, "default": 60 }]
+    },
+    {
+      "name": "OwnerInCombat",
+      "icon": "burst",
+      "color": "#5fae7a",
+      "description": "宠物：主人最近 5 秒内攻击过或被攻击过"
     }
   ],
   "services": [
@@ -133,6 +186,16 @@
       "icon": "satellite-dish",
       "description": "定期在 {{Range}} 内刷新目标（当前目标无效时）",
       "properties": [{ "name": "Range", "type": "number", "min": 0, "default": 250 }]
+    },
+    {
+      "name": "GuardOwner",
+      "icon": "shield-halved",
+      "color": "#5fae7a",
+      "description": "宠物：定期选目标守护主人（主人的目标 > 打主人的怪 > 主人 {{Range}} 内最近的敌人），目标离主人超过 {{Leash}} 时放弃",
+      "properties": [
+        { "name": "Range", "type": "number", "min": 0, "default": 300 },
+        { "name": "Leash", "type": "number", "min": 0, "default": 450 }
+      ]
     }
   ],
   "export": {

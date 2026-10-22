@@ -3,14 +3,19 @@
 // 悬停（手机上点一下）显示说明：名字（稀有度颜色）、槽位、职业限制、属性、特效。
 // 鼠标点背包里的装备就穿上（发 equip），点身上的就卸下（发 unequip）；手机上先点一下看说明，再点一次才执行。
 // 别的职业的装备变暗，点了只提示，不发请求。点外观卡发 skin。
+// 外观下面是宠物一栏：一排宠物卡加一张「不带」，点了发 pet；换宠物有冷却，冷却中的卡变暗、显示剩余秒数。
 // 面板只显示服务端发来的 Inventory，换装后等服务端回新的 Inventory 再刷新（见 game/sync.ts）。
 
 import { DERIVED_ATTRS, RARITY_COLOR, SKILL_KEY_LABELS } from '../game/config';
 import { state } from '../game/state';
-import type { ClientMessage, ItemInfo, ItemSlotted } from '../net/types';
+import type { ClientMessage, ItemInfo, ItemSlotted, PetInfo } from '../net/types';
 import { drawItemIcon } from '../render/itemIcons';
 import { formatDerived, showToast } from './hud';
 import { rememberSkin, skinCards, skinKey } from './skins';
+
+// 宠物记在 localStorage 的 btdemo.pet 里：存的是宠物 id，空串 = 收回（不带）；没存过是 null。
+const PET_STORE_KEY = 'btdemo.pet';
+const NO_PET_COLOR = '#6b6f73';   // “不带”卡的色块
 
 const RARITY_NAMES: Record<string, string> = { common: '普通', rare: '稀有', epic: '史诗' };
 
@@ -34,6 +39,9 @@ let equipBox: HTMLElement;
 let statsBox: HTMLElement;
 let skinRow: HTMLElement;
 let skinBox: HTMLElement;
+let petRow: HTMLElement;
+let petBox: HTMLElement;
+let petKey = '';              // 上次画的宠物卡（含冷却秒数），没变就不动 DOM
 let gridBox: HTMLElement;
 let bagCount: HTMLElement;
 let tip: HTMLElement;
@@ -51,6 +59,7 @@ export function initBag(sendMsg: (msg: ClientMessage) => void): void {
       <div class="bag-equip"></div>
       <div class="bag-stats kvs"></div>
       <div class="bag-skins"><span class="skin-label">外观</span><div class="bag-skin-cards"></div></div>
+      <div class="bag-skins bag-pets"><span class="skin-label">宠物</span><div class="bag-skin-cards bag-pet-cards"></div></div>
       <div class="bag-sub"><span>背包</span><span class="bag-count"></span></div>
       <div class="bag-grid"></div>
       <div class="picker-tip bag-tip-line">点背包里的装备穿上 · 点身上的卸下 · E / Esc 关闭</div>
@@ -60,6 +69,8 @@ export function initBag(sendMsg: (msg: ClientMessage) => void): void {
   statsBox = root.querySelector('.bag-stats')!;
   skinRow = root.querySelector('.bag-skins')!;
   skinBox = root.querySelector('.bag-skin-cards')!;
+  petRow = root.querySelector('.bag-pets')!;
+  petBox = root.querySelector('.bag-pet-cards')!;
   gridBox = root.querySelector('.bag-grid')!;
   bagCount = root.querySelector('.bag-count')!;
   tip = root.querySelector('.item-tip')!;
@@ -74,6 +85,28 @@ export function initBag(sendMsg: (msg: ClientMessage) => void): void {
   const btn = document.getElementById('bag-btn');
   btn?.addEventListener('pointerdown', (event) => event.stopPropagation());
   btn?.addEventListener('click', () => toggleBag());
+  // 换宠物的冷却要看着秒数往下走：面板开着时每 250 毫秒刷新一次宠物一栏（没变就不动 DOM）
+  window.setInterval(() => {
+    if (state.bagOpen) renderPets();
+  }, 250);
+}
+
+// rememberedPet 是上次选的宠物 id（空串 = 上次选的是不带）；没存过或存不了时返回 null。
+export function rememberedPet(): string | null {
+  try {
+    return localStorage.getItem(PET_STORE_KEY);
+  } catch {
+    return null;   // 浏览器不让存
+  }
+}
+
+// rememberPet 记下选的宠物（空串 = 不带）。
+export function rememberPet(petId: string): void {
+  try {
+    localStorage.setItem(PET_STORE_KEY, petId);
+  } catch {
+    // 存不了就算了
+  }
 }
 
 export function openBag(): void {
@@ -116,6 +149,7 @@ export function refreshBag(): void {
   statsKey = '';
   renderBagStats();
   renderSkins();
+  renderPets();
   renderGrid();
 }
 
@@ -217,6 +251,43 @@ function renderSkins(): void {
     rememberSkin(state.playerClass, skin.id);
     if (skin.id !== skinKey(state.playerClass, state.mySkin)) send({ t: 'skin', skin: skin.id });
   }));
+}
+
+// renderPets 画宠物一栏：每只宠物一张卡，最后是「不带」。当前带着的高亮；换宠物冷却中的卡变暗，写剩余秒数。
+function renderPets(): void {
+  petRow.hidden = state.pets.length === 0;
+  if (!state.pets.length) return;
+  const cooling = Math.max(0, Math.ceil((state.petCooldownUntil - performance.now()) / 1000));
+  const choices: PetInfo[] = [...state.pets, { id: '', name: '不带', desc: '收回宠物', color: NO_PET_COLOR, model: '' }];
+  const key = `${state.myPet}|${cooling}|${choices.map((pet) => pet.id).join(',')}`;
+  if (key === petKey) return;
+  petKey = key;
+  petBox.replaceChildren(...choices.map((pet) => {
+    const selected = pet.id === state.myPet;
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'skin-card pet-card' + (selected ? ' selected' : '') + (!selected && cooling > 0 ? ' cooling' : '');
+    card.style.setProperty('--swatch', pet.color || '#e8b65a');
+    card.title = pet.desc || pet.name;
+    card.innerHTML = '<span class="skin-swatch"></span><span class="skin-text"><b class="skin-name"></b><span class="skin-desc"></span></span>';
+    card.querySelector('.skin-name')!.textContent = pet.name;
+    const desc = !selected && cooling > 0 ? `冷却 ${cooling} 秒` : pet.desc;
+    card.querySelector('.skin-desc')!.textContent = desc;
+    card.addEventListener('click', () => pickPet(pet.id));
+    return card;
+  }));
+}
+
+// pickPet 点了一张宠物卡：冷却中只提示；否则发 pet 并记住。
+function pickPet(petId: string): void {
+  if (petId === state.myPet) return;
+  const remaining = Math.ceil((state.petCooldownUntil - performance.now()) / 1000);
+  if (remaining > 0) {
+    showToast(`换宠物冷却中，还有 ${remaining} 秒`);
+    return;
+  }
+  rememberPet(petId);
+  send({ t: 'pet', pet: petId });
 }
 
 function renderGrid(): void {

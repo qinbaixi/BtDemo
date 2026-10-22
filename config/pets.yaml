@@ -1,0 +1,40 @@
+# 宠物模板：字段和 monsters.yaml 的模板一样（tree / skills / attrs / speed / radius / color），另外：
+#   growth: 每比 1 级高一级增加的属性（宠物等级 = 主人等级，属性 = attrs + growth × (等级 - 1)）
+#   model: 前端模型名（默认为 id）；desc: 选择面板上的说明
+# 宠物的阵营固定是 player：怪物会打宠物，玩家和守卫不会。
+# 顺序就是面板顺序，第一个是进游戏默认召唤的宠物。
+# skills: 技能槽，行为树里 CastSkill 的 Slot 从 1 开始对应这里的顺序（技能定义在 skills.yaml）。
+pets:
+  - id: wolf_pup
+    name: 小狼
+    model: wolf_pup
+    color: "#c9a27a"
+    desc: 近战，专咬主人的目标，嚎叫时自己加速加攻
+    tree: pet_melee
+    attrs: { str: 5, agi: 7, int: 1, vit: 6 }
+    growth: { str: 1.2, agi: 1, int: 0.2, vit: 1.2 }
+    speed: 190
+    radius: 13
+    skills: [pet_bite, pet_howl]
+  - id: ember
+    name: 火灵
+    model: ember
+    color: "#ff8a3a"
+    desc: 远程法术，保持距离喷火球，近身时放小范围爆燃
+    tree: pet_caster
+    attrs: { str: 1, agi: 5, int: 8, vit: 4 }
+    growth: { str: 0.2, agi: 0.6, int: 1.4, vit: 0.8 }
+    speed: 180
+    radius: 12
+    skills: [pet_firebolt, pet_flare]
+  - id: sprout
+    name: 林精
+    model: sprout
+    color: "#7dd87d"
+    desc: 治疗，主人血少时给主人回血，平时用荆棘术骚扰敌人
+    tree: pet_healer
+    attrs: { str: 1, agi: 3, int: 9, vit: 5 }
+    growth: { str: 0.2, agi: 0.3, int: 1.3, vit: 1 }
+    speed: 180
+    radius: 12
+    skills: [pet_thorn, pet_mend]

@@ -9,7 +9,7 @@ export const HIT_MS = 260;           // 受击动画
 export const DEATH_MS = 650;         // 倒地动画
 
 // 每种实体的轮廓光颜色：金色的英雄、血红的怪物、幽蓝的 NPC
-export const RIM: Record<EntityKind, string> = { player: '#ffcf6a', monster: '#ff3b2e', npc: '#6fe3ff' };
+export const RIM: Record<EntityKind, string> = { player: '#ffcf6a', monster: '#ff3b2e', npc: '#6fe3ff', pet: '#9fd3a8' };
 export const MODEL_SCALE = 1.25;     // 模型画得比碰撞半径略大
 // 回血区在地上画成椭圆（和其他地面特效一样压扁），纵向半径 = 横向半径 × ZONE_ASPECT。
 // 服务端按同一个椭圆判断站没站在里面（internal/config 的 ZoneAspect），两边要一致。
@@ -21,6 +21,7 @@ export const MODEL_BOX: Record<string, [number, number, number]> = {
   ranger: [3.4, 4.2, 1.8],   // 拉弓时弓和箭伸到身前，箭雨时弓举过头顶
   guard: [3.6, 3.5, 1.8],
   ogre_chief: [3.6, 4.6, 3.6],
+  ember: [3, 4.2, 1.8],      // 飘在半空，胀大时更高
 };
 export function modelBox(model: string, r: number): number[] {
   const [x, up, down] = MODEL_BOX[model] || MODEL_BOX.default;
@@ -29,6 +30,7 @@ export function modelBox(model: string, r: number): number[] {
 // 半径 16 时每个模型的绘制高度，用来把名字放在头顶上方
 export const MODEL_H: Record<string, number> = {
   knight: 46, ranger: 46, guard: 50, villager: 42, slime: 26, wolf: 30, skeleton_archer: 46, ogre_chief: 54,
+  wolf_pup: 30, ember: 40, sprout: 30,
 };
 export const ACT_NAMES: Record<string, string> = {
   find_target: '索敌',

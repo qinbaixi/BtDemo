@@ -104,6 +104,8 @@ type World struct {
 	HealZones []*Zone `yaml:"heal_zones"`
 	// Loot 是怪物死亡时的装备掉落。
 	Loot Loot `yaml:"loot"`
+	// Pet 是宠物的复活、换宠物冷却和传送距离。
+	Pet PetRules `yaml:"pet"`
 }
 
 // ZoneAspect 是回血区纵向半径和横向半径之比：地面上画成压扁的椭圆（和其他地面特效一样），
@@ -151,14 +153,14 @@ type Skill struct {
 	ID       string  `yaml:"-"`
 	Name     string  `yaml:"name"`
 	Desc     string  `yaml:"desc"` // 选技能面板上的一句话说明
-	Kind     string  `yaml:"kind"` // target | aoe | self | dash 位移 | line 直线投掷 | zone 放回血区 | rain 范围落箭
+	Kind     string  `yaml:"kind"` // target | aoe | self | ally 友方 | dash 位移 | line 直线投掷 | zone 放回血区 | rain 范围落箭
 	Range    float64 `yaml:"range"`
 	Radius   float64 `yaml:"radius"`
 	Cooldown float64 `yaml:"cooldown"`
 	Damage   string  `yaml:"damage"` // physical | magic | ""
 	Ratio    float64 `yaml:"ratio"`
 	Base     float64 `yaml:"base"`
-	Heal     float64 `yaml:"heal"`
+	Heal     float64 `yaml:"heal"`     // self：回复自身最大生命的比例；ally：回复目标最大生命的比例
 	Distance float64 `yaml:"distance"` // dash：位移距离；rain：没有目标时落点在前方多远
 	Pierce   bool    `yaml:"pierce"`   // line：穿透，命中直线上的每个敌人
 	Buff     *Buff   `yaml:"buff"`
@@ -203,11 +205,12 @@ type Config struct {
 	Spawns    []Spawn
 	Layout    Layout  // 对应 map.tmj
 	Items     []*Item // 对应 items.yaml，按文件里的顺序
+	Pets      []*Pet  // 对应 pets.yaml，按文件里的顺序；第一个是进游戏默认召唤的
 
 	itemsByID map[string]*Item // 由 validate 建立
 }
 
-// Load 从 dir 读取 world.yaml、skills.yaml、monsters.yaml、items.yaml 和 map.tmj，并检查每个引用都能解析。
+// Load 从 dir 读取 world.yaml、skills.yaml、monsters.yaml、items.yaml、pets.yaml 和 map.tmj，并检查每个引用都能解析。
 // knownTrees 列出编译进二进制文件的行为树。
 func Load(dir string, knownTrees map[string]bool) (*Config, error) {
 	cfg := &Config{}
@@ -236,6 +239,13 @@ func Load(dir string, knownTrees map[string]bool) (*Config, error) {
 		return nil, err
 	}
 	cfg.Items = items.Items
+	var pets struct {
+		Pets []*Pet `yaml:"pets"`
+	}
+	if err := readYAML(filepath.Join(dir, "pets.yaml"), &pets); err != nil {
+		return nil, err
+	}
+	cfg.Pets = pets.Pets
 	var err error
 	if cfg.Layout, err = loadLayout(dir); err != nil {
 		return nil, err
@@ -293,7 +303,7 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 	for id, skill := range cfg.Skills {
 		skill.ID = id
 		switch skill.Kind {
-		case "target", "aoe", "self", "dash", "line", "zone", "rain":
+		case "target", "aoe", "self", "ally", "dash", "line", "zone", "rain":
 		default:
 			return fmt.Errorf("skills.yaml: skill %s has unknown kind %q", id, skill.Kind)
 		}
@@ -310,6 +320,9 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		}
 		if skill.Pierce && skill.Kind != "line" {
 			return fmt.Errorf("skills.yaml: skill %s has pierce but is not a line skill", id)
+		}
+		if skill.Kind == "ally" && (skill.Range <= 0 || skill.Heal <= 0) {
+			return fmt.Errorf("skills.yaml: ally skill %s needs a range and heal", id)
 		}
 		if skill.Kind == "line" && skill.Range <= 0 {
 			return fmt.Errorf("skills.yaml: line skill %s needs a range", id)
@@ -390,6 +403,9 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		}
 	}
 	if err := cfg.validateItems(); err != nil {
+		return err
+	}
+	if err := cfg.validatePets(knownTrees); err != nil {
 		return err
 	}
 	for id, template := range cfg.Templates {

@@ -1,0 +1,179 @@
+{
+  "type": "Selector",
+  "label": "林精",
+  "comment": "治疗主人 > 回到主人身边 > 战斗 > 跟随",
+  "services": [
+    {
+      "type": "GuardOwner",
+      "label": "守护主人",
+      "properties": [
+        {
+          "name": "Range",
+          "value": 300
+        },
+        {
+          "name": "Leash",
+          "value": 450
+        }
+      ],
+      "timeBetweenTicks": 0.3
+    }
+  ],
+  "childNodes": [
+    {
+      "type": "Sequence",
+      "label": "治疗主人",
+      "decorators": [
+        {
+          "type": "OwnerHpBelow",
+          "properties": [
+            {
+              "name": "Percent",
+              "value": 60
+            }
+          ]
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "FollowOwner",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 150
+            }
+          ]
+        },
+        {
+          "type": "CastOnOwner",
+          "label": "愈合",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "回到主人身边",
+      "decorators": [
+        {
+          "type": "OwnerFar",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 350
+            }
+          ]
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "ClearTarget"
+        },
+        {
+          "type": "FollowOwner",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 60
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Selector",
+      "label": "战斗",
+      "decorators": [
+        {
+          "type": "HasTarget"
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "CastSkill",
+          "label": "荆棘术",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 1
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 200
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "ChaseTarget",
+          "label": "靠近",
+          "properties": [
+            {
+              "name": "StopRange",
+              "value": 160
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "跟随",
+      "childNodes": [
+        {
+          "type": "FollowOwner",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 60
+            }
+          ]
+        },
+        {
+          "type": "Wait",
+          "properties": [
+            {
+              "name": "Seconds",
+              "value": 0.5
+            }
+          ]
+        },
+        {
+          "type": "Say",
+          "properties": [
+            {
+              "name": "Text",
+              "value": "沙沙～"
+            }
+          ],
+          "decorators": [
+            {
+              "type": "Cooldown",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 20
+                }
+              ]
+            },
+            {
+              "type": "ForceSuccess",
+              "comment": "说话冷却中也继续执行后面的节点"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

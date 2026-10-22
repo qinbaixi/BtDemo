@@ -1,6 +1,7 @@
 # 技能配置
 #   desc:   选技能面板上的一句话说明
 #   kind:   target 单体（需要目标）| aoe 以自身为中心的范围伤害 | self 作用于自己（治疗 / 增益）
+#           | ally 对行为树指定的友方目标（宠物的主人）治疗：heal 按目标最大生命的比例，目标必须在 range 内
 #           | dash 朝瞄准方向位移 distance 像素（遇到障碍物停下）
 #           | line 朝瞄准方向扔出投掷物，命中直线上 range 内第一个敌人（被障碍物挡住就停）；
 #             pierce: true 时穿透，命中直线上的每个敌人，飞到射程尽头或墙前
@@ -79,3 +80,18 @@ skills:
                 buff: { name: 狂暴, duration: 8, atk_pct: 0.5, speed_pct: 0.3 } }
   guard_hit:  { name: 长枪突刺, kind: target, range: 70, cooldown: 1.0, damage: physical, ratio: 1.1, base: 5, fx: melee, color: "#9ad0ff" }
   guard_heal: { name: 包扎,   kind: self,   cooldown: 12, heal: 0.4, fx: heal, color: "#7dff9b" }
+
+  # 宠物（技能槽见 pets.yaml）
+  pet_bite:     { name: 撕咬,   kind: target, range: 55,  cooldown: 0.9, damage: physical, ratio: 1.0, base: 3, fx: melee, color: "#e8c9a0",
+                desc: 宠物近战普攻 }
+  pet_howl:     { name: 嚎叫,   kind: self,   cooldown: 12, fx: buff, color: "#ffcf6e",
+                desc: 6 秒内攻击 +30%，移速 +20%,
+                buff: { name: 嚎叫, duration: 6, atk_pct: 0.3, speed_pct: 0.2 } }
+  pet_firebolt: { name: 小火球, kind: target, range: 260, cooldown: 1.8, damage: magic, ratio: 1.2, base: 6, fx: projectile, color: "#ff7b39",
+                desc: 宠物远程法术 }
+  pet_flare:    { name: 爆燃,   kind: aoe,    radius: 90, cooldown: 6, damage: magic, ratio: 0.9, base: 4, fx: circle, color: "#ffb347",
+                desc: 身边小范围爆炸 }
+  pet_thorn:    { name: 荆棘术, kind: target, range: 220, cooldown: 2.0, damage: magic, ratio: 0.6, base: 3, fx: projectile, color: "#8fe08f",
+                desc: 弱攻击，骚扰敌人 }
+  pet_mend:     { name: 愈合,   kind: ally,   range: 170, cooldown: 6, heal: 0.25, fx: heal, color: "#7dff9b",
+                desc: 给主人回复 25% 最大生命 }

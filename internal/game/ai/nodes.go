@@ -43,6 +43,15 @@ func (agent *Agent) target() *core.Entity {
 	return target
 }
 
+// owner 在 agent 是宠物且主人还活着时返回主人；否则返回 nil。
+func (agent *Agent) owner() *core.Entity {
+	owner := agent.sys.state.Ents.Get(agent.Entity.Owner)
+	if !owner.Alive() {
+		return nil
+	}
+	return owner
+}
+
 // memFloat 从节点的临时内存中读取 float64，缺失时返回 0。
 func memFloat(ctx *bt.Ctx, key string) float64 {
 	value, _ := ctx.Mem[key].(float64)
@@ -82,7 +91,14 @@ func (sys *System) register() {
 			ctx.Explain("已贴近 %s：距离 %.0f ≤ %.0f", who(target), dist, stop)
 			return bt.Success
 		}
-		sys.move.Toward(agent.Entity, target.X, target.Y, agent.step(1))
+		arrived := sys.move.Toward(agent.Entity, target.X, target.Y, agent.step(1))
+		dist = core.EdgeDist(agent.Entity, target)
+		if arrived && dist > stop {
+			// 走到了离目标最近的可达位置还是够不着（隔着墙）：放弃这个目标，不然会一直站在墙边
+			agent.Entity.Target = 0
+			ctx.Explain("够不着 %s：最近只能到 %.0f > %.0f，放弃", who(target), dist, stop)
+			return bt.Failure
+		}
 		ctx.Explain("追击 %s：距离 %.0f > %.0f", who(target), dist, stop)
 		return bt.Running
 	})
@@ -196,6 +212,8 @@ func (sys *System) register() {
 		}
 		return bt.Success
 	})
+
+	sys.registerPet()
 
 	reg.Condition("has_target", func(ctx *bt.Ctx) bool {
 		target := ctx.Agent.(*Agent).target()

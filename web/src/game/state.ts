@@ -5,7 +5,7 @@ import type { Aura, FX } from '../render/fx';
 import type { createScenery } from '../render/scenery';
 import type {
   ClassInfo,
-  EntityInfo, EntityKind, ItemInfo, ItemSlotted, Obstacle, SelfInfo, SkillInfo, SkinInfo, ZoneInfo,
+  EntityInfo, EntityKind, ItemInfo, ItemSlotted, Obstacle, PetInfo, SelfInfo, SkillInfo, SkinInfo, ZoneInfo,
 } from '../net/types';
 import { ATTACK_MS, KIND_COLOR, LERP_MS, MODEL_H, MODEL_SCALE } from './config';
 import { clamp, lerp } from './math';
@@ -41,6 +41,8 @@ export interface ClientEntity {
   model: string;
   skin: string;       // 玩家外观 id（空 = 职业默认外观）
   gear: string;       // 当前武器的外观（ItemInfo.look，空 = 职业默认武器）
+  owner: number;      // 宠物的主人实体 id（非宠物为 0）
+  petName: string;    // 宠物自己的名字（名牌上是「主人 的 宠物」，name 是拼好的）
   // 动画状态
   facing: number;     // 0 朝右，PI 朝左
   walk: number;       // 走路循环的相位
@@ -93,6 +95,11 @@ export interface State {
   inventory: { items: ItemSlotted[]; capacity: number };   // 自己的背包和身上的装备（服务端 Inventory 整份）
   skins: SkinInfo[];              // 当前职业的外观（从 classes 里取，第一个是默认）
   mySkin: string;                 // 自己现在的外观 id（空 = 默认），以服务端发来的自己的 Enter 为准
+  pets: PetInfo[];                // 可以带的宠物（welcome 里带的，第一个是默认）
+  myPet: string;                  // 自己选的宠物 id（空 = 不带），以服务端 PetStatus 为准
+  petEntity: number;              // 自己宠物的实体 id（没在视野或没召唤为 0）
+  petRespawnAt: number;           // 宠物复活的时间（performance.now()），0 = 没在复活中
+  petCooldownUntil: number;       // 换宠物冷却结束的时间（performance.now()），0 = 没有冷却
   ents: Map<number, ClientEntity>;
   self: SelfInfo | null;          // 最近一次同步里的 self
   selfAt: number;                 // 收到那次同步的 performance.now()
@@ -168,6 +175,11 @@ export const state: State = {
   inventory: { items: [], capacity: 0 },
   skins: [],
   mySkin: '',
+  pets: [],
+  myPet: '',
+  petEntity: 0,
+  petRespawnAt: 0,
+  petCooldownUntil: 0,
   ents: new Map(),
   self: null,
   selfAt: 0,
@@ -229,6 +241,8 @@ export function makeEntity(d: Partial<EntityInfo> & { id: number }, now: number)
     model: d.model || '',
     skin: d.skin || '',
     gear: d.gear || '',
+    owner: d.owner || 0,
+    petName: d.kind === 'pet' ? (d.name || '?') : '',
     facing: kind === 'player' ? 0 : (Math.random() < 0.5 ? 0 : Math.PI),
     walk: Math.random() * 6,
     moveUntil: 0,
@@ -247,6 +261,15 @@ export function makeEntity(d: Partial<EntityInfo> & { id: number }, now: number)
     turnAt: -1e9,
     fresh: true,
   };
+}
+
+// refreshPetNames 把宠物的名牌拼成「主人名 的 宠物名」；主人还没进视野时先只显示宠物名，主人来了再拼。
+export function refreshPetNames(): void {
+  for (const e of state.ents.values()) {
+    if (e.kind !== 'pet') continue;
+    const owner = state.ents.get(e.owner);
+    e.name = owner ? `${owner.name} 的 ${e.petName}` : e.petName;
+  }
 }
 
 // posOf 是实体的绘制位置：从上一个位置插值到最近一次同步的位置。

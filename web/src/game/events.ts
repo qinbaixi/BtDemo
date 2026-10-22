@@ -14,6 +14,18 @@ export function onEvent(ev: GameEvent, now: number): void {
   switch (ev.k) {
     case 'cast': {
       const src = state.ents.get(ev.src);
+      // 宠物出现（召唤 / 复活）和瞬移回主人身边：只放特效，不是技能
+      if (ev.fx === 'pet_summon') {
+        fx.petSummon(ev.src, ev.x ?? 0, ev.y ?? 0, ev.color || '#ffe08a', now);
+        break;
+      }
+      if (ev.fx === 'pet_teleport') {
+        // 出发点那一圈要在挪走实体之前放（petSummon 优先用实体当前的位置）
+        fx.petSummon(ev.src, ev.x ?? 0, ev.y ?? 0, src?.color || '#ffe08a', now, true);
+        if (src && typeof ev.tx === 'number') blinkTo(src, ev, now);
+        fx.petSummon(ev.src, ev.tx ?? 0, ev.ty ?? 0, src?.color || '#ffe08a', now + 120, true);
+        break;
+      }
       let lead = 0;
       let origin: { x: number; y: number } | null = null;
       if (src) {
@@ -23,7 +35,9 @@ export function onEvent(ev: GameEvent, now: number): void {
         // 装备特效追加的一箭（连射）和正常那一箭同时射出，不重新播一遍拉弓动作
         if (!ev.proc) {
           src.attackAt = now;
-          src.action = action ? actionName! : '';
+          // 宠物的施放类技能（嚎叫、爆燃、愈合）用 fx 当动作名，模型里画仰头 / 胀大 / 举手
+          const petCast = src.kind === 'pet' && (ev.fx === 'buff' || ev.fx === 'circle' || ev.fx === 'heal');
+          src.action = action ? actionName! : petCast ? ev.fx! : '';
           src.attackMs = action ? action.ms : ATTACK_MS;
         }
         lead = action ? action.lead : 0;

@@ -1,0 +1,164 @@
+{
+  "type": "Selector",
+  "label": "小狼",
+  "comment": "回到主人身边 > 战斗（嚎叫 > 咬 > 追击）> 跟随",
+  "services": [
+    {
+      "type": "GuardOwner",
+      "label": "守护主人",
+      "properties": [
+        {
+          "name": "Range",
+          "value": 300
+        },
+        {
+          "name": "Leash",
+          "value": 450
+        }
+      ],
+      "timeBetweenTicks": 0.3
+    }
+  ],
+  "childNodes": [
+    {
+      "type": "Sequence",
+      "label": "回到主人身边",
+      "decorators": [
+        {
+          "type": "OwnerFar",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 350
+            }
+          ]
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "ClearTarget"
+        },
+        {
+          "type": "FollowOwner",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 60
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Selector",
+      "label": "战斗",
+      "decorators": [
+        {
+          "type": "HasTarget"
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "CastSkill",
+          "label": "嚎叫",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 2
+            }
+          ],
+          "decorators": [
+            {
+              "type": "Cooldown",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 12
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "咬",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 1
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 50
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "ChaseTarget",
+          "label": "追击",
+          "properties": [
+            {
+              "name": "StopRange",
+              "value": 40
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "跟随",
+      "childNodes": [
+        {
+          "type": "FollowOwner",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 60
+            }
+          ]
+        },
+        {
+          "type": "Wait",
+          "properties": [
+            {
+              "name": "Seconds",
+              "value": 0.5
+            }
+          ]
+        },
+        {
+          "type": "Say",
+          "properties": [
+            {
+              "name": "Text",
+              "value": "汪！"
+            }
+          ],
+          "decorators": [
+            {
+              "type": "Cooldown",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 20
+                }
+              ]
+            },
+            {
+              "type": "ForceSuccess",
+              "comment": "说话冷却中也继续执行后面的节点"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

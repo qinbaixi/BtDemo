@@ -6,7 +6,7 @@
 
 import { btdemo } from './pb';
 import type {
-  AiTrace, ClassInfo, AiTreeDef, AiTreeNode, ClientMessage, EntityInfo, GameEvent, ItemInfo, ItemSlotted, Obstacle, SelfInfo,
+  AiTrace, ClassInfo, AiTreeDef, AiTreeNode, ClientMessage, EntityInfo, GameEvent, ItemInfo, ItemSlotted, Obstacle, PetInfo, SelfInfo,
   ServerMessage,
 } from './types';
 
@@ -38,9 +38,10 @@ function tidy(v: any): any {
   return v;
 }
 
-// skin、gear 没设置时是空串（默认外观 / 职业默认武器），这样再收到 Enter 时也能把它们清回默认
+// skin、gear 没设置时是空串（默认外观 / 职业默认武器），这样再收到 Enter 时也能把它们清回默认；
+// owner 是宠物的主人，非宠物为 0
 function entity(e: any): EntityInfo {
-  return { ...e, kind: String(e.kind || '').toLowerCase(), skin: e.skin || '', gear: e.gear || '' };
+  return { ...e, kind: String(e.kind || '').toLowerCase(), skin: e.skin || '', gear: e.gear || '', owner: e.owner || 0 };
 }
 
 function event(ev: any): GameEvent {
@@ -100,6 +101,10 @@ function itemSlotted(i: any): ItemSlotted {
   return { uid: i.uid, id: i.id, slot: i.slot || '' };
 }
 
+function petInfo(p: any): PetInfo {
+  return { id: p.id, name: p.name, desc: p.desc || '', color: p.color || '#e8b65a', model: p.model || '' };
+}
+
 function self(s: any): SelfInfo {
   const cds: Record<string, number> = {};
   for (const c of s.cds || []) cds[c.skill] = c.left;
@@ -125,6 +130,7 @@ export function createProtocol(): Protocol {
           classes: (w.classes || []).map(classInfo),
           playerClass: w.class || '',
           items: (w.items || []).map(itemInfo),
+          pets: (w.pets || []).map(petInfo),
           obstacles: (w.obstacles || []).map((o: any): Obstacle => ({ ...o, shape: String(o.shape).toLowerCase() })),
         };
       }
@@ -144,6 +150,10 @@ export function createProtocol(): Protocol {
       case 'inventory': return {
         t: 'inventory', items: (m.inventory.items || []).map(itemSlotted), capacity: m.inventory.capacity || 0,
       };
+      case 'petStatus': return {
+        t: 'petStatus', pet: m.petStatus.pet || '', entity: m.petStatus.entity || 0,
+        respawnIn: m.petStatus.respawnIn || 0, cooldown: m.petStatus.cooldown || 0,
+      };
     }
     return null;
   }
@@ -160,6 +170,7 @@ export function createProtocol(): Protocol {
       case 'equip': body = { equip: { uid: o.uid } }; break;
       case 'unequip': body = { unequip: { slot: o.slot } }; break;
       case 'skin': body = { skin: { skin: o.skin || '' } }; break;
+      case 'pet': body = { pet: { pet: o.pet || '' } }; break;
       default: return null;
     }
     const data = btdemo.ClientMsg.encode(btdemo.ClientMsg.create(body)).finish();

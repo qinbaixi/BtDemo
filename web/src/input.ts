@@ -176,10 +176,12 @@ function toWorld(ev: MouseEvent): { x: number; y: number } {
   };
 }
 
+// pickEntity 找出点中的实体。宠物不能被点选为目标，只有调试模式下能点中（用来看它的行为树）。
 function pickEntity(wx: number, wy: number, now: number): ClientEntity | null {
   let best: ClientEntity | null = null;
   let bestD = Infinity;
   for (const e of state.ents.values()) {
+    if (e.kind === 'pet' && !deps.debug.open) continue;
     const p = posOf(e, now);
     // 点中画出来的身体，身体在脚底位置的上方
     const half = (p.y - headY(e, p)) / 2;
@@ -273,6 +275,10 @@ export function initInput(d: InputDeps): void {
     // 左键：点到实体先选中它；点到的是怪就顺手打一下，按住不放会一直打
     const w = toWorld(ev);
     const hit = pickEntity(w.x, w.y, performance.now());
+    if (hit && hit.kind === 'pet') {        // 调试模式下点宠物：只给 BT 面板看，不选目标、不打
+      d.debug.pickPet(hit.id);
+      return;
+    }
     if (hit && hit.id !== state.target) {
       state.target = hit.id;
       d.send({ t: 'target', target: hit.id });

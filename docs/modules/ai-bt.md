@@ -1,6 +1,6 @@
 # bt 和 ai：行为树
 
-代码：`internal/bt/`（运行时）、`internal/game/ai/`（游戏节点与调试追踪）、`internal/ai/trees/`（导出的树）、`bt/`（BtTree 工程）、`tools/btregistry/`（生成注册表）
+代码：`internal/bt/`（运行时）、`internal/game/ai/`（游戏节点与调试追踪，宠物节点在 `pet_nodes.go`）、`internal/ai/trees/`（导出的树）、`bt/`（BtTree 工程）、`tools/btregistry/`（生成注册表）
 
 ## 三层分工
 
@@ -96,10 +96,27 @@ var All = map[string]Exported{
 | task | `say` | 头顶冒一句 Text |
 | 条件 | `has_target` / `target_in_range` / `hp_below` / `far_from_home` / `was_attacked` | 见名知意 |
 | 服务 | `update_target` | 当前目标跑太远就放弃；优先反击最近 5 秒内打过自己的人；否则找最近的敌人 |
+| 宠物 | `follow_owner` 等 7 个 | 见下面的[宠物节点](#宠物节点) |
 
 移动类节点都调用 `move.Toward`，所以都会自动绕开障碍；技能节点调用 `combat.Cast`，和玩家走的是同一条路径。
 
 启动时 `ai.New` 还会检查：每个模板的树里 `cast_skill` 用到的槽位，模板都配了对应数量的技能。
+
+## 宠物节点
+
+宠物（`kind = pet`，见 [pet](pet.md)）用同一套运行时，节点在 `internal/game/ai/pet_nodes.go`。宠物的主人是 `entity.Owner`；主人不在场（死了、已删除）时这些节点都返回失败 / 不成立，`guard_owner` 会清掉目标。其余已有节点（`has_target`、`target_in_range`、`cast_skill`、`chase_target`、`wait`、`say`、`cooldown`……）照常用；宠物的 `home` 没有意义，所以树里不用 `return_home` / `far_from_home`。
+
+| 类型 | sub_type（BtTree 里的名字） | 参数 | 做什么 |
+| --- | --- | --- | --- |
+| 服务 | `guard_owner`（GuardOwner） | `Range`=300，`Leash`=450 | 每次 tick 选目标。优先级：主人当前攻击的目标（敌对，离主人 ≤ Range）> 最近 5 秒内打过主人的敌人（离主人 ≤ Leash）> 主人 Range 内最近的敌人。都没有时，已有的目标离主人超过 Leash 就清掉，否则保持。Explain 写明选了谁、为什么 |
+| 任务 | `follow_owner`（FollowOwner） | `Distance`=60 | 走到主人身边 Distance 以内（主人在走时站在侧后方，按宠物 id 分左右），到了返回 Success，路上 Running；离主人超过 `world.yaml` 的 `pet.teleport` 时直接传送到主人身边，发 `fx = pet_teleport` 的 `CAST` 事件，返回 Success。落得很远（> Distance × 3）时加速追赶 |
+| 任务 | `keep_distance`（KeepDistance） | `Min`=120，`Max`=220 | 和目标的边缘距离保持在 Min ~ Max：太近后退，太远靠近（走向目标线上区间中点的位置），在区间内返回 Success，路上 Running |
+| 任务 | `cast_on_owner`（CastOnOwner） | `Slot`=1 | 对主人释放第 Slot 个技能（`ally` 技能，比如 `pet_mend`）；冷却、超出射程时失败 |
+| 条件 | `owner_far`（OwnerFar） | `Distance`=350 | 离主人超过 Distance |
+| 条件 | `owner_hp_below`（OwnerHpBelow） | `Percent`=60 | 主人生命百分比低于 Percent |
+| 条件 | `owner_in_combat`（OwnerInCombat） | 无 | 主人最近 5 秒内攻击过（`LastDealtAt`）或被攻击过（`LastHitAt`） |
+
+启动时 `checkSlots` 对宠物同样检查：树里 `cast_skill` / `cast_on_owner` 用到的槽位，`pets.yaml` 里的宠物都配了对应数量的技能。
 
 ## 以近战怪为例读一棵树
 

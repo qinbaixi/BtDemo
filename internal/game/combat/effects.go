@@ -115,22 +115,23 @@ func (sys *System) thorns(owner, attacker *core.Entity, taken float64, effect *c
 	sys.damage(owner, attacker, amount, false, "", config.EffectThorns)
 }
 
-// heal 给 entity 回复 amount 点生命（四舍五入，不超过最大生命），回了血就发 HEAL 事件（proc = 特效名）。
+// heal 给 entity 回复 amount 点生命（四舍五入，不超过最大生命），回了血就发 HEAL 事件
+// （proc 不空时写进事件，是触发它的特效名）。
 func (sys *System) heal(entity *core.Entity, amount float64, proc string) {
 	amount = math.Min(math.Round(amount), entity.Attr.MaxHP-entity.HP)
 	if amount <= 0 {
 		return
 	}
 	entity.HP += amount
-	sys.state.Events.Emit(
-		entity,
-		&core.Event{
-			Kind:  pb.EventKind_HEAL.Enum(),
-			Dst:   core.I32(entity.ID),
-			Value: core.F32(amount),
-			Proc:  proto.String(proc),
-		},
-	)
+	event := &core.Event{
+		Kind:  pb.EventKind_HEAL.Enum(),
+		Dst:   core.I32(entity.ID),
+		Value: core.F32(amount),
+	}
+	if proc != "" {
+		event.Proc = proto.String(proc)
+	}
+	sys.state.Events.Emit(entity, event)
 }
 
 // startAmbush 在 entity 放完位移技能后调用：有 ambush 特效时，接下来 dur 秒内的下一次伤害必定暴击。

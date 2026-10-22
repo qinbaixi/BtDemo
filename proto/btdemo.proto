@@ -22,7 +22,14 @@ message ClientMsg {
     Equip equip = 7;
     Unequip unequip = 8;
     SetSkin skin = 9;
+    SetPet pet = 10;
   }
+}
+
+// SetPet picks the pet that follows the player (swap cooldown, see world.yaml pet).
+// Empty or missing = dismiss the pet. The server answers with PetStatus, or a Toast when refused.
+message SetPet {
+  optional string pet = 1;   // PetInfo.id
 }
 
 // Equip puts a bag item on; whatever was in that slot goes back to the bag.
@@ -95,7 +102,25 @@ message ServerMsg {
     Toast toast = 5;
     SkillBar skill_bar = 6;
     Inventory inventory = 7;
+    PetStatus pet_status = 8;
   }
+}
+
+// PetStatus is sent to the owner when the pet is summoned, dismissed, dies or respawns.
+message PetStatus {
+  optional string pet = 1;        // PetInfo.id of the current pet; empty = no pet
+  optional int32 entity = 2;      // the pet's entity id (0 = none)
+  optional float respawn_in = 3;  // seconds until it respawns (0 = alive)
+  optional float cooldown = 4;    // seconds left before the pet can be swapped again
+}
+
+// PetInfo is one kind of pet from config/pets.yaml (sent once in Welcome, in panel order).
+message PetInfo {
+  required string id = 1;
+  required string name = 2;
+  optional string desc = 3;
+  optional string color = 4;
+  optional string model = 5;
 }
 
 // ItemInfo is one kind of equipment, from config/items.yaml (sent once in Welcome).
@@ -139,7 +164,7 @@ message SkillInfo {
   required int32 slot = 1;
   required string id = 2;
   required string name = 3;
-  required string kind = 4;  // target | aoe | self | dash | line (pierce: hits everyone on the line) | zone | rain
+  required string kind = 4;  // target | aoe | self | ally | dash | line (pierce: hits everyone on the line) | zone | rain
   optional float range = 5;
   optional float radius = 6;
   optional float cooldown = 7;
@@ -185,6 +210,7 @@ message Welcome {
   repeated ClassInfo classes = 10;    // classes to choose from; the first is the default
   optional string class = 11;         // the player's current class (pool/pick above are for it)
   repeated ItemInfo items = 12;       // every item kind (equipment catalogue)
+  repeated PetInfo pets = 13;         // every pet kind; the first is summoned on join
 }
 
 enum ObstacleShape {
@@ -207,6 +233,7 @@ enum EntityKind {
   PLAYER = 1;
   MONSTER = 2;
   NPC = 3;
+  PET = 4;
 }
 
 // EntityInfo is the static part of an entity, sent when it enters the AOI.
@@ -224,6 +251,7 @@ message EntityInfo {
   optional string model = 11;  // which look the client draws, e.g. knight, slime
   optional string skin = 12;   // player skin id (empty = default look)
   optional string gear = 13;   // equipped weapon's ItemInfo.look (empty = class default weapon)
+  optional int32 owner = 14;   // pet: the owner's entity id; 0 for everything else
 }
 
 message Enter {

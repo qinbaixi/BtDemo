@@ -211,6 +211,17 @@ func (sys *System) CastAimed(
 			dmg, crit := sys.CalcDamage(entity, other, skill)
 			sys.applyDamage(entity, other, dmg, crit, skill)
 		}
+	case "ally":
+		// 友方技能：对行为树指定的友方目标（宠物的主人）回血，目标要在 range 内
+		ally := sys.state.Ents.Get(targetID)
+		if !ally.Alive() || sys.state.Hostile(entity, ally) {
+			return ErrNoTarget
+		}
+		if core.EdgeDist(entity, ally) > skill.Range {
+			return ErrTooFar
+		}
+		sys.state.Events.Emit(entity, castEvent(entity, ally, skill))
+		sys.heal(ally, ally.Attr.MaxHP*skill.Heal, "")
 	case "dash":
 		dir, ok := unit(aimX, aimY)
 		if !ok {
@@ -465,6 +476,7 @@ func (sys *System) damage(
 	skillID string,
 	proc string,
 ) damageResult {
+	src.LastDealtAt = sys.state.Now()
 	event := &core.Event{
 		Kind: pb.EventKind_DAMAGE.Enum(),
 		Src:  core.I32(src.ID),
@@ -533,9 +545,13 @@ func (sys *System) absorb(entity *core.Entity, dmg float64) float64 {
 }
 
 // Kill 将 entity 标记为死亡，安排其重生，并奖励击杀者。
+// 宠物打死的，经验和掉落记给它的主人；宠物自己死了按 world.yaml 的 pet.respawn 复活。
 func (sys *System) Kill(entity, killer *core.Entity) {
 	if entity.Dead {
 		return
+	}
+	if killer != nil && killer.Kind == core.KindPet {
+		killer = sys.state.Ents.Get(killer.Owner)
 	}
 	entity.Dead = true
 	entity.HP = 0
@@ -548,6 +564,9 @@ func (sys *System) Kill(entity, killer *core.Entity) {
 		&core.Event{Kind: pb.EventKind_DIE.Enum(), Id: core.I32(entity.ID)},
 	)
 	delay := sys.state.Cfg.World.Player.Respawn
+	if entity.Kind == core.KindPet {
+		delay = sys.state.Cfg.World.Pet.Respawn
+	}
 	if entity.Tmpl != nil {
 		delay = entity.Tmpl.Respawn
 		if killer != nil && killer.Kind == core.KindPlayer {

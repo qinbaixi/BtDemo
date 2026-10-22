@@ -83,3 +83,12 @@ loot:
   bosses: { ogre_chief: 1.0 }
   rarity: { common: 6, rare: 3, epic: 1 }
   class_bias: 0.7
+
+# 宠物：每个玩家可以带一只（模板见 pets.yaml），进游戏默认召唤第一个
+#   respawn: 宠物死后几秒在主人身边复活
+#   swap_cooldown: 换宠物（含收回）之后几秒内不能再换
+#   teleport: 离主人超过这个距离（像素）直接传送到主人身边
+pet:
+  respawn: 10
+  swap_cooldown: 5
+  teleport: 600

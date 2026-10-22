@@ -1,20 +1,21 @@
 // 处理服务端消息：welcome / enter / leave / sync / toast / skills / inventory，更新本地状态。
 
 import type { Debug } from '../ui/debug';
-import { buildSkillBar, renderSelf, setConn, showToast } from '../ui/hud';
+import { buildSkillBar, renderPetHud, renderSelf, setConn, showToast } from '../ui/hud';
 import { closeBag, refreshBag, renderBagStats } from '../ui/bag';
 import { closePicker, openPicker } from '../ui/picker';
 import { rememberedSkin, rememberSkin, takePendingSkin } from '../ui/skins';
+import { rememberedPet } from '../ui/bag';
 import { forgetBlock } from '../input';
 import { createScenery } from '../render/scenery';
 import { loadMap } from './map';
-import type { ClientMessage, ServerMessage, SkillInfo, SyncMsg, WelcomeMsg, ZoneInfo } from '../net/types';
+import type { ClientMessage, PetStatusMsg, ServerMessage, SkillInfo, SyncMsg, WelcomeMsg, ZoneInfo } from '../net/types';
 import { ACTIONS } from '../render/knightActions';
 import { ZONE_FADE_MS } from '../render/zones';
 import { DEATH_MS, LERP_MS, SNAP_DIST } from './config';
 import { onEvent } from './events';
 import { hypot } from './math';
-import { makeEntity, posOf, state, type ClientZone } from './state';
+import { makeEntity, posOf, refreshPetNames, state, type ClientZone } from './state';
 
 export interface SyncDeps {
   send(msg: ClientMessage): void;
@@ -39,12 +40,15 @@ export function handleMessage(m: ServerMessage, deps: SyncDeps): void {
           if (d.name) old.name = d.name;
           if (d.color) old.color = d.color;
           if (d.r) old.r = d.r;
+          if (d.owner !== undefined) old.owner = d.owner;
+          if (d.kind === 'pet') old.petName = d.name || old.petName;
         }
         if (d.id === state.myId && d.skin !== undefined && d.skin !== state.mySkin) {
           state.mySkin = d.skin;
           refreshBag();
         }
       }
+      refreshPetNames();   // 宠物的名牌要等主人也在视野里才能拼上主人名
       break;
     case 'leave':
       for (const id of m.ids || []) {
@@ -81,7 +85,21 @@ export function handleMessage(m: ServerMessage, deps: SyncDeps): void {
       state.inventory = { items: m.items || [], capacity: m.capacity || 0 };
       refreshBag();
       break;
+    case 'petStatus': onPetStatus(m, now); break;
   }
+}
+
+// onPetStatus 记下自己宠物的状态：选的是哪只、实体 id、复活和换宠物冷却还剩多久。
+// 冷却和复活的时刻换算成本地时间，面板上按它倒数。
+function onPetStatus(m: PetStatusMsg, now: number): void {
+  const changed = m.pet !== state.myPet;
+  state.myPet = m.pet;
+  state.petEntity = m.entity;
+  state.petRespawnAt = m.respawnIn > 0 ? now + m.respawnIn * 1000 : 0;
+  if (m.cooldown > 0) state.petCooldownUntil = now + m.cooldown * 1000;
+  if (changed) showToast(m.pet ? `宠物：${state.pets.find((pet) => pet.id === m.pet)?.name ?? m.pet}` : '宠物已收回');
+  renderPetHud();
+  refreshBag();
 }
 
 // setSkills 换上一套技能栏。
@@ -155,6 +173,11 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   state.skillPick = m.pick || 0;
   state.classes = m.classes || [];
   state.items = new Map((m.items || []).map((item) => [item.id, item]));
+  state.pets = m.pets || [];
+  state.myPet = '';                                // 服务端随后发 PetStatus
+  state.petEntity = 0;
+  state.petRespawnAt = 0;
+  state.petCooldownUntil = 0;
   state.inventory = { items: [], capacity: 0 };   // 服务端随后发 Inventory
   state.mySkin = '';                               // 以自己的 Enter 为准
   state.canBlock = true;
@@ -183,6 +206,14 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
 
   buildSkillBar();
   refreshBag();
+  renderPetHud();
+  // 服务端进游戏默认召唤第一只宠物；本地记住的选择和默认不同就发过去换上
+  const remembered = rememberedPet();
+  if (remembered !== null && remembered !== (state.pets[0]?.id ?? '') && state.pets.some((pet) => pet.id === remembered)) {
+    deps.send({ t: 'pet', pet: remembered });
+  } else if (remembered === '' && state.pets.length) {
+    deps.send({ t: 'pet', pet: '' });
+  }
   closePicker();
   openPicker('join');   // 新角色：先挑技能
   deps.debug.setTarget(0);

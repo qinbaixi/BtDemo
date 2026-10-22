@@ -203,6 +203,8 @@ function drawLabels(e: ClientEntity, p: Point, now: number): void {
   ctx.strokeStyle = 'rgba(0,0,0,0.7)';
   let nameColor = NAME_COLOR[e.kind] || '#ffffff';
   if (isSelf) nameColor = '#ffd54a';
+  // 宠物：自己的宠物金色，别人的柔和的青绿色，不用敌对的红
+  if (e.kind === 'pet') nameColor = e.owner === state.myId ? '#e6c46c' : '#9fd3a8';
   if (dead) nameColor = '#9aa39e';
   const name = e.name;
   const lv = `Lv${fmt(e.lv)}`;

@@ -32,7 +32,8 @@ export function createDebug({ send, entity }: {
 
   let open = false;
   let tab = 'ai';
-  let target = 0;        // the selected entity
+  let target = 0;        // the entity the panel shows: a pet picked in debug mode, else the game's target
+  let gameTarget = 0;    // the player's selection (game/state.ts target)
   let watching = 0;      // what the server was last asked to trace
   let traceId = 0;       // entity the panel is showing
   let traceAt = 0;       // when the last trace arrived
@@ -43,7 +44,7 @@ export function createDebug({ send, entity }: {
   const ai = bodies.ai;
   const head = el('div', 'dbg-head');
   const title = el('div', 'dbg-title', '未选择目标');
-  const sub = el('div', 'dbg-sub', '点击一个怪物或 NPC 查看它的行为树决策');
+  const sub = el('div', 'dbg-sub', '点击一个怪物、NPC 或宠物查看它的行为树决策');
   head.append(title, sub);
   ai.append(head);
   const panel = createAiPanel(ai, sub, () => {
@@ -78,6 +79,13 @@ export function createDebug({ send, entity }: {
     syncWatch();
   }
 
+  // showTarget 换成面板要看的实体（没变就什么也不做）。
+  function showTarget(id) {
+    if (id === target) return;
+    target = id;
+    syncWatch();
+  }
+
   // syncWatch asks the server to trace the selected NPC or monster while the
   // AI tab is on screen, and stops the trace otherwise.
   function syncWatch() {
@@ -95,7 +103,7 @@ export function createDebug({ send, entity }: {
     const e = target ? entity(target) : null;
     if (!e || e.kind === 'player') {
       title.textContent = e ? `${e.name}（玩家，没有行为树）` : '未选择目标';
-      sub.textContent = '点击一个怪物或 NPC 查看它的行为树决策';
+      sub.textContent = '点击一个怪物、NPC 或宠物查看它的行为树决策';
       return;
     }
     title.textContent = `${e.name} #${e.id} · Lv${e.lv}${e.dead ? ' · 已阵亡' : ''}`;
@@ -116,11 +124,17 @@ export function createDebug({ send, entity }: {
     // frame is the protocol tap: every sent and received message.
     frame(dir, type, bytes, obj) { proto.log(dir, type, bytes, obj); },
 
-    // setTarget follows the player's selection.
+    // setTarget follows the player's selection; choosing a new game target drops the pinned pet.
     setTarget(id) {
-      if (id === target) return;
-      target = id;
-      syncWatch();
+      if (id === gameTarget) return;
+      gameTarget = id;
+      showTarget(gameTarget);
+    },
+
+    // pickPet 在调试模式下点中宠物：只让 BT 面板看它，不改游戏里的目标（宠物不能被选为目标）。
+    // 玩家下一次改变目标时 setTarget 会把面板切回游戏目标。
+    pickPet(id) {
+      showTarget(id);
     },
 
     // reset forgets server-side state after a reconnect.

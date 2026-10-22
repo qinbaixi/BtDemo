@@ -2,7 +2,7 @@
 // protocol.ts turns the generated protobuf classes (pb.js) into these, so
 // game and render code never touch protobuf directly.
 
-export type EntityKind = 'player' | 'monster' | 'npc';
+export type EntityKind = 'player' | 'monster' | 'npc' | 'pet';
 
 export interface SkillInfo {
   slot: number;
@@ -38,6 +38,15 @@ export interface SkinInfo {
   name: string;
   desc: string;
   color: string;   // 选择面板上的色块
+}
+
+// PetInfo 是一种宠物（config/pets.yaml，welcome 里一次发全）；第一个是默认。
+export interface PetInfo {
+  id: string;
+  name: string;
+  desc: string;    // 装备面板上的一句话说明
+  color: string;   // 卡片色块
+  model: string;   // 前端模型名
 }
 
 // 装备槽位
@@ -92,6 +101,7 @@ export interface EntityInfo {
   model?: string;
   skin?: string;   // 玩家外观 id（空 = 默认）
   gear?: string;   // 当前武器的 ItemInfo.look（空 = 职业默认武器）
+  owner?: number;  // 宠物的主人实体 id（非宠物为 0）
 }
 
 export interface EntityState {
@@ -234,6 +244,7 @@ export interface WelcomeMsg {
   classes: ClassInfo[];   // 可选职业，第一个是默认
   playerClass: string;    // 当前职业 id
   items: ItemInfo[];      // 全部装备种类（装备图鉴）
+  pets: PetInfo[];        // 可以带的宠物，第一个是默认
 }
 export interface EnterMsg { t: 'enter'; ents: EntityInfo[] }
 export interface LeaveMsg { t: 'leave'; ids: number[] }
@@ -252,7 +263,12 @@ export interface SkillBarMsg { t: 'skills'; skills: SkillInfo[]; playerClass: st
 // InventoryMsg 是整份背包和身上的装备：进游戏后和每次变化时发。
 export interface InventoryMsg { t: 'inventory'; items: ItemSlotted[]; capacity: number }   // capacity 是背包格数（穿着的不算）
 
-export type ServerMessage = WelcomeMsg | EnterMsg | LeaveMsg | SyncMsg | ToastMsg | SkillBarMsg | InventoryMsg;
+// PetStatusMsg 是自己宠物的状态：召唤、收回、死亡、复活、换宠物时发。
+// pet 是选中的宠物 id（空 = 不带）；entity 是宠物实体 id（不在视野或没召唤为 0）；
+// respawnIn 是死后还有几秒复活（0 = 不在复活中）；cooldown 是换宠物的冷却还剩几秒（0 = 没有冷却）。
+export interface PetStatusMsg { t: 'petStatus'; pet: string; entity: number; respawnIn: number; cooldown: number }
+
+export type ServerMessage = WelcomeMsg | EnterMsg | LeaveMsg | SyncMsg | ToastMsg | SkillBarMsg | InventoryMsg | PetStatusMsg;
 
 export type ClientMessage =
   | { t: 'move'; dx: number; dy: number }
@@ -263,4 +279,5 @@ export type ClientMessage =
   | { t: 'block'; on: boolean }
   | { t: 'equip'; uid: number }      // 穿上背包里的一件（ItemSlotted.uid）
   | { t: 'unequip'; slot: string }   // 把这个槽位的卸回背包
-  | { t: 'skin'; skin: string };     // 换当前职业的外观（空 = 默认）
+  | { t: 'skin'; skin: string }     // 换当前职业的外观（空 = 默认）
+  | { t: 'pet'; pet: string };      // 换宠物（空 = 收回）

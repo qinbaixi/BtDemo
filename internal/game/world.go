@@ -10,6 +10,7 @@
 //	combat   技能、伤害、增益、死亡、装备特效
 //	ai       来自 BtTree 的行为树与调试跟踪
 //	spawn    创建怪物、NPC 和玩家，复活
+//	pet      宠物：召唤、收回、换宠物、复活、跟随主人的等级
 //	zone     地上的回血区：出生点泉水、技能放的法阵
 //	session  已连接的玩家：输入、AOI 同步、协议
 package game
@@ -27,6 +28,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/item"
 	"github.com/qinbaixi/BtDemo/internal/game/move"
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
+	"github.com/qinbaixi/BtDemo/internal/game/pet"
 	"github.com/qinbaixi/BtDemo/internal/game/session"
 	"github.com/qinbaixi/BtDemo/internal/game/spawn"
 	"github.com/qinbaixi/BtDemo/internal/game/zone"
@@ -48,6 +50,7 @@ type World struct {
 	Combat   *combat.System
 	AI       *ai.System
 	Spawn    *spawn.System
+	Pet      *pet.System
 	Zone     *zone.System
 	Sessions *session.System
 
@@ -81,6 +84,7 @@ func newWorld(cfg *config.Config, seed int64, obstacles []nav.Shape) (*World, er
 		return nil, err
 	}
 	world.Spawn = spawn.New(world.State, world.Grid, world.Move, world.AI)
+	world.Pet = pet.New(world.State, world.Grid, world.Move, world.AI, world.Spawn)
 	world.Sessions = session.New(
 		world.State,
 		world.Grid,
@@ -89,6 +93,7 @@ func newWorld(cfg *config.Config, seed int64, obstacles []nav.Shape) (*World, er
 		world.AI,
 		world.Spawn,
 		world.Items,
+		world.Pet,
 	)
 	world.Spawn.SpawnConfigured()
 	return world, nil
@@ -120,6 +125,7 @@ func (world *World) Run(ctx context.Context) {
 func (world *World) Step() {
 	world.State.Clock.Advance()
 	world.Spawn.Tick()
+	world.Pet.Tick()
 	world.Combat.Tick()
 	world.Zone.Tick()
 	world.Move.Tick()

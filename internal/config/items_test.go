@@ -180,6 +180,9 @@ func TestShippedItems(t *testing.T) {
 		"monster_boss":   true,
 		"npc_guard":      true,
 		"npc_villager":   true,
+		"pet_melee":      true,
+		"pet_caster":     true,
+		"pet_healer":     true,
 	})
 	if err != nil {
 		t.Fatal(err)

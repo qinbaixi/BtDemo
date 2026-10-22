@@ -641,6 +641,19 @@ h4 {
 .skin-name { font-family: var(--display); font-size: 13px; letter-spacing: 1px; color: #fbe9c0; white-space: nowrap; }
 .skin-desc { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* 宠物卡：外观卡的样式，换宠物冷却中变暗（点了只提示剩余秒数） */
+.pet-card.cooling { opacity: 0.4; filter: grayscale(0.6); }
+.pet-card.cooling:hover { background: rgba(255, 255, 255, 0.03); opacity: 0.4; }
+
+/* 自己面板里的宠物小卡：名字、等级和一条血条，紧凑些 */
+.pet-hud { margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(224, 178, 90, 0.2); }
+.pet-hud-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; margin-bottom: 4px; }
+.pet-hud-name { font-family: var(--display); letter-spacing: 1px; color: #fbe9c0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pet-hud-state { color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pet-hud.empty .pet-hud-name { color: var(--muted); }
+.pet-hud-bar { height: 12px; margin-bottom: 0; }
+.pet-hud-bar .txt { font-size: 10px; line-height: 10px; }
+
 /* ======================= bag / equipment panel ======================= */
 .bag-btn {
   position: absolute;

@@ -9,4 +9,7 @@ var All = map[string]Exported{
 	"monster_ranged": {RootID: MonsterRangedRootID, Nodes: MonsterRangedNodes, Labels: map[int]string{1: "远程怪物", 2: "刷新仇恨", 4: "脱战回家", 8: "战斗", 11: "拉开距离", 13: "射击", 14: "靠近", 15: "闲逛"}},
 	"npc_guard":      {RootID: NpcGuardRootID, Nodes: NpcGuardNodes, Labels: map[int]string{1: "守卫", 2: "警戒", 4: "自我治疗", 6: "回岗", 10: "战斗", 12: "攻击", 14: "巡逻", 17: "说话冷却中也继续执行后面的节点"}},
 	"npc_villager":   {RootID: NpcVillagerRootID, Nodes: NpcVillagerNodes, Labels: map[int]string{1: "村民", 3: "逃跑", 5: "说话冷却中也继续执行后面的节点", 9: "回家", 11: "日常", 12: "散步", 15: "闲聊", 18: "提醒"}},
+	"pet_caster":     {RootID: PetCasterRootID, Nodes: PetCasterNodes, Labels: map[int]string{1: "火灵", 2: "守护主人", 4: "回到主人身边", 8: "战斗", 10: "爆燃", 11: "远程输出", 13: "技能冷却时也留在战斗分支，不跑回主人身边", 14: "火球", 15: "跟随", 19: "说话冷却中也继续执行后面的节点"}},
+	"pet_healer":     {RootID: PetHealerRootID, Nodes: PetHealerNodes, Labels: map[int]string{1: "林精", 2: "守护主人", 4: "治疗主人", 6: "愈合", 8: "回到主人身边", 12: "战斗", 14: "荆棘术", 15: "靠近", 16: "跟随", 20: "说话冷却中也继续执行后面的节点"}},
+	"pet_melee":      {RootID: PetMeleeRootID, Nodes: PetMeleeNodes, Labels: map[int]string{1: "小狼", 2: "守护主人", 4: "回到主人身边", 8: "战斗", 10: "嚎叫", 12: "咬", 13: "追击", 14: "跟随", 18: "说话冷却中也继续执行后面的节点"}},
 }

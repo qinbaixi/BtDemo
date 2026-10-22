@@ -17,6 +17,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/game/item"
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
+	"github.com/qinbaixi/BtDemo/internal/game/pet"
 	"github.com/qinbaixi/BtDemo/internal/game/spawn"
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
@@ -43,11 +44,13 @@ type System struct {
 	aiSys    *ai.System
 	spawn    *spawn.System
 	items    *item.System
+	pets     *pet.System
 	nav      *nav.Map
 	sessions map[*Session]bool
 
 	obstacles []*pb.Obstacle // 构建一次，并在每条欢迎消息中发送
 	itemInfos []*pb.ItemInfo // 装备图鉴，构建一次，并在每条欢迎消息中发送
+	petInfos  []*pb.PetInfo  // 宠物图鉴，构建一次，并在每条欢迎消息中发送
 }
 
 // New 创建会话系统。
@@ -59,6 +62,7 @@ func New(
 	aiSys *ai.System,
 	spawnSys *spawn.System,
 	itemSys *item.System,
+	petSys *pet.System,
 ) *System {
 	sys := &System{
 		state:    state,
@@ -68,10 +72,12 @@ func New(
 		aiSys:    aiSys,
 		spawn:    spawnSys,
 		items:    itemSys,
+		pets:     petSys,
 		sessions: map[*Session]bool{},
 	}
 	sys.obstacles = obstacles(navMap)
 	sys.itemInfos = itemInfos(state.Cfg.Items)
+	sys.petInfos = petInfos(state.Cfg.Pets)
 	return sys
 }
 
@@ -92,6 +98,7 @@ func (sys *System) Join() *Session {
 		AoiCell:   core.F32(sys.grid.Cell),
 		Obstacles: sys.obstacles,
 		Items:     sys.itemInfos,
+		Pets:      sys.petInfos,
 	}
 	class := cfg.Player.Class(session.Player.Class)
 	welcome.Skills = skillBar(session.Player.Skills)
@@ -104,6 +111,7 @@ func (sys *System) Join() *Session {
 	session.Player.CanPick = true // 刚进游戏，放第一个技能之前可以挑技能
 	sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Welcome{Welcome: welcome}})
 	sys.items.GiveStarter(session.Player)
+	sys.pets.Join(session.Player)
 	sys.publishGear()
 	return session
 }
@@ -167,6 +175,7 @@ func (sys *System) Leave(session *Session) {
 		return
 	}
 	delete(sys.sessions, session)
+	sys.pets.Dismiss(session.Player)
 	sys.spawn.Remove(session.Player)
 	close(session.Out)
 }
@@ -187,6 +196,11 @@ func (sys *System) publishGear() {
 			player.InventoryDirty = false
 			inventory := inventoryInfo(player, sys.items.Capacity())
 			sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Inventory{Inventory: inventory}})
+		}
+		if player.PetDirty {
+			player.PetDirty = false
+			status := petStatus(sys.state, player)
+			sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_PetStatus{PetStatus: status}})
 		}
 		if player.LookDirty {
 			player.LookDirty = false
@@ -263,6 +277,10 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 		}
 	case *pb.ClientMsg_Unequip:
 		if reason := sys.items.Unequip(entity, body.Unequip.GetSlot()); reason != "" {
+			sys.toast(session, reason)
+		}
+	case *pb.ClientMsg_Pet:
+		if reason := sys.pets.Set(entity, body.Pet.GetPet()); reason != "" {
 			sys.toast(session, reason)
 		}
 	case *pb.ClientMsg_Skin:

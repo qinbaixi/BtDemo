@@ -1,4 +1,4 @@
-// Package ai 负责运行从 BtTree 导出的行为树：加载并校验这些树，为每个怪物和 NPC 挂载一棵树，
+// Package ai 负责运行从 BtTree 导出的行为树：加载并校验这些树，为每个怪物、NPC 和宠物挂载一棵树，
 // 驱动其 tick，并为调试面板记录决策轨迹。
 package ai
 
@@ -7,7 +7,6 @@ import (
 
 	"github.com/qinbaixi/BtDemo/internal/ai/trees"
 	"github.com/qinbaixi/BtDemo/internal/bt"
-	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/game/combat"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/game/move"
@@ -52,7 +51,14 @@ func New(state *core.State, combatSys *combat.System, moveSys *move.System) (*Sy
 		sys.trees[name] = tree
 	}
 	for _, tmpl := range state.Cfg.Templates {
-		if err := checkSlots(sys.trees[tmpl.Tree], tmpl); err != nil {
+		tree := sys.trees[tmpl.Tree]
+		if err := checkSlots(tree, "monsters.yaml: template", tmpl.ID, tmpl.Skills); err != nil {
+			return nil, err
+		}
+	}
+	for _, pet := range state.Cfg.Pets {
+		tree := sys.trees[pet.Tree]
+		if err := checkSlots(tree, "pets.yaml: pet", pet.ID, pet.Skills); err != nil {
 			return nil, err
 		}
 	}
@@ -68,20 +74,24 @@ func TreeNames() map[string]bool {
 	return out
 }
 
-// checkSlots 确保模板行为树中的每个 CastSkill 都指向该模板的某个技能。
-func checkSlots(tree *bt.Tree, tmpl *config.Template) error {
+// checkSlots 确保行为树中的每个 CastSkill 和 CastOnOwner 都指向模板（monsters.yaml 的模板或
+// pets.yaml 的宠物，owner 是报错时的前缀，id 是它的 id）的某个技能。
+func checkSlots(tree *bt.Tree, owner, id string, skills []string) error {
 	for _, node := range tree.Nodes {
-		if node.Kind == bt.KindTask && node.SubType == "cast_skill" {
-			if slot := int(node.Num("Slot", 1)); slot < 1 || slot > len(tmpl.Skills) {
-				return fmt.Errorf(
-					"monsters.yaml: template %s has %d skills but tree %s casts slot %d (node %d)",
-					tmpl.ID,
-					len(tmpl.Skills),
-					tree.Name,
-					slot,
-					node.ID,
-				)
-			}
+		if node.Kind != bt.KindTask || node.SubType != "cast_skill" &&
+			node.SubType != "cast_on_owner" {
+			continue
+		}
+		if slot := int(node.Num("Slot", 1)); slot < 1 || slot > len(skills) {
+			return fmt.Errorf(
+				"%s %s has %d skills but tree %s casts slot %d (node %d)",
+				owner,
+				id,
+				len(skills),
+				tree.Name,
+				slot,
+				node.ID,
+			)
 		}
 	}
 	return nil

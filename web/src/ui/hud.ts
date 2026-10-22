@@ -27,6 +27,8 @@ let ui: {
   skillbar: HTMLElement; conn: HTMLElement; toast: HTMLElement;
   death: HTMLElement; deathText: HTMLElement; deathPick: HTMLElement;
 };
+// 自己面板里的宠物小卡（initHud 里加进去）：名字 + 等级，下面是宠物的血条；死了画复活倒计时
+let petUi: { box: HTMLElement; name: HTMLElement; state: HTMLElement; fill: HTMLElement; txt: HTMLElement } | null = null;
 const attrEls: Record<string, HTMLElement> = {};
 let skillBtns: Record<number, SkillButton> = {};
 let onCast: (slot: number) => void = () => {};
@@ -68,6 +70,45 @@ export function initHud(cast: (slot: number) => void): void {
   };
   buildAttrRows();
   buildSkillBar();
+  buildPetHud();
+  // 复活倒计时要按秒走；血条和名字没变时 renderPetHud 不动 DOM
+  window.setInterval(renderPetHud, 250);
+}
+
+// buildPetHud 在自己面板的末尾加宠物小卡（DOM 在这里建，index.html 不用改）。
+function buildPetHud(): void {
+  const box = document.createElement('div');
+  box.className = 'pet-hud';
+  box.innerHTML = `
+    <div class="pet-hud-head"><span class="pet-hud-name">宠物</span><span class="pet-hud-state"></span></div>
+    <div class="bar hp pet-hud-bar"><div class="fill"></div><span class="txt"></span></div>`;
+  $('panel-self').append(box);
+  petUi = {
+    box,
+    name: box.querySelector('.pet-hud-name') as HTMLElement,
+    state: box.querySelector('.pet-hud-state') as HTMLElement,
+    fill: box.querySelector('.fill') as HTMLElement,
+    txt: box.querySelector('.txt') as HTMLElement,
+  };
+}
+
+// renderPetHud 按状态画宠物小卡：不带 / 复活倒计时 / 召唤中 / 阵亡 / 名字加血条。
+export function renderPetHud(): void {
+  if (!petUi) return;
+  const now = performance.now();
+  const pet = state.pets.find((p) => p.id === state.myPet);
+  const entity = state.petEntity ? state.ents.get(state.petEntity) : undefined;
+  const hasBar = !!state.myPet && !!entity && !entity.dead && state.petRespawnAt <= now;
+  petUi.box.classList.toggle('empty', !state.myPet);
+  setText(petUi.name, state.myPet ? (pet?.name ?? state.myPet) : '不带宠物');
+  if (!state.myPet) setText(petUi.state, '');
+  else if (state.petRespawnAt > now) setText(petUi.state, `复活倒计时 ${Math.ceil((state.petRespawnAt - now) / 1000)} 秒`);
+  else if (entity?.dead) setText(petUi.state, '阵亡');
+  else if (!entity && state.ents.get(state.myId)?.dead) setText(petUi.state, '主人复活后回来');
+  else if (!entity) setText(petUi.state, '召唤中…');
+  else setText(petUi.state, `Lv ${fmt(entity.lv)}`);
+  petUi.fill.parentElement!.hidden = !hasBar;   // 没有可看的血条（不带、死了、没召唤）时隐藏
+  if (hasBar) setBar(petUi.fill, petUi.txt, entity.hp, entity.maxHp);
 }
 
 export function setConn(kind: 'wait' | 'ok' | 'bad', text: string): void {

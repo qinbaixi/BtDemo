@@ -16,6 +16,7 @@ var kindToPB = map[core.Kind]pb.EntityKind{
 	core.KindPlayer:  pb.EntityKind_PLAYER,
 	core.KindMonster: pb.EntityKind_MONSTER,
 	core.KindNPC:     pb.EntityKind_NPC,
+	core.KindPet:     pb.EntityKind_PET,
 }
 
 // entityInfo 是实体进入视野时客户端获知的信息。
@@ -34,6 +35,7 @@ func entityInfo(entity *core.Entity) *pb.EntityInfo {
 		Model: proto.String(entity.Model),
 		Skin:  proto.String(entity.Skin),
 		Gear:  proto.String(entity.GearLook()),
+		Owner: core.I32(entity.Owner),
 	}
 }
 
@@ -263,4 +265,35 @@ func zoneInfos(zones []*core.Zone) []*pb.Zone {
 		})
 	}
 	return infos
+}
+
+// petInfos 是宠物图鉴：每种宠物的名字、说明和外观，按 pets.yaml 的顺序（第一个是默认）。
+func petInfos(pets []*config.Pet) []*pb.PetInfo {
+	infos := make([]*pb.PetInfo, 0, len(pets))
+	for _, pet := range pets {
+		infos = append(infos, &pb.PetInfo{
+			Id:    proto.String(pet.ID),
+			Name:  proto.String(pet.Name),
+			Desc:  proto.String(pet.Desc),
+			Color: proto.String(pet.Color),
+			Model: proto.String(pet.Model),
+		})
+	}
+	return infos
+}
+
+// petStatus 是玩家 owner 的宠物现在的状态：选了哪只、实体 id、复活倒计时、换宠物冷却。
+func petStatus(state *core.State, owner *core.Entity) *pb.PetStatus {
+	now := state.Now()
+	status := &pb.PetStatus{
+		Pet:      proto.String(owner.PetID),
+		Entity:   core.I32(owner.PetEntity),
+		Cooldown: core.F32(math.Max(0, core.Round1(owner.PetSwapAt-now))),
+	}
+	respawnIn := 0.0
+	if pet := state.Ents.Get(owner.PetEntity); pet != nil && pet.Dead {
+		respawnIn = math.Max(0, core.Round1(pet.RespawnAt-now))
+	}
+	status.RespawnIn = core.F32(respawnIn)
+	return status
 }

@@ -18,9 +18,17 @@ const (
 	KindPlayer  Kind = "player"
 	KindMonster Kind = "monster"
 	KindNPC     Kind = "npc"
+	KindPet     Kind = "pet"
 )
 
-// Entity 是玩家、怪物或 NPC。其字段按职责分组为组件，每类职责一个组件；
+// 宠物的特效名（CAST 事件的 fx 字段），客户端据此画召唤和传送特效：
+// 召唤 / 复活时 (x, y) 是出现的位置；传送时 (x, y) 是出发的位置、(tx, ty) 是到达的位置。
+const (
+	FXPetSummon   = "pet_summon"
+	FXPetTeleport = "pet_teleport"
+)
+
+// Entity 是玩家、怪物、NPC 或宠物。其字段按职责分组为组件，每类职责一个组件；
 // 组件以内嵌方式引入，因此可以直接写 entity.X、entity.HP，不用写 entity.Transform.X。
 type Entity struct {
 	Identity
@@ -32,6 +40,7 @@ type Entity struct {
 	Steering
 	Brain
 	Inventory
+	Companion
 }
 
 // Identity 描述实体是什么，以及客户端如何绘制它。
@@ -44,7 +53,11 @@ type Identity struct {
 	Model   string           // 客户端外观，例如 knight、slime
 	Class   string           // 玩家职业 id（config.Class.ID）；怪物和 NPC 为空
 	Skin    string           // 玩家皮肤 id（config.Skin.ID）；怪物和 NPC 为空
-	Tmpl    *config.Template // 玩家为 nil
+	Tmpl    *config.Template // 玩家和宠物为 nil
+	// Owner 是宠物的主人（玩家实体）的 ID；其他实体为 0
+	Owner int
+	// PetCfg 是宠物的模板；其他实体为 nil
+	PetCfg *config.Pet
 	// LookDirty 为 true 表示皮肤或武器外观变了，session 要让所有能看见它的会话重发 Enter
 	LookDirty bool
 }
@@ -89,6 +102,7 @@ type Combat struct {
 	Target       int     // 实体 ID，0 表示无
 	LastAttacker int     // 最近一次攻击者的实体 ID
 	LastHitAt    float64 // 最近一次受击的时间
+	LastDealtAt  float64 // 最近一次出手打人（造成伤害，含被免疫的）的时间，0 表示没打过
 
 	// CanPick 为 true 时玩家可以重新挑技能：进游戏或死亡之后、放下一个技能之前（由 session、combat 管理）
 	CanPick bool
@@ -142,6 +156,21 @@ type Inventory struct {
 	InventoryDirty bool
 	// Notices 是要以 Toast 发给玩家的提示（比如背包满了），session 发完后清空
 	Notices []string
+}
+
+// Companion 是玩家带的宠物的记录（由 pet 管理）。怪物、NPC 和宠物自己这些字段都是空的。
+type Companion struct {
+	// PetID 是玩家选的宠物（config.Pet.ID）；空 = 不带宠物
+	PetID string
+	// PetEntity 是宠物实体的 ID；0 = 现在场上没有（收回了，或主人死亡期间）
+	PetEntity int
+	// PetSwapAt 之前不能再换宠物
+	PetSwapAt float64
+	// PetDeadSeen 为 true 表示宠物这次死亡已经通知过主人
+	PetDeadSeen bool
+	// PetDirty 为 true 表示宠物的状态变了（召唤、收回、死亡、复活、换宠物），
+	// session 要给玩家发一份 PetStatus
+	PetDirty bool
 }
 
 // OwnedItem 是玩家拥有的一件物品。

@@ -126,11 +126,11 @@ func (sys *System) skills(ids []string) []*config.Skill {
 	return out
 }
 
-// Tick 复活复活时间已到的死亡实体。
+// Tick 复活复活时间已到的死亡实体（宠物由 pet 包复活）。
 func (sys *System) Tick() {
 	now := sys.state.Now()
 	sys.state.Ents.Each(func(entity *core.Entity) {
-		if entity.Dead && now >= entity.RespawnAt {
+		if entity.Dead && entity.Kind != core.KindPet && now >= entity.RespawnAt {
 			sys.respawn(entity)
 		}
 	})
