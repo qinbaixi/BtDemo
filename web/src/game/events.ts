@@ -1,7 +1,10 @@
 // 把服务端事件（施法、伤害、死亡……）变成动画、特效和飘字。
 
 import type { GameEvent } from '../net/types';
-import { faceToward, headY, posOf, state, type FloatOpts } from './state';
+import { cameraKick, cameraPunch } from '../render/camera';
+import { FEEL } from './config';
+import { hypot } from './math';
+import { faceToward, headY, posOf, state, type ClientEntity, type FloatOpts } from './state';
 
 export function onEvent(ev: GameEvent, now: number): void {
   const fx = state.fx!;
@@ -30,8 +33,15 @@ export function onEvent(ev: GameEvent, now: number): void {
       const hit = () => {
         const t = performance.now();
         const e = state.ents.get(ev.dst);
-        if (e) e.hitAt = t;
         const v = ev.v || 0;
+        let side = Math.random() < 0.5 ? -1 : 1;
+        if (e) {
+          e.hitAt = t;
+          const push = feelHit(e, ev.src, !!ev.crit, !!ev.blocked, v, t);
+          if (Math.abs(push) > 0.2) side = Math.sign(push);
+        }
+        // 伤害数字往被推开的方向抛出去（竖着打时随机左右）
+        const drift = e ? side * 26 : 0;
         if (ev.blocked) {
           // 格挡：盾上迸出火花，伤害数字小一号
           fx.block(ev.dst, t);
@@ -44,8 +54,11 @@ export function onEvent(ev: GameEvent, now: number): void {
           addFloat(t, ev.dst, `吸收 ${ev.absorbed}`, '#7fd8ff', 15, 900, { rise: 30 });
         }
         if (v <= 0) return;   // 全被挡下或吸收
-        if (ev.crit) addFloat(t, ev.dst, `暴击 ${v}`, '#ffe14d', ev.blocked ? 20 : 26, 1100, { pop: true, rise: 54 });
-        else addFloat(t, ev.dst, `-${v}`, ev.dst === state.myId ? '#ff6b6b' : '#ffffff', ev.blocked ? 14 : 17, 900);
+        const mine = ev.dst === state.myId;
+        // 自己挨的暴击用大号红字，金色暴击留给自己打出去的
+        if (ev.crit && !mine) addFloat(t, ev.dst, `${v}`, '#ffe14d', ev.blocked ? 22 : 30, 1200, { pop: true, rise: 58, crit: true, drift: drift * 0.5 });
+        else if (ev.crit) addFloat(t, ev.dst, `${v}`, '#ff4a3a', ev.blocked ? 18 : 24, 1100, { pop: true, rise: 50, drift });
+        else addFloat(t, ev.dst, `${v}`, mine ? '#ff6b6b' : '#ffffff', ev.blocked ? 14 : 18, 900, { drift });
       };
       if (at > now) state.pending.push({ at, fn: hit });
       else hit();
@@ -61,6 +74,8 @@ export function onEvent(ev: GameEvent, now: number): void {
       state.bubbles.delete(ev.id);
       const e = state.ents.get(ev.id);
       if (e && e.deadAt < 0) e.deadAt = now;
+      // 倒地时被打飞一小段（方向沿用最后一次受击）
+      if (e) e.knockAmp = FEEL.knockPx * 3;
       fx.death(ev.id, e ? e.color : '#ffffff', now);
       break;
     }
@@ -76,6 +91,48 @@ export function onEvent(ev: GameEvent, now: number): void {
       addFloat(now, ev.id, `升级! Lv ${ev.lv}`, '#ffd54a', 26, 1600, { pop: true, rise: 60 });
       break;
   }
+}
+
+// feelHit 处理一次命中的打击感：双方顿帧、受击方向、镜头冲击、连击数。
+// 返回受击方向的横向分量（伤害数字往这边飘）。
+function feelHit(target: ClientEntity, srcId: number, crit: boolean, blocked: boolean, damage: number, now: number): number {
+  const src = srcId ? state.ents.get(srcId) : undefined;
+  const tp = posOf(target, now);
+  let dx = 0;
+  let dy = 0;
+  if (src && src !== target) {
+    const sp = posOf(src, now);
+    const len = Math.hypot(tp.x - sp.x, tp.y - sp.y);
+    if (len > 0.5) { dx = (tp.x - sp.x) / len; dy = (tp.y - sp.y) / len; }
+  }
+  if (dx === 0 && dy === 0) dx = Math.cos(target.facing) < 0 ? 1 : -1;   // 不知道谁打的：往身后推
+  target.knockX = dx;
+  target.knockY = dy;
+  const amp = blocked ? FEEL.knockPx * 0.5 : FEEL.knockPx * (crit ? 1.7 : 1);
+  // 已经倒地（箭比死亡事件晚到）时保留被打飞的距离
+  target.knockAmp = target.dead ? Math.max(target.knockAmp, amp) : amp;
+
+  // 顿帧：受击者停住；近战的攻击者也停（远程的箭飞到时攻击动作早就结束了）
+  const stop = blocked ? FEEL.hitStopBlockMs : crit ? FEEL.hitStopCritMs : FEEL.hitStopMs;
+  target.freezeUntil = Math.max(target.freezeUntil, now + stop);
+  const srcPos = src ? posOf(src, now) : null;
+  if (src && srcPos && src !== target && hypot(srcPos.x, srcPos.y, tp.x, tp.y) < 140) src.freezeUntil = Math.max(src.freezeUntil, now + stop);
+
+  // 镜头：只在自己打人或被打时动，旁边 NPC 互殴不晃屏幕
+  if (srcId === state.myId && target.id !== state.myId) {
+    cameraKick(dx, dy, crit ? 7 : 2.5);
+    if (crit) cameraPunch(FEEL.zoomPunch);
+    // 一次范围技能同时打中好几个只算一击（同一时刻的命中合并）
+    const combo = state.combo;
+    if (damage > 0 && now - combo.at > 1) {
+      combo.n = now - combo.at < 2000 ? combo.n + 1 : 1;
+      combo.at = now;
+    }
+  } else if (target.id === state.myId) {
+    cameraKick(dx, dy, blocked ? 3 : crit ? 8 : 4.5);
+    if (damage > 0) state.hurtAt = now;
+  }
+  return dx;
 }
 
 // addFloat 在实体头顶加一行飘字（实体消失后停在最后的位置）。
@@ -97,5 +154,7 @@ export function addFloat(
     born: now,
     rise: opts.rise ?? 40,
     pop: !!opts.pop,
+    drift: opts.drift ?? 0,
+    crit: !!opts.crit,
   });
 }

@@ -9,7 +9,7 @@
 //   overlay      另一块 2D 画布：头顶文字、调试线条、暗角（不参与泛光和调色，保持清晰）
 
 import { Application, Container, Graphics } from 'pixi.js';
-import { ATTACK_MS, DEATH_MS, HIT_MS, MODEL_SCALE, RIM } from '../game/config';
+import { ATTACK_MS, DEATH_MS, FEEL, HIT_MS, MODEL_SCALE, RIM } from '../game/config';
 import { clamp, hypot } from '../game/math';
 import { posOf, state, type ClientEntity, type Point, type Scenery } from '../game/state';
 import { art } from './art';
@@ -23,6 +23,7 @@ import { SceneView } from './pixi/sceneView';
 
 let app: Application;
 let scene: Container;          // 整个画面（后期处理加在这一层）
+let zoomer: Container;         // 缩放冲击（暴击时画面放大一下）加在这一层，后期处理不跟着缩放
 let post: PostFilter;
 let world: Container;          // 跟随镜头的世界层
 let glowWorld: Container;      // 光照彩色层，和 world 用同一个镜头变换
@@ -80,7 +81,9 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
   overFx = new CanvasSprite();
   fxWorld.addChild(overFx);
   scene = new Container();
-  scene.addChild(world, darkness, glowWorld, fxWorld);
+  zoomer = new Container();
+  zoomer.addChild(world, darkness, glowWorld, fxWorld);
+  scene.addChild(zoomer);
   scene.filterArea = app.screen;   // 后期处理整屏做，不用每帧算整个世界的包围盒
   app.stage.addChild(scene);
   lighting = createLighting(app.renderer, darkness, glowWorld);
@@ -88,6 +91,12 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
 
   initOverlay(overlay);
   resize();
+}
+
+// setPostOptions 调整后期处理参数（?fxlab 实验页用）。
+export function setPostOptions(opts: Partial<typeof POST>): void {
+  Object.assign(POST, opts);
+  post?.set(opts);
 }
 
 // resize 让画布跟窗口和设备像素比一致。
@@ -99,22 +108,15 @@ export function resize(): void {
   resizeOverlay(state.dpr);
 }
 
-export function updateCamera(now: number): void {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const { w, h } = state.map;
-  const me = state.ents.get(state.myId);
-  const p = me ? posOf(me, now) : { x: w / 2, y: h / 2 };
-  const x = w <= vw ? (w - vw) / 2 : clamp(p.x - vw / 2, 0, w - vw);
-  const y = h <= vh ? (h - vh) / 2 : clamp(p.y - vh / 2, 0, h - vh);
-  state.cam = { x, y, w: vw, h: vh };
-}
-
 // drawWorld 画一帧。debugOpen 时额外画被观察实体的 AI 路径。
 export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
   const view = state.cam;
-  const shake = state.fx.shakeOffset(dt);
+  const shake = state.camShake;
   for (const c of [world, glowWorld, fxWorld]) c.position.set(-view.x + shake.x, -view.y + shake.y);
+  // 缩放冲击以屏幕中心为原点
+  const zoom = state.camZoom;
+  zoomer.scale.set(zoom);
+  zoomer.position.set((view.w / 2) * (1 - zoom), (view.h / 2) * (1 - zoom));
 
   const me = state.ents.get(state.myId);
   const mp = me ? posOf(me, now) : null;
@@ -130,6 +132,8 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
 
   drawMarks(mp, now);
   drawUnderFx(now);
+  // 先收集光源：角色要知道附近最亮的光在哪
+  updateLights(now, mp, shake);
 
   // 角色：每个实体一个 ActorView，实体被移除（离开 AOI）后销毁
   const ents: { e: ClientEntity; p: Point }[] = [];
@@ -141,34 +145,65 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
       v = new ActorView(e.model, RIM[e.kind], depth);
       actors.set(e.id, v);
     }
+    const pose = poseOf(e, p, now, dt);
+    if (state.hq && !e.dead) pose.light = lighting.dominant(p.x, p.y - 20);
+    // 开始溶解时冒出一阵灰烬
+    if ((pose.dissolve ?? -1) >= 0 && !v.dissolving) state.fx.ashes(e.id, pose.burn!, now);
+    v.dissolving = (pose.dissolve ?? -1) >= 0;
     // 尸体是躺平的，排在站在它上面的东西后面
-    v.update(poseOf(e, p, now), p.y - (e.dead ? 30 : 0), state.dpr, state.hq, now);
+    v.update(pose, p.y - (e.dead ? 30 : 0), state.dpr, state.hq, now);
   }
   for (const [id, v] of actors) {
     if (!state.ents.has(id)) { v.destroy(); actors.delete(id); }
   }
 
-  updateLights(now, mp, shake);
   // 开后期处理时特效画进 Pixi 才能发光；不开时直接画在叠加层上，省掉每帧整屏上传纹理
   const usePost = state.hq && state.post;
   if (usePost !== (scene.filters?.[0] === post)) scene.filters = usePost ? [post] : null;
   overFx.visible = usePost;
   if (usePost) drawOverFx(now, dt, shake);
   app.renderer.render(app.stage);
-  drawOverlay(now, dt, shake, mp, ents, debugOpen, !usePost);
+  drawOverlay(now, dt, shake, zoom, mp, ents, debugOpen, !usePost);
 }
 
-// poseOf 推进走路循环，并算出这一帧的模型姿势。
-function poseOf(e: ClientEntity, p: Point, now: number): Pose {
+// 溶解边缘的火光：怪物是暗红的余烬，NPC 是幽蓝的魂火
+const BURN: Record<string, string> = { monster: '#ff5a1e', npc: '#5fd8ff', player: '#ffcf6a' };
+
+// poseOf 推进走路循环、顿帧和受击形变，并算出这一帧的模型姿势。
+function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
+  // 顿帧：动作进度停住（把动作开始的时间往后推），走路也不迈步；位置照常插值
+  const frozen = now < e.freezeUntil;
+  if (frozen) {
+    if (now - e.attackAt < ATTACK_MS) e.attackAt += dt;
+    if (now - e.hitAt < HIT_MS) e.hitAt += dt;
+    if (e.deadAt >= 0 && now - e.deadAt < DEATH_MS) e.deadAt += dt;
+  }
   // 走路循环按这一帧实际画出来的移动距离推进
   const moved = hypot(e.rx, e.ry, p.x, p.y);
   // 往背对的方向走（举盾倒退）时腿反着迈，不然看起来像在原地滑步
   const back = (p.x - e.rx) * Math.cos(e.facing) < -0.05;
   e.rx = p.x;
   e.ry = p.y;
-  if (moved < 40) e.walk += (back ? -1 : 1) * moved * 0.16 * (16 / (e.r || 14));
+  if (moved < 40 && !frozen) e.walk += (back ? -1 : 1) * moved * 0.16 * (16 / (e.r || 14));
   const atk = (now - e.attackAt) / ATTACK_MS;
   const hit = (now - e.hitAt) / HIT_MS;
+  const hitting = hit >= 0 && hit < 1;
+  const dead = e.dead ? clamp((now - (e.deadAt < 0 ? now - DEATH_MS : e.deadAt)) / DEATH_MS, 0, 1) : -1;
+
+  // 受击：先被推开再慢慢回来；倒地时被打飞的那段距离保留到复活
+  let knock = 0;
+  if (dead >= 0) knock = e.knockAmp * (1 - (1 - dead) * (1 - dead));
+  else if (hitting) knock = e.knockAmp * (hit < 0.18 ? 1 - Math.pow(1 - hit / 0.18, 2) : 1 - smooth((hit - 0.18) / 0.82));
+  // 形变：一下压扁再弹两下回原样
+  const squash = hitting && dead < 0 ? FEEL.squash * Math.exp(-hit * 5) * Math.cos(hit * Math.PI * 3) : 0;
+
+  // 溶解：怪物和 NPC 倒地一会儿后烧掉（玩家的尸体留着等复活）
+  let dissolve = -1;
+  if (dead >= 1 && e.kind !== 'player' && e.deadAt >= 0) {
+    const t = (now - e.deadAt - DEATH_MS - FEEL.dissolveDelayMs) / Math.max(1, FEEL.dissolveMs);
+    if (t >= 0) dissolve = Math.min(1, t);
+  }
+
   return {
     x: p.x,
     y: p.y,
@@ -178,13 +213,20 @@ function poseOf(e: ClientEntity, p: Point, now: number): Pose {
     walk: e.walk,
     moving: now < e.moveUntil && !e.dead,
     attack: atk >= 0 && atk < 1 && !e.dead ? atk : -1,
-    hit: hit >= 0 && hit < 1 ? hit : -1,
-    dead: e.dead ? clamp((now - (e.deadAt < 0 ? now - DEATH_MS : e.deadAt)) / DEATH_MS, 0, 1) : -1,
+    hit: hitting ? hit : -1,
+    dead,
     time: now + e.id * 397,
     isSelf: e.id === state.myId,
     blocking: e.blocking && !e.dead,
+    knockX: e.knockX * knock,
+    knockY: e.knockY * knock * 0.6,
+    squash,
+    dissolve,
+    burn: BURN[e.kind],
   };
 }
+
+const smooth = (x: number) => x * x * (3 - 2 * x);
 
 // drawMarks 画地面上的标记：AOI 网格（G 键）、地图边界、技能射程预览、目标圈。
 function drawMarks(mp: Point | null, now: number): void {

@@ -24,18 +24,22 @@ export function resizeOverlay(dpr: number): void {
  * withFx：特效和环境粒子也画在这里。开后期处理时它们在 Pixi 里画（world.ts 的 drawOverFx），这样能参与泛光。
  */
 export function drawOverlay(
-  now: number, dt: number, shake: Point, mp: Point | null, ents: { e: ClientEntity; p: Point }[], debugOpen: boolean,
-  withFx: boolean,
+  now: number, dt: number, shake: Point, zoom: number, mp: Point | null, ents: { e: ClientEntity; p: Point }[],
+  debugOpen: boolean, withFx: boolean,
 ): void {
-  const { x: cx, y: cy } = state.cam;
+  const { x: cx, y: cy, w: vw, h: vh } = state.cam;
   const dpr = state.dpr;
+  // 世界坐标 → 屏幕：减去镜头、加上冲击，再以屏幕中心缩放（和 world.ts 的 Pixi 层一致）
+  const s = dpr * zoom;
+  const ox = ((vw / 2) * (1 - zoom) + (-cx + shake.x) * zoom) * dpr;
+  const oy = ((vh / 2) * (1 - zoom) + (-cy + shake.y) * zoom) * dpr;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.setTransform(dpr, 0, 0, dpr, (-cx + shake.x) * dpr, (-cy + shake.y) * dpr);
+  ctx.setTransform(s, 0, 0, s, ox, oy);
   if (withFx) {
     state.fx.drawOver(ctx, now, dt);
     if (state.scenery) state.scenery.drawAmbient(ctx, state.cam, now);
-    ctx.setTransform(dpr, 0, 0, dpr, (-cx + shake.x) * dpr, (-cy + shake.y) * dpr);
+    ctx.setTransform(s, 0, 0, s, ox, oy);
   }
   const tgt = state.ents.get(state.target);
   if (tgt && mp && tgt.id !== state.myId) drawTargetLink(tgt, mp, now);
@@ -45,6 +49,8 @@ export function drawOverlay(
   drawBubbles(now);
   drawFloats(now);
   drawVignette();
+  drawHurt(now);
+  drawCombo(now);
 }
 
 // drawAOILabel 在九宫格视野框的左上角写“AOI 视野”（网格和框在 WebGL 层画）。
@@ -271,26 +277,121 @@ function drawBubbles(now: number): void {
   }
 }
 
+// drawFloats 画飘字。伤害数字横着抛出去、先升后落；暴击数字金色渐变、粗描边、弹出时抖一下。
 function drawFloats(now: number): void {
   state.floats = state.floats.filter((f) => now - f.born < f.life);
   for (const f of state.floats) {
     const t = (now - f.born) / f.life;
     const e = state.ents.get(f.anchor);
     const base = e ? posOf(e, now) : { x: f.x, y: f.y };
-    const x = base.x + f.jx;
-    const y = base.y + f.oy - f.rise * (1 - (1 - t) * (1 - t));   // ease-out rise
-    const alpha = t < 0.6 ? 1 : clamp(1 - (t - 0.6) / 0.4, 0, 1);
-    const scale = f.pop && t < 0.2 ? 1 + 0.5 * (1 - t / 0.2) : 1;
+    // 横向：快速抛出然后停住；纵向：先升起，后半段略微下落（抛物线）
+    const x = base.x + f.jx + f.drift * (1 - (1 - t) * (1 - t) * (1 - t));
+    const rise = f.drift ? f.rise * (4 * t * (1 - t) * 0.9 + t * 0.35) : f.rise * (1 - (1 - t) * (1 - t));
+    let y = base.y + f.oy - rise;
+    const alpha = t < 0.65 ? 1 : clamp(1 - (t - 0.65) / 0.35, 0, 1);
+    let scale = 1;
+    if (f.pop) scale = t < 0.08 ? 0.6 + (t / 0.08) * 1.2 : t < 0.2 ? 1.8 - ((t - 0.08) / 0.12) * 0.8 : 1;
+    let jitter = 0;
+    if (f.crit && t < 0.18) { jitter = Math.sin(now / 16) * 2.5 * (1 - t / 0.18); y += Math.cos(now / 13) * 1.5 * (1 - t / 0.18); }
+    const size = f.size * scale;
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.font = `bold ${(f.size * scale).toFixed(1)}px ${FONT}`;
+    ctx.font = `${f.crit ? 900 : 'bold'} ${size.toFixed(1)}px ${f.crit ? DISPLAY : FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-    ctx.strokeText(f.text, x, y);
-    ctx.fillStyle = f.color;
-    ctx.fillText(f.text, x, y);
+    ctx.lineJoin = 'round';
+    if (f.crit) {
+      // 暗红外描边 + 黑色内描边 + 金色竖向渐变，下面一个小“暴击”
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = 'rgba(90,10,0,0.85)';
+      ctx.strokeText(f.text, x + jitter, y);
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = '#120804';
+      ctx.strokeText(f.text, x + jitter, y);
+      const g = ctx.createLinearGradient(0, y - size * 0.8, 0, y);
+      g.addColorStop(0, '#fffbe0');
+      g.addColorStop(0.45, '#ffd84a');
+      g.addColorStop(1, '#ff8a1a');
+      ctx.fillStyle = g;
+      ctx.fillText(f.text, x + jitter, y);
+      ctx.font = `bold 11px ${FONT}`;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.strokeText('暴击', x + jitter, y + 13);
+      ctx.fillStyle = '#ffd84a';
+      ctx.fillText('暴击', x + jitter, y + 13);
+    } else {
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.strokeText(f.text, x, y);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, x, y);
+    }
     ctx.restore();
   }
+}
+
+// drawHurt 在自己掉血时屏幕边缘闪一下红；血量低于三成时边缘持续红色脉动，越低越急。
+function drawHurt(now: number): void {
+  const me = state.ents.get(state.myId);
+  if (!me) return;
+  const frac = me.maxHp > 0 ? me.hp / me.maxHp : 1;
+  const flash = clamp(1 - (now - state.hurtAt) / 350, 0, 1);
+  let low = 0;
+  if (!me.dead && frac < 0.3) {
+    const speed = 900 - (0.3 - frac) * 1500;   // 血越少跳得越快
+    low = (0.2 + 0.25 * (0.5 + 0.5 * Math.sin((now / speed) * Math.PI * 2))) * (1 - (frac / 0.3) * 0.5);
+  }
+  const alpha = Math.max(flash * 0.5, low);
+  if (alpha < 0.01) return;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+  const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.hypot(w, h) * 0.6);
+  g.addColorStop(0, 'rgba(160,0,0,0)');
+  g.addColorStop(1, `rgba(170,8,8,${alpha.toFixed(3)})`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+}
+
+// drawCombo 在屏幕右侧显示自己的连击数（2 连击起），每多一击弹一下，2 秒没打中就消失。
+function drawCombo(now: number): void {
+  const c = state.combo;
+  const age = now - c.at;
+  if (c.n < 2 || age > 2000) return;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const pop = age < 120 ? 1 + 0.35 * (1 - age / 120) : 1;
+  const alpha = age < 1600 ? 1 : 1 - (age - 1600) / 400;
+  const x = w - 70;
+  const y = h * 0.36;
+  ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+  ctx.scale(pop, pop);
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'alphabetic';
+  ctx.lineJoin = 'round';
+  ctx.font = `900 40px ${DISPLAY}`;
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#07040a';
+  ctx.strokeText(String(c.n), 0, 0);
+  const g = ctx.createLinearGradient(0, -32, 0, 0);
+  g.addColorStop(0, '#fff3c0');
+  g.addColorStop(1, '#e8a23a');
+  ctx.fillStyle = g;
+  ctx.fillText(String(c.n), 0, 0);
+  ctx.font = `bold 14px ${FONT}`;
+  ctx.lineWidth = 3;
+  ctx.strokeText('连击', 0, 20);
+  ctx.fillStyle = '#e8c78a';
+  ctx.fillText('连击', 0, 20);
+  // 剩余时间条：连击还能续多久
+  const left = clamp(1 - age / 2000, 0, 1);
+  ctx.fillStyle = 'rgba(7,4,10,0.8)';
+  ctx.fillRect(-60, 28, 60, 3);
+  ctx.fillStyle = '#e8b65a';
+  ctx.fillRect(-60 * left, 28, 60 * left, 3);
+  ctx.restore();
 }

@@ -5,6 +5,7 @@
 // 暗色层画在半分辨率的渲染纹理里（反正是柔和的渐变），彩色光直接用加法混合的精灵画在世界里。
 
 import { Container, Graphics, RenderTexture, Sprite, Texture, type Renderer } from 'pixi.js';
+import type { ActorLight } from './pixi/actorView';
 
 const SCALE = 0.5;               // 暗色层相对 CSS 像素的分辨率
 const AMBIENT = 0x0a0616;        // 没被照亮的地方盖的颜色
@@ -71,6 +72,26 @@ export function createLighting(renderer: Renderer, screen: Container, world: Con
 
   return {
     begin(): void { lights.length = 0; },
+
+    // dominant 找出照在 (x, y) 处角色身上最亮的光源（光源就在角色身上的不算，比如自己的光）。
+    // 返回从光源指向角色的方向和强度，附近没有光时返回 null。要在 add 完所有光源之后调用。
+    dominant(x: number, y: number): ActorLight | null {
+      let best: Light | null = null;
+      let bestAmt = 0;
+      let bestDx = 0;
+      let bestDy = 0;
+      for (const l of lights) {
+        const dx = x - l.x;
+        const dy = y - l.y;
+        const d = Math.hypot(dx, dy);
+        if (d < 26 || d > l.radius) continue;
+        const fall = 1 - d / l.radius;
+        const amt = fall * fall * l.strength * (0.4 + l.glow) * 1.3;
+        if (amt > bestAmt) { best = l; bestAmt = amt; bestDx = dx / d; bestDy = dy / d; }
+      }
+      if (!best || bestAmt < 0.03) return null;
+      return { dx: bestDx, dy: bestDy, color: best.color, amt: Math.min(0.8, bestAmt) };
+    },
 
     // add 登记一个世界坐标里的光源。strength (0..1) 擦掉多少暗色，glow (0..1) 彩色光强度。
     add(x: number, y: number, radius: number, color: string, strength = 1, glow = 0.35): void {

@@ -44,6 +44,11 @@ export interface ClientEntity {
   attackAt: number;
   hitAt: number;
   deadAt: number;
+  // 打击感
+  freezeUntil: number; // 顿帧：此时间之前动作停住
+  knockX: number;     // 最近一次被打的方向（单位向量，从攻击者指向自己）
+  knockY: number;
+  knockAmp: number;   // 这次受击被推开的距离（像素），暴击更远
   fresh: boolean;     // 还没收到过同步：一进视野就是死的，直接显示倒地
 }
 
@@ -53,9 +58,11 @@ export interface FloatText {
   oy: number; jx: number;
   text: string; color: string; size: number; life: number;
   born: number; rise: number; pop: boolean;
+  drift: number;      // 横向飘出的距离（伤害数字往攻击方向的反方向抛出去）
+  crit: boolean;      // 暴击样式：金色渐变、粗描边、弹出时抖动
 }
 
-export interface FloatOpts { rise?: number; pop?: boolean }
+export interface FloatOpts { rise?: number; pop?: boolean; drift?: number; crit?: boolean }
 
 export interface State {
   myId: number;
@@ -91,6 +98,10 @@ export interface State {
   floats: FloatText[];
   bubbles: Map<number, { text: string; until: number }>;
   cam: { x: number; y: number; w: number; h: number };
+  camShake: Point;                // 这一帧镜头冲击和震动的偏移（camera.ts）
+  camZoom: number;                // 这一帧的缩放冲击（1 = 不缩放）
+  combo: { n: number; at: number };   // 自己的连击数和最近一次命中的时间
+  hurtAt: number;                 // 自己最近一次掉血的时间（屏幕边缘闪红）
   dpr: number;
 }
 
@@ -126,6 +137,10 @@ export const state: State = {
   floats: [],
   bubbles: new Map(),
   cam: { x: 0, y: 0, w: 0, h: 0 },
+  camShake: { x: 0, y: 0 },
+  camZoom: 1,
+  combo: { n: 0, at: -1e9 },
+  hurtAt: -1e9,
   dpr: 1,
 };
 
@@ -160,6 +175,10 @@ export function makeEntity(d: Partial<EntityInfo> & { id: number }, now: number)
     attackAt: -1e9,
     hitAt: -1e9,
     deadAt: -1,
+    freezeUntil: 0,
+    knockX: 0,
+    knockY: 0,
+    knockAmp: 0,
     fresh: true,
   };
 }

@@ -109,7 +109,14 @@ function stopMouse(): void {
 
 function toWorld(ev: MouseEvent): { x: number; y: number } {
   const r = deps.canvas.getBoundingClientRect();
-  return { x: ev.clientX - r.left + state.cam.x, y: ev.clientY - r.top + state.cam.y };
+  // 反推 world.ts 的画面变换：以屏幕中心缩放（暴击冲击）+ 镜头冲击偏移
+  const zoom = state.camZoom;
+  const screenX = ev.clientX - r.left;
+  const screenY = ev.clientY - r.top;
+  return {
+    x: (screenX - (state.cam.w / 2) * (1 - zoom)) / zoom + state.cam.x - state.camShake.x,
+    y: (screenY - (state.cam.h / 2) * (1 - zoom)) / zoom + state.cam.y - state.camShake.y,
+  };
 }
 
 function pickEntity(wx: number, wy: number, now: number): ClientEntity | null {

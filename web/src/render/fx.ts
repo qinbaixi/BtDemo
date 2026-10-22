@@ -83,7 +83,7 @@ export class FX {
     this.auras = auras;
     this.effects = [];
     this.parts = [];
-    this.shake = 0;          // screen shake strength in px, decays
+    this.shake = 0;          // 大范围技能的震动强度（像素），由 camera.ts 衰减
   }
 
   clear() {
@@ -183,7 +183,6 @@ export class FX {
       this.effects.push({ kind: 'gash', x: p.x, y, color: c, rgb: rgbOf(c), ang: rand(-0.9, -0.3) + i * 1.2,
         len: (p.r || 14) * (crit ? 2.6 : 1.9), born: now + i * 40, life: 170 });
     }
-    if (crit) this.shake = Math.max(this.shake, 5);
   }
 
   // block 是格挡住一击：盾面（朝向那一侧）闪一道弧光，火花向外溅。
@@ -205,7 +204,6 @@ export class FX {
       this.spawn({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.12, grav: 0.0012,
         life: rand(200, 380), size: rand(1.4, 2.6), color: i % 3 ? '#fff3c4' : '#9ad7ff', kind: 'spark', drag: 0.98, born: now });
     }
-    this.shake = Math.max(this.shake, 2.5);
   }
 
   // shieldHit 是护盾吸收了伤害：泡泡亮一下，受击处荡开一圈波纹。
@@ -228,6 +226,21 @@ export class FX {
         grav: 0.0004, life: rand(320, 560), size: rand(1.5, 2.8), color: i % 4 ? '#7fd8ff' : '#ffffff', kind: 'spark', drag: 0.99, born: now });
     }
     this.effects.push({ kind: 'ring', x: b.cx, y: b.cy + b.ry * 0.6, color: '#7fd8ff', rgb: rgbOf('#7fd8ff'), radius: b.rx * 1.6, born: now, life: 420 });
+  }
+
+  // ashes 是尸体开始溶解：一阵余烬和灰从身上升起来。
+  ashes(id, color, now) {
+    const p = this.pos(id, null);
+    if (!p) return;
+    const r = p.r || 14;
+    for (let i = 0; i < 26; i++) {
+      this.spawn({ x: p.x + rand(-r * 1.6, r * 1.6), y: p.y - rand(0, r * 0.8), vx: rand(-0.02, 0.02), vy: -rand(0.03, 0.08),
+        life: rand(700, 1300), size: rand(1.5, 3), color: i % 3 ? color : '#ffe2a8', kind: 'wisp', born: now + rand(0, 700) });
+    }
+    for (let i = 0; i < 8; i++) {
+      this.spawn({ x: p.x + rand(-r, r), y: p.y - rand(0, 6), vx: rand(-0.02, 0.02), vy: -rand(0.01, 0.025),
+        life: rand(800, 1200), size: rand(5, 9), color: '#3a3038', kind: 'dust', born: now + rand(0, 600) });
+    }
   }
 
   death(id, color, now) {
@@ -274,14 +287,6 @@ export class FX {
     p.drag = p.drag ?? 1;
     p.grav = p.grav ?? 0;
     this.parts.push(p);
-  }
-
-  // shakeOffset returns this frame's camera jitter and decays it.
-  shakeOffset(dt) {
-    if (this.shake < 0.2) { this.shake = 0; return { x: 0, y: 0 }; }
-    const s = this.shake;
-    this.shake *= Math.pow(0.0025, dt / 1000);
-    return { x: rand(-s, s), y: rand(-s, s) };
   }
 
   // lights reports the light that active effects cast on their surroundings.

@@ -18,7 +18,8 @@ import { createConnection } from './net/connection';
 import { createProtocol } from './net/protocol';
 import { loadArt } from './render/art';
 import { FX } from './render/fx';
-import { drawWorld, initWorld, resize, updateCamera } from './render/world';
+import { updateCamera } from './render/camera';
+import { drawWorld, initWorld, resize } from './render/world';
 import { createDebug } from './ui/debug';
 import {
   initHud, renderDeath, renderSkillBar, renderTarget, setConn, showToast,
@@ -61,7 +62,7 @@ function frame(): void {
   faceInput(now);
   debug.setTarget(state.target);
   debug.update(now);
-  updateCamera(now);
+  updateCamera(now, dt);
   drawWorld(now, dt, debug.open);
   renderTarget();
   renderSkillBar(now);
@@ -100,6 +101,11 @@ async function init(): Promise<void> {
   window.addEventListener('resize', resize);
   initInput({ canvas, send: conn.send, debug });
   requestAnimationFrame(frame);
+  // ?fxlab：特效实验页，不连服务器，用假角色播放各种打击和技能效果（见 fxlab.ts）
+  if (new URLSearchParams(location.search).has('fxlab')) {
+    (await import('./fxlab')).startFxLab();
+    return;
+  }
   conn.connect();
 }
 

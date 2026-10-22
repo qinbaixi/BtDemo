@@ -19,13 +19,24 @@ export interface Pose {
   x: number; y: number; r: number; color: string; facing: number; walk: number;
   moving: boolean; attack: number; hit: number; dead: number; time: number; isSelf: boolean;
   blocking?: boolean;   // 正在格挡（举盾）
+  knockX?: number;      // 受击被推开的显示偏移（像素，服务端位置不变）
+  knockY?: number;
+  squash?: number;      // 受击形变：正数横向变宽、纵向变扁
+  dissolve?: number;    // 尸体溶解进度 0..1，-1 或不填表示不溶解
+  burn?: string;        // 溶解边缘的火光颜色
+  light?: ActorLight | null;   // 附近最亮的光源（给身体加一道那个颜色的轮廓光）
 }
+
+// ActorLight 是照在角色身上的主光源：(dx, dy) 是从光源指向角色的单位向量，amt 是强度 0..1。
+export interface ActorLight { dx: number; dy: number; color: string; amt: number }
 
 export class ActorView {
   readonly root = new Container();
+  dissolving = false;                 // 已经开始溶解（world.ts 用它在开始时放一次灰烬）
   private shadow = new Graphics();
   private sigil = new Container();
   private sigilRing = new Graphics();
+  private figure = new Container();   // 身体 + 白闪，受击形变整体缩放这一层（以脚底为原点）
   private body: Sprite;
   private canvasBody: CanvasSprite | null = null;
   private sheet: LoadedCharacter | null;
@@ -43,7 +54,8 @@ export class ActorView {
     this.sigil.scale.set(1, 0.42);
     this.sigil.addChild(this.sigilRing);
     this.flash.blendMode = 'add';
-    this.root.addChild(this.shadow, this.sigil, this.body, this.flash);
+    this.figure.addChild(this.body, this.flash);
+    this.root.addChild(this.shadow, this.sigil, this.figure);
     parent.addChild(this.root);
   }
 
@@ -54,8 +66,21 @@ export class ActorView {
   update(pose: Pose, zIndex: number, res: number, hq: boolean, now: number): void {
     const r = pose.r;
     // 对齐到设备像素：角色精灵按整像素显示更清晰
-    this.root.position.set(Math.round(pose.x * res) / res, Math.round(pose.y * res) / res);
+    // 受击推开只挪身体，影子留在脚下；尸体被打飞时影子跟着走
+    const corpse = pose.dead >= 0;
+    const knockX = pose.knockX || 0;
+    const knockY = pose.knockY || 0;
+    const x = pose.x + (corpse ? knockX : 0);
+    const y = pose.y + (corpse ? knockY : 0);
+    this.root.position.set(Math.round(x * res) / res, Math.round(y * res) / res);
+    this.figure.position.set(corpse ? 0 : Math.round(knockX * res) / res, corpse ? 0 : Math.round(knockY * res) / res);
     this.root.zIndex = zIndex;
+    const squash = pose.squash || 0;
+    this.figure.scale.set(1 + squash, 1 - squash * 0.8);
+    const dissolve = pose.dissolve ?? -1;
+    // 溶解完了就整个藏起来，等复活
+    this.root.visible = dissolve < 1;
+    this.shadow.alpha = dissolve > 0 ? 1 - dissolve : 1;
 
     // 硬阴影；自己脚下多一个旋转的金色印记
     if (this.shadowR !== r) {
@@ -84,10 +109,15 @@ export class ActorView {
     if (hq) {
       this.ink ??= new InkFilter(this.rim);
       this.ink.set(dead, flash);
+      this.ink.setDissolve(dissolve, pose.burn || '#ff6a2a');
+      this.ink.setLight(pose.light ?? null);
       if (this.body.filters?.[0] !== this.ink) this.body.filters = [this.ink];
+      this.body.alpha = 1;
       this.flash.visible = false;
     } else {
       if (this.body.filters) this.body.filters = null;
+      // 简化画质没有溶解着色器：直接淡出
+      this.body.alpha = dissolve > 0 ? 1 - dissolve : 1;
       // 简化画质的受击：同一张图用加法混合再叠一次
       this.flash.visible = flash > 0;
       if (flash > 0) {
