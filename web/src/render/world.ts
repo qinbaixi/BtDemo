@@ -20,6 +20,7 @@ import { ActorView, type Pose } from './pixi/actorView';
 import { CanvasSprite } from './pixi/canvasSprite';
 import { PostFilter } from './pixi/postFilter';
 import { SceneView } from './pixi/sceneView';
+import { SpriteCtx } from './pixi/spriteCtx';
 
 let app: Application;
 let scene: Container;          // 整个画面（后期处理加在这一层）
@@ -28,7 +29,8 @@ let post: PostFilter;
 let world: Container;          // 跟随镜头的世界层
 let glowWorld: Container;      // 光照彩色层，和 world 用同一个镜头变换
 let fxWorld: Container;        // 技能特效和环境粒子，同样跟随镜头
-let overFx: CanvasSprite;
+let shapeFx: CanvasSprite;      // 有形状的技能特效（刀光、弹道……），只画在特效所在的小范围里
+let sparkFx: SpriteCtx;        // 粒子、光晕、环境粒子：GPU 精灵
 let groundLayer: Container;
 let marks: Graphics;           // 地面标记
 let targetRing: Container;     // 目标脚下的旋转圈
@@ -78,8 +80,10 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
   const darkness = new Container();
   glowWorld = new Container();
   fxWorld = new Container();
-  overFx = new CanvasSprite();
-  fxWorld.addChild(overFx);
+  shapeFx = new CanvasSprite();
+  const sparkLayer = new Container();
+  sparkFx = new SpriteCtx(sparkLayer);
+  fxWorld.addChild(shapeFx, sparkLayer);
   scene = new Container();
   zoomer = new Container();
   zoomer.addChild(world, darkness, glowWorld, fxWorld);
@@ -160,10 +164,9 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
   // 开后期处理时特效画进 Pixi 才能发光；不开时直接画在叠加层上，省掉每帧整屏上传纹理
   const usePost = state.hq && state.post;
   if (usePost !== (scene.filters?.[0] === post)) scene.filters = usePost ? [post] : null;
-  overFx.visible = usePost;
-  if (usePost) drawOverFx(now, dt, shake);
+  drawOverFx(now, dt);
   app.renderer.render(app.stage);
-  drawOverlay(now, dt, shake, zoom, mp, ents, debugOpen, !usePost);
+  drawOverlay(now, shake, zoom, mp, ents, debugOpen);
 }
 
 // 溶解边缘的火光：怪物是暗红的余烬，NPC 是幽蓝的魂火
@@ -314,14 +317,23 @@ function drawUnderFx(now: number): void {
   if (box) underFx.paint(box, state.dpr, (g) => state.fx.drawUnder(g, now));
 }
 
-// drawOverFx 把技能特效和环境粒子画到整屏大小的画布上（世界坐标，覆盖当前镜头）。
-function drawOverFx(now: number, dt: number, shake: Point): void {
-  const v = state.cam;
-  const box = [v.x - shake.x, v.y - shake.y, v.x - shake.x + v.w, v.y - shake.y + v.h];
-  overFx.paint(box, state.dpr, (g) => {
-    state.fx.drawOver(g, now, dt);
-    if (state.scenery) state.scenery.drawAmbient(g, state.cam, now);
-  });
+// drawOverFx 画角色上方的特效：有形状的特效画进一块只覆盖特效范围的画布，
+// 粒子、光晕和环境粒子（雾、火星、光点）用 GPU 精灵画。
+function drawOverFx(now: number, dt: number): void {
+  const fx = state.fx;
+  fx.step(now);
+  let box = fx.shapeBounds(now);
+  if (box) {
+    const v = state.cam;
+    box = [Math.max(box[0], v.x - 40), Math.max(box[1], v.y - 40), Math.min(box[2], v.x + v.w + 40), Math.min(box[3], v.y + v.h + 40)];
+    if (box[2] <= box[0] || box[3] <= box[1]) box = null;
+  }
+  shapeFx.visible = !!box;
+  if (box) shapeFx.paint(box, state.dpr, (g) => fx.drawShapes(g, now));
+  sparkFx.begin();
+  fx.particles(sparkFx, now, dt);
+  if (state.scenery) state.scenery.drawAmbient(sparkFx, state.cam, now);
+  sparkFx.end();
 }
 
 // updateLights 收集光源：自己身上的光、其他玩家、场景里的火、正在播放的特效。

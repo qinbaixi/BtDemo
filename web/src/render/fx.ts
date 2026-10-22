@@ -367,7 +367,8 @@ export class FX {
     return x1 > x0 ? [x0, y0, x1, y1] : null;
   }
 
-  drawOver(ctx, now, dt) {
+  // step 每帧先调一次：弹道到达时爆一下，清掉播完的特效。
+  step(now) {
     // Projectiles burst once on arrival, even if no frame fell near their end.
     for (const f of this.effects) {
       if ((f.kind === 'orb' || f.kind === 'arrow') && !f.landed && now - f.born >= f.life * 0.95) {
@@ -377,6 +378,10 @@ export class FX {
       }
     }
     this.effects = this.effects.filter((f) => now - f.born < f.life);
+  }
+
+  // drawShapes 用 Canvas 2D 画有形状的特效（刀光、弹道、旋风、护盾泡泡……），画在 shapeBounds 的范围里。
+  drawShapes(ctx, now) {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
@@ -398,8 +403,41 @@ export class FX {
       }
     }
     this.shieldAuras(ctx, now);
-    this.particles(ctx, now, dt);
     ctx.restore();
+  }
+
+  // shapeBounds 返回 drawShapes 这一帧会画到的大致范围 [x0, y0, x1, y1]（世界坐标，宁大勿小），
+  // 没有要画的时返回 null。
+  shapeBounds(now: number): number[] | null {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const add = (x: number, y: number, side: number, up: number, down: number) => {
+      x0 = Math.min(x0, x - side); x1 = Math.max(x1, x + side);
+      y0 = Math.min(y0, y - up); y1 = Math.max(y1, y + down);
+    };
+    for (const f of this.effects) {
+      const t = (now - f.born) / f.life;
+      if (t < 0 || t >= 1) continue;
+      switch (f.kind) {
+        case 'slash': { const p = this.pos(f.src, { x: f.sx, y: f.sy }); add(p.x, p.y, 120, 140, 80); break; }
+        case 'orb':
+        case 'arrow': {
+          const sp = this.pos(f.src, { x: f.sx, y: f.sy });
+          const dp = this.pos(f.dst, { x: f.dx, y: f.dy });
+          add(sp.x, sp.y, 60, 110, 40);
+          add(dp.x, dp.y, 60, 110, 40);
+          break;
+        }
+        case 'whirl': add(f.cx, f.cy, f.radius * 1.2 + 20, f.radius * 0.8 + 60, f.radius * 0.6 + 20); break;
+        case 'flare': add(f.x, f.y, f.size * 2.5, f.size * 2.5, f.size * 2.5); break;
+        case 'gash': add(f.x, f.y, f.len + 10, f.len + 10, f.len + 10); break;
+        case 'pillar': { const p = this.pos(f.anchor, f); add(p.x, p.y, 50, (f.height || 120) + 50, 20); break; }
+        case 'buff':
+        case 'shieldForm': { const p = this.pos(f.src, { x: f.sx, y: f.sy }); add(p.x, p.y, 90, 150, 40); break; }
+        case 'parry': add(f.x, f.y, f.r * 3 + 10, f.r * 3 + 10, f.r * 3 + 10); break;
+      }
+    }
+    for (const a of this.auras()) add(a.x, a.y, a.r * 2.6 + 20, a.h * 1.8 + 30, a.r + 20);
+    return x1 > x0 ? [x0, y0, x1, y1] : null;
   }
 
   /* --------------------------- effect kinds -------------------------- */
@@ -879,7 +917,10 @@ export class FX {
     blit(ctx, glow(f.color), p.x, p.y - h, w * 1.4, 0.6 * fade);
   }
 
+  // particles 用 GPU 精灵画全部粒子（ctx 是 pixi/spriteCtx.ts 的 SpriteCtx，加法混合）。
   particles(ctx, now, dt) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     const step = Math.min(dt, 50);
     let w = 0;
     for (let i = 0; i < this.parts.length; i++) {
@@ -910,12 +951,7 @@ export class FX {
       switch (p.kind) {
         case 'spark': {
           ctx.globalAlpha = a;
-          ctx.strokeStyle = p.color;
-          ctx.lineWidth = p.size;
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          ctx.lineTo(x - p.vx * 28, y - p.vy * 28);
-          ctx.stroke();
+          ctx.streak(x, y, x - p.vx * 28, y - p.vy * 28, p.size, p.color);
           break;
         }
         case 'plus': {
@@ -930,10 +966,7 @@ export class FX {
           ctx.save();
           ctx.globalCompositeOperation = 'source-over';
           ctx.globalAlpha = a * 0.45;
-          ctx.fillStyle = p.color;
-          ctx.beginPath();
-          ctx.arc(x, y, p.size * (0.6 + k), 0, TAU);
-          ctx.fill();
+          ctx.disc(x, y, p.size * (0.6 + k), p.color);
           ctx.restore();
           break;
         }
@@ -945,5 +978,6 @@ export class FX {
       }
     }
     this.parts.length = w;
+    ctx.restore();
   }
 }

@@ -19,13 +19,12 @@ export function resizeOverlay(dpr: number): void {
 }
 
 /**
- * drawOverlay 画一帧叠加层。shake 是屏幕震动偏移，ents 是本帧可见实体和它们的绘制位置。
- * 顺序：（特效 → 环境粒子）→ 目标连线 → 碰撞体 → AI 路径 → 头顶文字 → 气泡 → 飘字 → 暗角。
- * withFx：特效和环境粒子也画在这里。开后期处理时它们在 Pixi 里画（world.ts 的 drawOverFx），这样能参与泛光。
+ * drawOverlay 画一帧叠加层。shake 是镜头冲击偏移，zoom 是缩放冲击，ents 是本帧可见实体和它们的绘制位置。
+ * 顺序：目标连线 → 碰撞体 → AI 路径 → 头顶文字 → 气泡 → 飘字 → 暗角 → 受伤红边 → 连击数。
+ * 技能特效和环境粒子都在 Pixi 里画（world.ts 的 drawOverFx），这里只画文字和线条。
  */
 export function drawOverlay(
-  now: number, dt: number, shake: Point, zoom: number, mp: Point | null, ents: { e: ClientEntity; p: Point }[],
-  debugOpen: boolean, withFx: boolean,
+  now: number, shake: Point, zoom: number, mp: Point | null, ents: { e: ClientEntity; p: Point }[], debugOpen: boolean,
 ): void {
   const { x: cx, y: cy, w: vw, h: vh } = state.cam;
   const dpr = state.dpr;
@@ -36,11 +35,6 @@ export function drawOverlay(
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.setTransform(s, 0, 0, s, ox, oy);
-  if (withFx) {
-    state.fx.drawOver(ctx, now, dt);
-    if (state.scenery) state.scenery.drawAmbient(ctx, state.cam, now);
-    ctx.setTransform(s, 0, 0, s, ox, oy);
-  }
   const tgt = state.ents.get(state.target);
   if (tgt && mp && tgt.id !== state.myId) drawTargetLink(tgt, mp, now);
   if (state.showAOI) { drawObstacles(); drawAOILabel(mp); }
