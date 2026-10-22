@@ -766,9 +766,11 @@ export class FX {
       return true;
     };
     for (const ent of ents) {
-      if (ent.looks & LOOK_HASTE && ent.moving && due(ent.id, LOOK_HASTE, 45)) {
-        this.spawn({ x: ent.x - ent.dir * rand(4, 14), y: ent.y - rand(4, ent.h * 0.8), vx: -ent.dir * rand(0.15, 0.3), vy: 0,
-          drag: 0.98, life: rand(220, 360), size: rand(1.2, 2), color: '#9effd8', kind: 'spark', born: now });
+      if (ent.looks & LOOK_HASTE && ent.moving && due(ent.id, LOOK_HASTE, 30)) {
+        for (let i = 0; i < 2; i++) {
+          this.spawn({ x: ent.x - ent.dir * rand(4, 14), y: ent.y - rand(4, ent.h * 0.8), vx: -ent.dir * rand(0.2, 0.4), vy: 0,
+            drag: 0.98, life: rand(260, 420), size: rand(1.6, 2.6), color: i ? '#ffffff' : '#9effd8', kind: 'spark', born: now });
+        }
       }
       if (ent.looks & LOOK_HOLY && due(ent.id, LOOK_HOLY, 70)) {
         const a = rand(0, TAU);
