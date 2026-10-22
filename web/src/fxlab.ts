@@ -384,6 +384,76 @@ ACTIONS.push(
   }],
 );
 
+// 宠物：召唤到自己身后，按按钮让它攻击当前目标、放技能、瞬移
+const PET = 50;
+const LAB_PETS: Record<string, { name: string; color: string; r: number; attack: string; skill: string; skillName: string; skillColor: string }> = {
+  wolf_pup: { name: '小狼', color: '#b5824e', r: 13, attack: 'melee', skill: 'buff', skillName: '嚎叫', skillColor: '#ffcf6e' },
+  ember: { name: '火灵', color: '#ff7a2a', r: 12, attack: 'projectile', skill: 'circle', skillName: '爆燃', skillColor: '#ffb347' },
+  sprout: { name: '林精', color: '#7dd87d', r: 12, attack: 'projectile', skill: 'heal', skillName: '愈合', skillColor: '#7dff9b' },
+};
+
+function summonPet(model: string): void {
+  const now = performance.now();
+  const me = state.ents.get(ME)!;
+  const from = posOf(me, now);
+  const cfg = LAB_PETS[model];
+  const pet = makeEntity({
+    id: PET, kind: 'pet', name: `我 的 ${cfg.name}`, model, r: cfg.r, lv: 10,
+    x: from.x - 46, y: from.y + 14, hp: 160, maxHp: 160, owner: ME, color: cfg.color,
+  }, now);
+  pet.fresh = false;
+  pet.petName = cfg.name;
+  state.ents.set(PET, pet);
+  emit({ k: 'cast', src: PET, fx: 'pet_summon', color: cfg.color, x: pet.x, y: pet.y });
+}
+
+function petOf(): ClientEntity | undefined {
+  const pet = state.ents.get(PET);
+  return pet && !pet.dead ? pet : undefined;
+}
+
+ACTIONS.push(
+  ['召唤小狼', () => summonPet('wolf_pup')],
+  ['召唤火灵', () => summonPet('ember')],
+  ['召唤林精', () => summonPet('sprout')],
+  ['宠物攻击', () => {
+    const pet = petOf();
+    const t = target();
+    if (!pet || !t) return;
+    const cfg = LAB_PETS[pet.model];
+    // 小狼先扑到目标身边再咬
+    if (cfg.attack === 'melee') {
+      const p = posOf(t, performance.now());
+      moveTo(pet, p.x - 34, p.y + 4, performance.now());
+    }
+    const color = pet.model === 'sprout' ? '#8fe08f' : pet.model === 'ember' ? '#ff7b39' : '#e8c9a0';
+    emit({ k: 'cast', src: PET, dst: t.id, fx: cfg.attack, color });
+    emit({ k: 'dmg', src: PET, dst: t.id, v: 18 });
+    damage(t, 18);
+    if (t.hp <= 0) kill(t);
+  }],
+  ['宠物技能', () => {
+    const pet = petOf();
+    if (!pet) return;
+    const cfg = LAB_PETS[pet.model];
+    if (cfg.skill === 'heal') {
+      emit({ k: 'cast', src: PET, dst: ME, fx: 'heal', name: cfg.skillName, color: cfg.skillColor });
+      emit({ k: 'heal', dst: ME, v: 60 });
+    } else {
+      emit({ k: 'cast', src: PET, fx: cfg.skill, name: cfg.skillName, color: cfg.skillColor, radius: 90 });
+    }
+  }],
+  ['宠物传送', () => {
+    const pet = petOf();
+    if (!pet) return;
+    const now = performance.now();
+    const from = posOf(pet, now);
+    const me = posOf(state.ents.get(ME)!, now);
+    const away = from.x < me.x ? 1 : -1;
+    emit({ k: 'cast', src: PET, fx: 'pet_teleport', x: from.x, y: from.y, tx: me.x + away * 46, ty: me.y + 14 });
+  }],
+);
+
 // 滑条：[标签, FEEL 字段, 最小, 最大, 步长]
 const SLIDERS: [string, keyof typeof FEEL, number, number, number][] = [
   ['顿帧 ms', 'hitStopMs', 0, 200, 5],

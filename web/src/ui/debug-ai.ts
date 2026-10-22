@@ -15,6 +15,9 @@ const SUB_TEXT: Record<string, string> = {
   wander: '闲逛', return_home: '回家', flee: '逃跑', wait: '等待', say: '说话',
   has_target: '有目标', target_in_range: '目标在范围内', hp_below: '生命低于', far_from_home: '离家太远',
   was_attacked: '刚被攻击', update_target: '刷新目标', cooldown: '冷却', invert: '结果取反', force_success: '强制成功',
+  // 宠物节点
+  guard_owner: '守护主人', follow_owner: '跟随主人', keep_distance: '保持距离', cast_on_owner: '对主人施法',
+  owner_far: '离主人太远', owner_hp_below: '主人生命低于', owner_in_combat: '主人在战斗',
 };
 const COMPOSITE_HINT: Record<string, string> = {
   selector: '按顺序尝试子节点，第一个不失败的就是结果',

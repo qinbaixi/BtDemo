@@ -8,7 +8,7 @@ pets:
   - id: wolf_pup
     name: 小狼
     model: wolf_pup
-    color: "#c9a27a"
+    color: "#b5824e"
     desc: 近战，专咬主人的目标，嚎叫时自己加速加攻
     tree: pet_melee
     attrs: { str: 5, agi: 7, int: 1, vit: 6 }
@@ -19,7 +19,7 @@ pets:
   - id: ember
     name: 火灵
     model: ember
-    color: "#ff8a3a"
+    color: "#ff7a2a"
     desc: 远程法术，保持距离喷火球，近身时放小范围爆燃
     tree: pet_caster
     attrs: { str: 1, agi: 5, int: 8, vit: 4 }

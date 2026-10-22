@@ -21,7 +21,10 @@ export const MODEL_BOX: Record<string, [number, number, number]> = {
   ranger: [3.4, 4.2, 1.8],   // 拉弓时弓和箭伸到身前，箭雨时弓举过头顶
   guard: [3.6, 3.5, 1.8],
   ogre_chief: [3.6, 4.6, 3.6],
-  ember: [3, 4.2, 1.8],      // 飘在半空，胀大时更高
+  // 宠物画的时候放大了 1.35 倍（models.ts PET_DRAW_SCALE）
+  wolf_pup: [3.8, 3.4, 1.8],
+  ember: [3.4, 5.4, 1.8],    // 飘在半空，胀大时更高
+  sprout: [3.2, 3.8, 1.8],
 };
 export function modelBox(model: string, r: number): number[] {
   const [x, up, down] = MODEL_BOX[model] || MODEL_BOX.default;
@@ -30,7 +33,7 @@ export function modelBox(model: string, r: number): number[] {
 // 半径 16 时每个模型的绘制高度，用来把名字放在头顶上方
 export const MODEL_H: Record<string, number> = {
   knight: 46, ranger: 46, guard: 50, villager: 42, slime: 26, wolf: 30, skeleton_archer: 46, ogre_chief: 54,
-  wolf_pup: 30, ember: 40, sprout: 30,
+  wolf_pup: 40, ember: 54, sprout: 40,
 };
 export const ACT_NAMES: Record<string, string> = {
   find_target: '索敌',
@@ -41,6 +44,9 @@ export const ACT_NAMES: Record<string, string> = {
   flee: '逃跑',
   wait: '待机',
   say: '说话',
+  follow_owner: '跟随',
+  keep_distance: '拉开距离',
+  cast_on_owner: '施法',
   clear_target: '清除目标',
   move: '移动',
 };

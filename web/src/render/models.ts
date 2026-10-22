@@ -2393,6 +2393,9 @@ function drawOgre(ctx, q) {
 // 宠物：比怪物小一圈、圆一点、表情友好，脖子上都有一样东西表明是有主人的（项圈 / 铃铛 / 花环）。
 // 动作名就是宠物技能的 fx（见 config/skills.yaml）：攻击走 q.ph，其他技能走 q.action。
 
+// 宠物的碰撞半径比人小，但按半径画出来太小看不清，画的时候再放大这么多（MODEL_BOX 里的框也相应放大）
+const PET_DRAW_SCALE = 1.35;
+
 // petCast 返回施放类动作（嚎叫、治疗）的进度：举起 → 保持 → 放下，没有动作时是 0。
 function petCast(q) {
   if (!q.ph || !['buff', 'circle', 'heal'].includes(q.action)) return 0;
@@ -2410,7 +2413,9 @@ function petAttack(q) {
 
 // 小狼：圆滚滚的幼崽，大脑袋短腿，红色项圈挂一个金铃铛。攻击是扑咬，嚎叫时仰头张嘴。
 function drawWolfPup(ctx, q) {
-  const color = safeColor(q.color, '#c9a27a');
+  ctx.save();
+  ctx.scale(PET_DRAW_SCALE, PET_DRAW_SCALE);
+  const color = safeColor(q.color, '#b5824e');
   const dark = shade(color, -0.35);
   const cream = shade(color, 0.5);
   const time = q.time / 1000;
@@ -2521,13 +2526,16 @@ function drawWolfPup(ctx, q) {
   ctx.restore();
 
   ctx.restore();
+  ctx.restore();
 }
 
 // 火灵：飘在半空的一团火，圆脸大眼，身后拖着火舌。攻击时往前一冲吐火，爆燃时整团火胀大。
 function drawEmber(ctx, q) {
-  const color = safeColor(q.color, '#ff8a3a');
-  const core = '#ffe08a';
-  const deep = shade(color, -0.3);
+  ctx.save();
+  ctx.scale(PET_DRAW_SCALE, PET_DRAW_SCALE);
+  const color = safeColor(q.color, '#ff7a2a');
+  const core = '#ffcf4a';
+  const deep = shade(color, -0.35);
   const time = q.time / 1000;
   const moving = q.moving && q.dead < 0;
   const { gather, strike } = petAttack(q);
@@ -2620,10 +2628,13 @@ function drawEmber(ctx, q) {
   // 金色小环：有主人的标记
   line(ctx, [-4.6, 6.2, 0, 7.6, 4.6, 6.2], '#f0c850', 1.2);
   ctx.restore();
+  ctx.restore();
 }
 
 // 林精：一截小树桩似的木头身子，头顶冒两片嫩叶，戴一圈小花环。攻击时甩出刺，治疗时举起双手、叶子张开。
 function drawSprout(ctx, q) {
+  ctx.save();
+  ctx.scale(PET_DRAW_SCALE, PET_DRAW_SCALE);
   const color = safeColor(q.color, '#8fd17a');
   const wood = '#a07a50';
   const woodDark = '#6e4e30';
@@ -2719,6 +2730,7 @@ function drawSprout(ctx, q) {
   // 手最后画：举起来时盖在花环和叶子前面
   arm(-5, mend, woodDark, false);
   arm(5, mend, wood, true);
+  ctx.restore();
   ctx.restore();
 }
 
