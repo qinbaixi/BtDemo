@@ -202,20 +202,31 @@ export function renderSelf(): void {
   for (const [k] of DERIVED_ATTRS) {
     setText(attrEls['der.' + k], formatDerived(k, (s.attr as any)?.[k]));
   }
-  renderBuffs(s.buffs || []);
+  renderBuffs(s.buffs || [], performance.now());
 }
 
-function renderBuffs(list: { name: string; left: number }[]): void {
-  if (!list.length) {
+// Buff 按结束时间点倒计时。self 消息只在列表变了才来，所以主循环每帧调 renderBuffTimes 刷新数字。
+let lastBuffText = '';
+function renderBuffs(list: { name: string; endsAt: number }[], now: number): void {
+  const live = list.filter((b) => b.endsAt > now);
+  const texts = live.map((b) => `${b.name} ${((b.endsAt - now) / 1000).toFixed(1)}s`);
+  const key = texts.join('|');
+  if (key === lastBuffText) return;
+  lastBuffText = key;
+  if (!texts.length) {
     ui.buffs.replaceChildren(document.createTextNode('无'));
     return;
   }
-  ui.buffs.replaceChildren(...list.map((b) => {
+  ui.buffs.replaceChildren(...texts.map((text) => {
     const el = document.createElement('span');
     el.className = 'buff';
-    el.textContent = `${b.name} ${Math.max(0, b.left ?? 0).toFixed(1)}s`;
+    el.textContent = text;
     return el;
   }));
+}
+
+export function renderBuffTimes(now: number): void {
+  if (state.self) renderBuffs(state.self.buffs, now);
 }
 
 export function renderTarget(): void {
@@ -232,7 +243,7 @@ export function renderDeath(now: number): void {
   const dead = !!(s && s.dead);
   ui.death.classList.toggle('hidden', !dead);
   if (!dead) return;
-  const left = (s.respawnIn ?? 0) - (now - state.selfAt) / 1000;
+  const left = (s.respawnAt - now) / 1000;
   // 选技能面板关掉以后，死亡期间还能点这个按钮重新打开（按钮在 picker.ts 里接上）
   ui.deathPick.classList.toggle('hidden', state.pickerOpen || !state.skillPool.length);
   setText(ui.deathText, left > 0

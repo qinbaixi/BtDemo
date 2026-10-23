@@ -5,7 +5,7 @@ import type { Aura, FX } from '../render/fx';
 import type { createScenery } from '../render/scenery';
 import type {
   ClassInfo,
-  EntityInfo, EntityKind, ItemInfo, ItemSlotted, Obstacle, PetInfo, SelfInfo, SkillInfo, SkinInfo, ZoneInfo,
+  EntityInfo, EntityKind, EntityState, ItemInfo, ItemSlotted, Obstacle, PetInfo, SelfInfo, SkillInfo, SkinInfo, ZoneInfo,
 } from '../net/types';
 import { ATTACK_MS, KIND_COLOR, LERP_MS, MODEL_H, MODEL_SCALE } from './config';
 import { clamp, lerp } from './math';
@@ -101,10 +101,9 @@ export interface State {
   petRespawnAt: number;           // 宠物复活的时间（performance.now()），0 = 没在复活中
   petCooldownUntil: number;       // 换宠物冷却结束的时间（performance.now()），0 = 没有冷却
   ents: Map<number, ClientEntity>;
-  self: SelfInfo | null;          // 最近一次同步里的 self
-  selfAt: number;                 // 收到那次同步的 performance.now()
-  cds: Record<string, number>;    // 技能 id -> cdsAt 时刻剩余的冷却秒数
-  cdsAt: number;
+  self: SelfInfo | null;          // 服务端增量合并后的完整自己信息
+  cds: Record<string, number>;    // 技能 id -> 冷却结束的本地时间（performance.now() 毫秒）
+  clockOffset: number;            // performance.now() - 服务端时间 × 1000：每收到一帧更新，把服务端时间点换成本地时间
   target: number;
   hoverSlot: number;
   showAOI: boolean;
@@ -182,9 +181,8 @@ export const state: State = {
   petCooldownUntil: 0,
   ents: new Map(),
   self: null,
-  selfAt: 0,
   cds: {},
-  cdsAt: 0,
+  clockOffset: 0,
   target: 0,
   hoverSlot: 0,
   showAOI: false,
@@ -213,7 +211,8 @@ export const state: State = {
   dpr: 1,
 };
 
-export function makeEntity(d: Partial<EntityInfo> & { id: number }, now: number): ClientEntity {
+// 初始值可以直接给坐标、血量等（fxlab 用）；收到 Enter 时把 info.state 展开进来
+export function makeEntity(d: Partial<Omit<EntityInfo, 'state'>> & Partial<EntityState> & { id: number }, now: number): ClientEntity {
   const kind = d.kind || 'monster';
   return {
     id: d.id,
@@ -321,7 +320,12 @@ export function fxAuras(): Aura[] {
 }
 
 export function cdRemaining(skillId: string, now: number): number {
-  return Math.max(0, (state.cds[skillId] || 0) - (now - state.cdsAt) / 1000);
+  return Math.max(0, ((state.cds[skillId] || 0) - now) / 1000);
+}
+
+// localTime 把服务端时间（秒，Frame.time 同一个时钟）换成本地 performance.now() 毫秒；0 保持 0（没有这个时间点）。
+export function localTime(serverTime: number): number {
+  return serverTime ? serverTime * 1000 + state.clockOffset : 0;
 }
 
 // setQuality 切换画质档位，同时维护 hq（不是低档）。

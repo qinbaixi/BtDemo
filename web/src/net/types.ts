@@ -93,21 +93,18 @@ export interface EntityInfo {
   name: string;
   color?: string;
   r?: number;
-  lv?: number;
-  x: number;
-  y: number;
-  hp?: number;
-  maxHp?: number;
+  state: EntityState;   // 进入视野时所有字段都有
   model?: string;
   skin?: string;   // 玩家外观 id（空 = 默认）
   gear?: string;   // 当前武器的 ItemInfo.look（空 = 职业默认武器）
   owner?: number;  // 宠物的主人实体 id（非宠物为 0）
 }
 
+// EntityState 是增量：除 id 外只有变化了的字段有值（值可能是 0 / false / 空串，也算变了）。
 export interface EntityState {
   id: number;
-  x: number;
-  y: number;
+  x?: number;
+  y?: number;
   hp?: number;
   maxHp?: number;
   lv?: number;
@@ -158,7 +155,7 @@ export interface ZoneInfo {
   color?: string;
   look?: string;       // spring 泉水 | rune 法阵
   owner?: number;      // 放下它的实体，0 表示地图自带
-  until?: number;      // 服务端时间（Sync.time），到这时消失；0 表示常驻
+  until?: number;      // 服务端时间（Frame.time），到这时消失；0 表示常驻
   dur?: number;        // 一共持续多少秒（画倒计时）
   interval?: number;   // 隔几秒回一次血
   heal?: number;       // 每次回复最大生命的比例
@@ -171,6 +168,22 @@ export interface Derived {
   mdef?: number; crit?: number; critDmg?: number; speed?: number;
 }
 
+// SelfUpdate 是服务端发来的自己的信息，增量：只有变了的字段有值。
+// 时间点（readyAt、until、respawnAt）是服务端时间，game/sync.ts 合并时换算成本地时间。
+export interface SelfUpdate {
+  lv?: number;
+  exp?: number;
+  next?: number;
+  hp?: number;
+  base?: Attrs;       // 出现就整体替换
+  attr?: Derived;     // 出现就整体替换
+  cds?: { skill: string; readyAt: number }[];   // 只在整份冷却列表有变化时出现（cds_set）
+  buffs?: { name: string; until: number }[];    // 只在整份 Buff 列表有变化时出现（buffs_set）
+  dead?: boolean;
+  respawnAt?: number; // 复活的服务端时间；0 = 没死
+}
+
+// SelfInfo 是合并后的完整自己信息（state.self）。时间点是本地 performance.now() 毫秒。
 export interface SelfInfo {
   lv: number;
   exp: number;
@@ -178,10 +191,9 @@ export interface SelfInfo {
   hp: number;
   base?: Attrs;
   attr?: Derived;
-  cds: Record<string, number>;   // skill id -> seconds left
-  buffs: { name: string; left: number }[];
-  dead?: boolean;
-  respawnIn?: number;
+  buffs: { name: string; endsAt: number }[];
+  dead: boolean;
+  respawnAt: number;   // 本地复活时刻；0 = 没死
 }
 
 export type AiStatus = 'success' | 'failure' | 'running';
@@ -250,15 +262,14 @@ export interface WelcomeMsg {
 }
 export interface EnterMsg { t: 'enter'; ents: EntityInfo[] }
 export interface LeaveMsg { t: 'leave'; ids: number[] }
-export interface SyncMsg {
-  t: 'sync';
-  time: number;
-  ents: EntityState[];
-  ev: GameEvent[];
-  self: SelfInfo | null;
-  ai: AiTrace | null;
-  zones: ZoneInfo[] | null;   // 回血区有变化时是整份新列表，没变化时是 null
-}
+export interface StateMsg { t: 'state'; state: EntityState }
+export interface EventMsg { t: 'event'; ev: GameEvent }
+export interface SelfMsg { t: 'self'; self: SelfUpdate }
+export interface ZonesMsg { t: 'zones'; zones: ZoneInfo[] }   // 整份新列表
+export interface AiMsg { t: 'ai'; trace: AiTrace }
+
+// ServerFrame 是一个 WebSocket 帧：服务端时间（秒）和按顺序要处理的消息。
+export interface ServerFrame { time: number; msgs: ServerMessage[] }
 export interface ToastMsg { t: 'msg'; text: string }
 export interface SkillBarMsg { t: 'skills'; skills: SkillInfo[]; playerClass: string }   // playerClass 空 = 职业没变
 
@@ -270,7 +281,7 @@ export interface InventoryMsg { t: 'inventory'; items: ItemSlotted[]; capacity: 
 // respawnIn 是死后还有几秒复活（0 = 不在复活中）；cooldown 是换宠物的冷却还剩几秒（0 = 没有冷却）。
 export interface PetStatusMsg { t: 'petStatus'; pet: string; entity: number; respawnIn: number; cooldown: number }
 
-export type ServerMessage = WelcomeMsg | EnterMsg | LeaveMsg | SyncMsg | ToastMsg | SkillBarMsg | InventoryMsg | PetStatusMsg;
+export type ServerMessage = WelcomeMsg | EnterMsg | LeaveMsg | StateMsg | EventMsg | SelfMsg | ZonesMsg | AiMsg | ToastMsg | SkillBarMsg | InventoryMsg | PetStatusMsg;
 
 export type ClientMessage =
   | { t: 'move'; dx: number; dy: number }

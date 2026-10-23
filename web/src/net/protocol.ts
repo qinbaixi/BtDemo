@@ -7,7 +7,7 @@
 import { btdemo } from './pb';
 import type {
   AiTrace, ClassInfo, AiTreeDef, AiTreeNode, ClientMessage, EntityInfo, GameEvent, ItemInfo, ItemSlotted, Obstacle, PetInfo, SelfInfo,
-  ServerMessage,
+  EntityState, SelfUpdate, ServerFrame, ServerMessage,
 } from './types';
 
 const EVENT_KIND: Record<string, GameEvent['k']> = {
@@ -20,19 +20,11 @@ const TO_OBJECT = { enums: String, longs: Number, defaults: false, oneofs: true 
 // 收发的每一帧都会交给 tap：tap(方向, 消息类型, 字节数, 普通对象)。调试面板用它。
 export type Tap = (dir: 'in' | 'out', type: string, bytes: number, obj: unknown) => void;
 
-// Received 是解出来的一帧：消息本身（不认识的类型为 null）、它的序号、服务端已处理到的输入序号。
-export interface Received {
-  m: ServerMessage | null;
-  seq: number;
-  inputAck: number;
-}
-
 export interface Protocol {
-  decode(buf: ArrayBuffer): Received;
-  // encode 组装一条游戏消息；seq 是这条消息的序号，ack 是已收到的最大服务端序号
-  encode(msg: ClientMessage, seq: number, ack: number): Uint8Array | null;
-  encodeHello(token: string, lastSeq: number): Uint8Array;   // 每条连接的第一帧
-  encodePing(ack: number): Uint8Array;                       // 心跳，顺带 ack
+  // decode 解一个服务端帧：服务端时间和按顺序的消息（不认识的类型跳过）；每条消息调一次 tap
+  decode(buf: ArrayBuffer): ServerFrame;
+  encode(msg: ClientMessage): Uint8Array | null;
+  encodeHello(token: string): Uint8Array;   // 每条连接的第一帧；没有 token 传空串
   tap: Tap | null;
 }
 
@@ -51,7 +43,7 @@ function tidy(v: any): any {
 // skin、gear 没设置时是空串（默认外观 / 职业默认武器），这样再收到 Enter 时也能把它们清回默认；
 // owner 是宠物的主人，非宠物为 0
 function entity(e: any): EntityInfo {
-  return { ...e, kind: String(e.kind || '').toLowerCase(), skin: e.skin || '', gear: e.gear || '', owner: e.owner || 0 };
+  return { ...e, state: e.state || { id: e.id }, kind: String(e.kind || '').toLowerCase(), skin: e.skin || '', gear: e.gear || '', owner: e.owner || 0 };
 }
 
 function event(ev: any): GameEvent {
@@ -115,20 +107,28 @@ function petInfo(p: any): PetInfo {
   return { id: p.id, name: p.name, desc: p.desc || '', color: p.color || '#e8b65a', model: p.model || '' };
 }
 
-function self(s: any): SelfInfo {
-  const cds: Record<string, number> = {};
-  for (const c of s.cds || []) cds[c.skill] = c.left;
-  return { ...s, cds, buffs: s.buffs || [] };
+// 自己的信息是增量：只保留出现了的字段；cds、buffs 只在 cdsSet、buffsSet 为 true 时出现
+function self(s: any): SelfUpdate {
+  const { cds, buffs, cdsSet, buffsSet, ...rest } = s;
+  const out: SelfUpdate = rest;
+  if (cdsSet) out.cds = (cds || []).map((c: any) => ({ skill: c.skill, readyAt: c.readyAt }));
+  if (buffsSet) out.buffs = (buffs || []).map((b: any) => ({ name: b.name, until: b.until }));
+  return out;
 }
 
 export function createProtocol(): Protocol {
-  const api: Protocol = { decode, encode, encodeHello, encodePing, tap: null };
+  const api: Protocol = { decode, encode, encodeHello, tap: null };
 
-  function decode(buf: ArrayBuffer): Received {
-    const pb = btdemo.ServerMsg.decode(new Uint8Array(buf));
-    const m = tidy(btdemo.ServerMsg.toObject(pb, TO_OBJECT));
-    if (api.tap) api.tap('in', m.msg, buf.byteLength, m[m.msg]);
-    return { m: message(m), seq: pb.seq || 0, inputAck: pb.inputAck || 0 };
+  function decode(buf: ArrayBuffer): ServerFrame {
+    const frame = btdemo.Frame.decode(new Uint8Array(buf));
+    const msgs: ServerMessage[] = [];
+    for (const raw of frame.msgs) {
+      const obj = tidy(btdemo.ServerMsg.toObject(raw as btdemo.ServerMsg, TO_OBJECT));
+      if (api.tap) api.tap('in', obj.msg, btdemo.ServerMsg.encode(raw).finish().length, obj[obj.msg]);
+      const m = message(obj);
+      if (m) msgs.push(m);
+    }
+    return { time: frame.time, msgs };
   }
 
   function message(m: any): ServerMessage | null {
@@ -152,15 +152,11 @@ export function createProtocol(): Protocol {
       }
       case 'enter': return { t: 'enter', ents: (m.enter.ents || []).map(entity) };
       case 'leave': return { t: 'leave', ids: m.leave.ids || [] };
-      case 'sync': {
-        const s = m.sync;
-        return {
-          t: 'sync', time: s.time, ents: s.ents || [],
-          ev: (s.ev || []).map(event), self: s.self ? self(s.self) : null,
-          ai: s.ai ? aiTrace(s.ai) : null,
-          zones: s.zonesSet ? s.zones || [] : null,
-        };
-      }
+      case 'state': return { t: 'state', state: m.state as EntityState };
+      case 'event': return { t: 'event', ev: event(m.event) };
+      case 'self': return { t: 'self', self: self(m.self) };
+      case 'zones': return { t: 'zones', zones: m.zones.zones || [] };
+      case 'ai': return { t: 'ai', trace: aiTrace(m.ai) };
       case 'toast': return { t: 'msg', text: m.toast.text };
       case 'skillBar': return { t: 'skills', skills: m.skillBar.skills || [], playerClass: m.skillBar.class || '' };
       case 'inventory': return {
@@ -174,15 +170,11 @@ export function createProtocol(): Protocol {
     return null;
   }
 
-  function encodeHello(token: string, lastSeq: number): Uint8Array {
-    return btdemo.ClientMsg.encode(btdemo.ClientMsg.create({ hello: { token, lastSeq } })).finish();
+  function encodeHello(token: string): Uint8Array {
+    return btdemo.ClientMsg.encode(btdemo.ClientMsg.create({ hello: { token } })).finish();
   }
 
-  function encodePing(ack: number): Uint8Array {
-    return btdemo.ClientMsg.encode(btdemo.ClientMsg.create({ ack, ping: {} })).finish();
-  }
-
-  function encode(o: ClientMessage, seq: number, ack: number): Uint8Array | null {
+  function encode(o: ClientMessage): Uint8Array | null {
     let body: btdemo.IClientMsg;
     switch (o.t) {
       case 'move': body = { move: { dx: o.dx, dy: o.dy } }; break;
@@ -197,7 +189,7 @@ export function createProtocol(): Protocol {
       case 'pet': body = { pet: { pet: o.pet || '' } }; break;
       default: return null;
     }
-    const data = btdemo.ClientMsg.encode(btdemo.ClientMsg.create({ ...body, seq, ack })).finish();
+    const data = btdemo.ClientMsg.encode(btdemo.ClientMsg.create(body)).finish();
     if (api.tap) {
       const type = Object.keys(body)[0];
       api.tap('out', type, data.length, (body as any)[type]);

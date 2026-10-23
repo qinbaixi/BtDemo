@@ -1,4 +1,4 @@
-// 处理服务端消息：welcome / enter / leave / sync / toast / skills / inventory，更新本地状态。
+// 处理服务端的帧和消息：welcome / enter / leave / state / event / self / zones / ai / toast / skills / inventory / petStatus，更新本地状态。
 
 import type { Debug } from '../ui/debug';
 import { buildSkillBar, renderPetHud, renderSelf, setConn, showToast } from '../ui/hud';
@@ -9,13 +9,15 @@ import { rememberedPet } from '../ui/bag';
 import { forgetBlock } from '../input';
 import { createScenery } from '../render/scenery';
 import { loadMap } from './map';
-import type { ClientMessage, PetStatusMsg, ServerMessage, SkillInfo, SyncMsg, WelcomeMsg, ZoneInfo } from '../net/types';
+import type {
+  ClientMessage, EntityState, PetStatusMsg, SelfUpdate, ServerFrame, ServerMessage, SkillInfo, WelcomeMsg, ZoneInfo,
+} from '../net/types';
 import { ACTIONS } from '../render/knightActions';
 import { ZONE_FADE_MS } from '../render/zones';
 import { DEATH_MS, LERP_MS, SNAP_DIST } from './config';
 import { onEvent } from './events';
 import { hypot } from './math';
-import { makeEntity, posOf, refreshPetNames, state, type ClientZone } from './state';
+import { localTime, makeEntity, posOf, refreshPetNames, state, type ClientZone } from './state';
 
 export interface SyncDeps {
   send(msg: ClientMessage): void;
@@ -23,15 +25,21 @@ export interface SyncDeps {
   resendMove(): void;   // 把当前按键状态告诉服务端
 }
 
-export function handleMessage(m: ServerMessage, deps: SyncDeps): void {
+// handleFrame 处理一个 WebSocket 帧：先用帧里的服务端时间校准时钟，再按顺序处理每条消息。
+export function handleFrame(frame: ServerFrame, deps: SyncDeps): void {
   const now = performance.now();
+  state.clockOffset = now - frame.time * 1000;
+  for (const m of frame.msgs) handleMessage(m, now, deps);
+}
+
+function handleMessage(m: ServerMessage, now: number, deps: SyncDeps): void {
   switch (m.t) {
     case 'welcome': onWelcome(m, deps); break;
     case 'enter':
       for (const d of m.ents || []) {
         const old = state.ents.get(d.id);
         if (!old) {
-          state.ents.set(d.id, makeEntity(d, now));
+          state.ents.set(d.id, makeEntity({ ...d, ...d.state }, now));
         } else {
           // 已存在的实体再收到 Enter：对方换了职业、外观或武器，更新模型、外观、武器、名字、颜色和半径
           if (d.model !== undefined) old.model = d.model;
@@ -61,7 +69,14 @@ export function handleMessage(m: ServerMessage, deps: SyncDeps): void {
         }
       }
       break;
-    case 'sync': onSync(m, now, deps); break;
+    case 'state': onState(m.state, now); break;
+    case 'event': onEvent(m.ev, now); break;
+    case 'self': onSelf(m.self, now); break;
+    case 'zones': setZones(m.zones, now); break;
+    case 'ai':
+      deps.debug.trace(m.trace);
+      state.aiPath = m.trace.path.length >= 4 ? { id: m.trace.id, pts: m.trace.path, at: now } : null;
+      break;
     case 'msg': showToast(m.text); break;
     case 'skills': {
       const classChanged = !!m.playerClass && m.playerClass !== state.playerClass;
@@ -122,7 +137,7 @@ function setPlayerClass(id: string): void {
 
 // setZones 换上服务端发来的整份回血区列表。新出现的技能法阵从施法动作按地的那一刻开始铺开；
 // 刚连上时收到的（已经在那儿的）直接显示；服务端去掉的留一会儿淡出。
-function setZones(zones: ZoneInfo[], serverTime: number, now: number): void {
+function setZones(zones: ZoneInfo[], now: number): void {
   const first = !zonesSeen;
   zonesSeen = true;
   const old = new Map(state.zones.map((zone) => [zone.id, zone]));
@@ -130,7 +145,7 @@ function setZones(zones: ZoneInfo[], serverTime: number, now: number): void {
   for (const info of zones) {
     const prev = old.get(info.id);
     old.delete(info.id);
-    const endsAt = info.until ? now + (info.until - serverTime) * 1000 : 0;
+    const endsAt = localTime(info.until ?? 0);
     let born = prev ? prev.born : now;
     if (!prev && first) born = now - 10000;
     else if (!prev) {
@@ -187,9 +202,11 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   state.pending = [];
   state.floats = [];
   state.bubbles.clear();
-  state.self = null;
-  state.cds = {};
-  if (!m.resumed) state.target = 0;
+  if (!m.resumed) {
+    state.self = null;
+    state.cds = {};
+    state.target = 0;
+  }   // resumed：自己的信息接着用，服务端随后发的全量 self 会整份覆盖
   state.hoverSlot = 0;
 
   loadScene().catch((err) => console.error('场景创建失败', err));
@@ -217,62 +234,75 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   deps.debug.reset();
 }
 
-function onSync(m: SyncMsg, now: number, deps: SyncDeps): void {
-  if (m.zones) setZones(m.zones, m.time, now);
-  for (const s of m.ents || []) {
-    let e = state.ents.get(s.id);
-    if (!e && s.id === state.myId) {
-      e = makeEntity({ id: s.id, kind: 'player', name: '我', r: 16, x: s.x, y: s.y }, now);
-      state.ents.set(s.id, e);
-    }
-    if (!e) continue;
+// onState 把一个实体的增量状态合并进本地实体：只处理出现了的字段，位置出现才做插值。
+// 不认识的实体（还没 Enter，或已经 Leave）直接忽略。
+function onState(s: EntityState, now: number): void {
+  const e = state.ents.get(s.id);
+  if (!e) return;
+  if (s.x !== undefined || s.y !== undefined) {
+    const x = s.x ?? e.x;
+    const y = s.y ?? e.y;
     const cur = posOf(e, now);
-    const jump = hypot(cur.x, cur.y, s.x, s.y) > SNAP_DIST;
-    const mdx = s.x - e.x;
-    if (!jump && hypot(e.x, e.y, s.x, s.y) > 0.5) {
+    const jump = hypot(cur.x, cur.y, x, y) > SNAP_DIST;
+    const mdx = x - e.x;
+    if (!jump && hypot(e.x, e.y, x, y) > 0.5) {
       e.moveUntil = now + LERP_MS * 1.6;
       // 自己按着左右键时朝向由按键决定（main.ts 的 faceInput），这里只管别人和被推动的情况
       // 格挡中的人举着盾倒退，朝向不跟着移动方向转
       const steered = (s.id === state.myId && (state.moveDx !== 0 || state.blockHeld)) || e.blocking;
       if (!steered && Math.abs(mdx) > 0.3 && now - e.attackAt > e.attackMs) e.facing = mdx < 0 ? Math.PI : 0;
     }
-    if (jump) { e.rx = s.x; e.ry = s.y; }
+    if (jump) { e.rx = x; e.ry = y; }
+    e.px = jump ? x : cur.x;
+    e.py = jump ? y : cur.y;
+    e.x = x;
+    e.y = y;
+    e.t0 = now;
+  }
+  if (s.dead !== undefined) {
     if (s.dead && !e.dead) e.deadAt = e.fresh ? now - DEATH_MS : now;
     if (!s.dead) e.deadAt = -1;
-    e.px = jump ? s.x : cur.x;
-    e.py = jump ? s.y : cur.y;
-    e.x = s.x;
-    e.y = s.y;
-    e.t0 = now;
-    e.hp = s.hp;
-    e.maxHp = s.maxHp;
-    e.lv = s.lv;
-    e.act = s.act || '';
-    e.tg = s.tg || 0;
-    e.dead = !!s.dead;
-    const shield = s.shield || 0;
-    if (shield > e.shield) e.shieldMax = shield;          // 新加了一层护盾
-    else if (shield <= 0 && e.shield > 0 && !e.dead) state.fx?.shieldBreak(e.id, performance.now());
-    e.shield = shield;
-    e.blocking = !!s.blocking && !e.dead;
-    e.looks = e.dead ? 0 : s.looks || 0;
-    e.fresh = false;
+    e.dead = s.dead;
+    if (e.dead) { e.blocking = false; e.looks = 0; }
   }
-  if (m.self) {
-    // 刚死：弹出选技能面板，复活后用新技能
-    if (m.self.dead && !state.self?.dead) openPicker('death');
-    state.self = m.self;
-    state.selfAt = now;
-    state.cds = m.self.cds || {};
-    state.cdsAt = now;
-    renderSelf();
-    renderBagStats();
+  if (s.hp !== undefined) e.hp = s.hp;
+  if (s.maxHp !== undefined) e.maxHp = s.maxHp;
+  if (s.lv !== undefined) e.lv = s.lv;
+  if (s.act !== undefined) e.act = s.act;
+  if (s.tg !== undefined) e.tg = s.tg;
+  if (s.shield !== undefined) {
+    if (s.shield > e.shield) e.shieldMax = s.shield;          // 新加了一层护盾
+    else if (s.shield <= 0 && e.shield > 0 && !e.dead) state.fx?.shieldBreak(e.id, now);
+    e.shield = s.shield;
   }
-  for (const ev of m.ev || []) onEvent(ev, now);
-  if (m.ai) {
-    deps.debug.trace(m.ai);
-    state.aiPath = m.ai.path.length >= 4 ? { id: m.ai.id, pts: m.ai.path, at: now } : null;
+  if (s.blocking !== undefined) e.blocking = s.blocking && !e.dead;
+  if (s.looks !== undefined) e.looks = e.dead ? 0 : s.looks;
+  e.fresh = false;
+}
+
+// onSelf 把自己的增量信息合并进 state.self。时间点（冷却结束、Buff 结束、复活）用服务端时钟，这里换成本地时间。
+function onSelf(u: SelfUpdate, now: number): void {
+  const prev = state.self;
+  const merged = prev ?? { lv: 1, exp: 0, next: 0, hp: 0, buffs: [], dead: false, respawnAt: 0 };
+  if (u.lv !== undefined) merged.lv = u.lv;
+  if (u.exp !== undefined) merged.exp = u.exp;
+  if (u.next !== undefined) merged.next = u.next;
+  if (u.hp !== undefined) merged.hp = u.hp;
+  if (u.base) merged.base = u.base;
+  if (u.attr) merged.attr = u.attr;
+  if (u.buffs) merged.buffs = u.buffs.map((b) => ({ name: b.name, endsAt: localTime(b.until) }));
+  if (u.cds) {
+    state.cds = {};
+    for (const c of u.cds) state.cds[c.skill] = localTime(c.readyAt);
   }
+  if (u.respawnAt !== undefined) merged.respawnAt = localTime(u.respawnAt);
+  const wasDead = !!prev?.dead;
+  if (u.dead !== undefined) merged.dead = u.dead;
+  state.self = merged;
+  // 刚死：弹出选技能面板，复活后用新技能
+  if (merged.dead && !wasDead) openPicker('death');
+  renderSelf();
+  renderBagStats();
 }
 
 // loadScene 下载地图并建场景。每次 welcome 都重新下载（服务端可能换了地图），

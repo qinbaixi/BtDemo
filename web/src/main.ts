@@ -11,7 +11,7 @@ import './styles/debug.css';
 import './styles/debug-proto.css';
 
 import { faceToward, fxAuras, fxResolve, posOf, QUALITY_NAMES, setQuality, state } from './game/state';
-import { handleMessage } from './game/sync';
+import { handleFrame } from './game/sync';
 import { castSlot, initInput, resendMove } from './input';
 import { createConnection } from './net/connection';
 import { createProtocol } from './net/protocol';
@@ -21,7 +21,7 @@ import { updateCamera } from './render/camera';
 import { drawWorld, initWorld, resize } from './render/world';
 import { createDebug } from './ui/debug';
 import {
-  initHud, renderDeath, renderSkillBar, renderTarget, setConn, showToast,
+  initHud, renderBuffTimes, renderDeath, renderSkillBar, renderTarget, setConn, showToast,
 } from './ui/hud';
 import { initBag } from './ui/bag';
 import { initPicker } from './ui/picker';
@@ -33,7 +33,7 @@ declare global {
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const protocol = createProtocol();
 const conn = createConnection(protocol, {
-  onMessage: (m) => handleMessage(m, { send: conn.send, debug, resendMove }),
+  onFrame: (frame) => handleFrame(frame, { send: conn.send, debug, resendMove }),
   onStatus: setConn,   // 断线时画面停在原处，重连后服务端接着发（或发全量）
 });
 const debug = createDebug({ send: conn.send, entity: (id: number) => state.ents.get(id) });
@@ -67,6 +67,7 @@ function frame(): void {
   renderTarget();
   renderSkillBar(now);
   renderDeath(now);
+  renderBuffTimes(now);
 }
 
 // watchFrameRate 在约 3 秒低于约 30fps 后降一档画质（高 → 中 → 低），降完给 5 秒再评判。
