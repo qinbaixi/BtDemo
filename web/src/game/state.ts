@@ -103,6 +103,7 @@ export interface State {
   ents: Map<number, ClientEntity>;
   self: SelfInfo | null;          // 服务端增量合并后的完整自己信息
   cds: Record<string, number>;    // 技能 id -> 冷却结束的本地时间（performance.now() 毫秒）
+  clockSynced: boolean;           // 已经收到过服务端的帧（clockOffset 有效）
   clockOffset: number;            // performance.now() - 服务端时间 × 1000：每收到一帧更新，把服务端时间点换成本地时间
   target: number;
   hoverSlot: number;
@@ -182,6 +183,7 @@ export const state: State = {
   ents: new Map(),
   self: null,
   cds: {},
+  clockSynced: false,
   clockOffset: 0,
   target: 0,
   hoverSlot: 0,

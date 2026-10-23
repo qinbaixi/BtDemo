@@ -226,6 +226,9 @@ func (sys *System) Leave(session *Session) {
 func (sys *System) DrainInputs() {
 	for session := range sys.sessions {
 		messages, overflow := session.Inbox.Take()
+		if session.link == nil {
+			continue // 断线前没来得及处理的输入作废：断线的角色原地站着（见 detach）
+		}
 		if overflow {
 			log.Printf("player %d: input queue overflow, disconnecting", session.Player.ID)
 			sys.Leave(session)
@@ -349,6 +352,8 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 		aimX, aimY := float64(body.Cast.GetDx()), float64(body.Cast.GetDy())
 		if err := sys.combat.CastAimed(entity, skill, target, aimX, aimY); err != nil {
 			sys.toast(session, err.Error())
+			// 客户端按下技能时先在本地转上了冷却；被拒绝时下一帧重发完整的自身信息把它纠正回来
+			session.selfSent = nil
 		}
 	case *pb.ClientMsg_Equip:
 		if reason := sys.items.Equip(entity, int(body.Equip.GetUid())); reason != "" {

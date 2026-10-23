@@ -3,7 +3,10 @@ package game
 import (
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/qinbaixi/BtDemo/internal/game/session"
+	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
 // 断线后带着 token 重连：同一个角色，Welcome{resumed} 之后把背包、周围实体等全部重新发一遍。
@@ -106,5 +109,18 @@ func TestOneFramePerSync(t *testing.T) {
 	}
 	if frames := sentFrames(client); len(frames) > 1 {
 		t.Fatalf("%d frames in one sync tick, want at most 1", len(frames))
+	}
+}
+
+// 断线前没来得及处理的输入作废：断线的角色不会因为残留的移动消息继续走。
+func TestInputAfterDetachIsDropped(t *testing.T) {
+	world := shippedWorld(t)
+	client := world.Join()
+	move := &pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Float32(1), Dy: proto.Float32(0)}}}
+	client.Inbox.Push(move)
+	world.Detach(client, client.Link())
+	world.Sessions.DrainInputs()
+	if client.Player.MoveX != 0 {
+		t.Fatal("a disconnected character picked up a leftover move")
 	}
 }

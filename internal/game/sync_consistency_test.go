@@ -166,7 +166,7 @@ func syncScenario(world *World) []*simClient {
 	var clients []*simClient
 	for _, spot := range spots {
 		client := world.Join()
-		client.Player.X, client.Player.Y = spot[0], spot[1]
+		client.Player.SetPos(spot[0], spot[1])
 		world.Grid.Moved(client.Player)
 		clients = append(clients, newSimClient(client))
 	}

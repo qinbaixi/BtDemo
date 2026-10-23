@@ -42,7 +42,11 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	go world.Run(ctx)
+	worldDone := make(chan struct{})
+	go func() {
+		world.Run(ctx)
+		close(worldDone)
+	}()
 
 	addr := cfg.World.Addr
 	if *addrFlag != "" {
@@ -70,6 +74,12 @@ func main() {
 	if err := srv.Serve(listener); err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+	// 等世界跑完已接受的命令、给所有连接发出关闭帧再退出（最多等 3 秒）
+	select {
+	case <-worldDone:
+	case <-time.After(3 * time.Second):
+	}
+	time.Sleep(200 * time.Millisecond) // 留一点时间给写协程把关闭帧写出去
 }
 
 // browserHost 返回浏览器连接该监听地址所用的 host:port；监听所有网卡接口时使用 localhost。

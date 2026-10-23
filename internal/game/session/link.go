@@ -25,14 +25,15 @@ func NewLink() *Link {
 }
 
 // Push 把一帧放进队列。队列已关闭返回 true（帧直接丢弃，会话已经不用这个连接了）；
-// 积压超过 LinkByteLimit 时不放入并返回 false。
+// 积压超过 LinkByteLimit 时不放入并返回 false。队列是空的时候总能放入，
+// 否则一个本身就超过上限的帧（比如实体很密集时的全量）永远发不出去。
 func (link *Link) Push(frame []byte) bool {
 	link.mutex.Lock()
 	defer link.mutex.Unlock()
 	if link.closed {
 		return true
 	}
-	if link.bytes+len(frame) > LinkByteLimit {
+	if link.bytes > 0 && link.bytes+len(frame) > LinkByteLimit {
 		return false
 	}
 	link.frames = append(link.frames, frame)

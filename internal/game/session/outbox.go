@@ -51,14 +51,16 @@ func (sys *System) flushFrame(session *Session) {
 	if len(session.pending) == 0 {
 		return
 	}
-	frame := &pb.Frame{Time: core.F32(core.Round1(sys.state.Now())), Msgs: session.pending}
+	frame := &pb.Frame{Time: core.F32(sys.state.Now()), Msgs: session.pending}
 	session.pending = nil
 	if session.link == nil {
 		return
 	}
 	data, err := proto.Marshal(frame)
 	if err != nil {
-		log.Printf("player %d: marshal: %v", session.Player.ID, err)
+		// 少了一帧客户端的视野就对不上了：下一帧发全量
+		log.Printf("player %d: marshal: %v, sending full state next", session.Player.ID, err)
+		session.resync = true
 		return
 	}
 	if !session.link.Push(data) {

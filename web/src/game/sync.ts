@@ -28,7 +28,13 @@ export interface SyncDeps {
 // handleFrame 处理一个 WebSocket 帧：先用帧里的服务端时间校准时钟，再按顺序处理每条消息。
 export function handleFrame(frame: ServerFrame, deps: SyncDeps): void {
   const now = performance.now();
-  state.clockOffset = now - frame.time * 1000;
+  // 偏移里含这一帧的网络延迟：取最小的那个（延迟最小的帧最接近真实偏移），每帧允许回升 1ms 以跟上时钟漂移，
+  // 这样倒计时不会随网络抖动跳来跳去
+  const sample = now - frame.time * 1000;
+  // 差了 2 秒以上说明服务端时钟重新开始了（服务器重启），直接重新取
+  const restarted = sample - state.clockOffset > 2000;
+  state.clockOffset = state.clockSynced && !restarted ? Math.min(sample, state.clockOffset + 1) : sample;
+  state.clockSynced = true;
   for (const m of frame.msgs) handleMessage(m, now, deps);
 }
 
