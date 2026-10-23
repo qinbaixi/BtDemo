@@ -172,13 +172,13 @@ func (sys *System) registerPet() {
 		entity := agent.Entity
 		owner := agent.owner()
 		if owner == nil {
-			entity.Target = 0
+			entity.SetTarget(0)
 			ctx.Explain("主人不在场，不选目标")
 			return
 		}
 		radius, leash := ctx.Node.Num("Range", 300), ctx.Node.Num("Leash", 450)
 		if target, reason := sys.guardTarget(entity, owner, radius, leash); target != nil {
-			entity.Target = target.ID
+			entity.SetTarget(target.ID)
 			ctx.Explain("%s %s", reason, who(target))
 			return
 		}
@@ -202,7 +202,7 @@ func (sys *System) registerPet() {
 				leash,
 			)
 		}
-		entity.Target = 0
+		entity.SetTarget(0)
 	})
 }
 

@@ -75,7 +75,7 @@ func (sys *System) Player() *core.Entity {
 	x, y := sys.state.Scatter(player.Spawn.X, player.Spawn.Y, player.Spawn.Spread)
 	x, y = sys.move.FreeSpot(entity, x, y)
 	entity.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: class.Radius}
-	entity.Level = max(1, player.Level)
+	entity.SetLevel(max(1, player.Level))
 	sys.ApplyClass(entity, class)
 	attr.Init(entity)
 	sys.add(entity)
@@ -101,8 +101,9 @@ func (sys *System) ApplyClass(entity *core.Entity, class *config.Class) {
 	entity.Cooldowns = map[string]float64{}
 	// 现在只有刚进游戏和死亡期间能换职业，那时身上没有 Buff；以后放宽了也别把上个职业的 Buff 带过来
 	entity.Buffs = nil
+	entity.MarkDirty(core.DirtyShield | core.DirtyLooks)
 	if !class.CanBlock {
-		entity.Blocking = false
+		entity.SetBlocking(false)
 	}
 	attr.Recalc(entity)
 }
@@ -137,7 +138,7 @@ func (sys *System) Tick() {
 }
 
 func (sys *System) respawn(entity *core.Entity) {
-	entity.Dead = false
+	entity.SetDead(false)
 	x, y := entity.HomeX, entity.HomeY
 	if entity.Kind == core.KindPlayer {
 		spawnAt := sys.state.Cfg.World.Player.Spawn

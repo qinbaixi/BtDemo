@@ -127,7 +127,7 @@ func (sys *System) Tick(watched map[int]bool) {
 		}
 		entity.AI.Tracing = watched[entity.ID]
 		entity.AI.Tick(now)
-		entity.Action = entity.AI.Active
+		entity.SetAction(entity.AI.Active)
 		if entity.AI.Tracing {
 			sys.recordTrace(entity)
 		}

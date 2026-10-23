@@ -122,7 +122,7 @@ func (sys *System) heal(entity *core.Entity, amount float64, proc string) {
 	if amount <= 0 {
 		return
 	}
-	entity.HP += amount
+	entity.SetHP(entity.HP + amount)
 	event := &core.Event{
 		Kind:  pb.EventKind_HEAL.Enum(),
 		Dst:   core.I32(entity.ID),
@@ -145,6 +145,6 @@ func (sys *System) startAmbush(entity *core.Entity) {
 func (sys *System) regen(entity *core.Entity) {
 	for _, effect := range entity.Effects(config.EffectRegen) {
 		perTick := entity.Attr.MaxHP * effect.Pct * sys.state.Clock.Dt
-		entity.HP = math.Min(entity.Attr.MaxHP, entity.HP+perTick)
+		entity.SetHP(math.Min(entity.Attr.MaxHP, entity.HP+perTick))
 	}
 }

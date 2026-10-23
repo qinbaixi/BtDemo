@@ -87,6 +87,9 @@ func filterBuffs(entity *core.Entity, keep func(*core.Buff) bool) bool {
 	removed := len(kept) < len(entity.Buffs)
 	clear(entity.Buffs[len(kept):]) // 不让被丢弃的 Buff 仍可通过底层数组访问
 	entity.Buffs = kept
+	if removed {
+		entity.MarkDirty(core.DirtyShield | core.DirtyLooks)
+	}
 	return removed
 }
 
@@ -235,7 +238,7 @@ func (sys *System) CastAimed(
 		event := castEvent(entity, nil, skill)
 		event.X, event.Y = core.F32(core.Round1(from.X)), core.F32(core.Round1(from.Y))
 		event.Tx, event.Ty = core.F32(core.Round1(end.X)), core.F32(core.Round1(end.Y))
-		entity.X, entity.Y = end.X, end.Y
+		entity.SetPos(end.X, end.Y)
 		sys.grid.Moved(entity)
 		sys.state.Events.Emit(entity, event)
 		sys.startAmbush(entity)
@@ -273,7 +276,7 @@ func (sys *System) CastAimed(
 		sys.state.Events.Emit(entity, castEvent(entity, entity, skill))
 		if skill.Heal > 0 {
 			amount := math.Round(entity.Attr.MaxHP * skill.Heal)
-			entity.HP = math.Min(entity.Attr.MaxHP, entity.HP+amount)
+			entity.SetHP(math.Min(entity.Attr.MaxHP, entity.HP+amount))
 			sys.state.Events.Emit(
 				entity,
 				&core.Event{
@@ -430,6 +433,7 @@ func (sys *System) addBuff(entity *core.Entity, cfg *config.Buff) *core.Event {
 			Absorb: math.Round(entity.Attr.MaxHP * cfg.ShieldPct),
 		},
 	)
+	entity.MarkDirty(core.DirtyShield | core.DirtyLooks)
 	attr.Recalc(entity)
 	event := &core.Event{
 		Kind: pb.EventKind_BUFF.Enum(),
@@ -510,7 +514,7 @@ func (sys *System) damage(
 	}
 	result.taken = dmg
 	event.Value = core.F32(dmg)
-	dst.HP -= dmg
+	dst.SetHP(dst.HP - dmg)
 	dst.LastAttacker = src.ID
 	dst.LastHitAt = sys.state.Now()
 	sys.state.Events.Emit(dst, event)
@@ -533,6 +537,7 @@ func (sys *System) absorb(entity *core.Entity, dmg float64) float64 {
 		total += take
 	}
 	if total > 0 {
+		entity.MarkDirty(core.DirtyShield) // 护盾剩余量变了
 		// 护盾打破了就去掉这个 Buff（只靠护盾存在的 Buff，没有别的加成）
 		if filterBuffs(
 			entity,
@@ -553,11 +558,13 @@ func (sys *System) Kill(entity, killer *core.Entity) {
 	if killer != nil && killer.Kind == core.KindPet {
 		killer = sys.state.Ents.Get(killer.Owner)
 	}
-	entity.Dead = true
-	entity.HP = 0
-	entity.Target = 0
-	entity.Buffs = nil // 保留 MoveX/MoveY，使按住的按键在重生后仍然有效
-	entity.Action = ""
+	entity.SetDead(true)
+	entity.SetHP(0)
+	entity.SetTarget(0)
+	entity.Buffs = nil
+	entity.MarkDirty(core.DirtyShield | core.DirtyLooks)
+	// 保留 MoveX/MoveY，使按住的按键在重生后仍然有效
+	entity.SetAction("")
 	entity.CanPick = entity.Kind == core.KindPlayer // 玩家死亡期间可以重新挑技能
 	sys.state.Events.Emit(
 		entity,

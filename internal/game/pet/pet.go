@@ -169,7 +169,7 @@ func (sys *System) summon(owner *core.Entity, template *config.Pet) *core.Entity
 
 // revive 让死去的宠物在主人身边满血复活。
 func (sys *System) revive(owner, pet *core.Entity) {
-	pet.Dead = false
+	pet.SetDead(false)
 	pet.Cooldowns = map[string]float64{}
 	pet.Steering = core.Steering{}
 	pet.LastAttacker, pet.LastHitAt = 0, 0
@@ -200,7 +200,7 @@ func (sys *System) applyLevel(pet *core.Entity, level int) {
 	level = max(1, level)
 	template := pet.PetCfg
 	steps := float64(level - 1)
-	pet.Level = level
+	pet.SetLevel(level)
 	pet.Growth = template.Growth
 	pet.Base = config.Attrs{
 		Str: template.Attrs.Str + template.Growth.Str*steps,

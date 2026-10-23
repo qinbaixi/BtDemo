@@ -37,7 +37,7 @@ func (agent *Agent) step(mult float64) float64 {
 func (agent *Agent) target() *core.Entity {
 	target := agent.sys.state.Ents.Get(agent.Entity.Target)
 	if !target.Alive() {
-		agent.Entity.Target = 0
+		agent.Entity.SetTarget(0)
 		return nil
 	}
 	return target
@@ -69,13 +69,13 @@ func (sys *System) register() {
 			ctx.Explain("%.0f 范围内没有敌人", radius)
 			return bt.Failure
 		}
-		agent.Entity.Target = target.ID
+		agent.Entity.SetTarget(target.ID)
 		ctx.Explain("找到 %s，距离 %.0f", who(target), core.Dist(agent.Entity, target))
 		return bt.Success
 	})
 
 	reg.Task("clear_target", func(ctx *bt.Ctx) bt.Status {
-		ctx.Agent.(*Agent).Entity.Target = 0
+		ctx.Agent.(*Agent).Entity.SetTarget(0)
 		return bt.Success
 	})
 
@@ -95,7 +95,7 @@ func (sys *System) register() {
 		dist = core.EdgeDist(agent.Entity, target)
 		if arrived && dist > stop {
 			// 走到了离目标最近的可达位置还是够不着（隔着墙）：放弃这个目标，不然会一直站在墙边
-			agent.Entity.Target = 0
+			agent.Entity.SetTarget(0)
 			ctx.Explain("够不着 %s：最近只能到 %.0f > %.0f，放弃", who(target), dist, stop)
 			return bt.Failure
 		}
@@ -149,8 +149,8 @@ func (sys *System) register() {
 			ctx.Explain("回家中，离家 %.0f", agent.Entity.HomeDist())
 			return bt.Running
 		}
-		agent.Entity.HP = agent.Entity.Attr.MaxHP
-		agent.Entity.Target = 0
+		agent.Entity.SetHP(agent.Entity.Attr.MaxHP)
+		agent.Entity.SetTarget(0)
 		ctx.Explain("到家，回满血并清除目标")
 		return bt.Success
 	})
@@ -277,16 +277,16 @@ func (sys *System) register() {
 			ctx.Explain("保持目标 %s", who(target))
 			return
 		}
-		entity.Target = 0
+		entity.SetTarget(0)
 		if attacker := sys.state.Ents.Get(entity.LastAttacker); attacker.Alive() &&
 			sys.state.Hostile(entity, attacker) &&
 			ctx.Now-entity.LastHitAt <= attackerWindow {
-			entity.Target = attacker.ID
+			entity.SetTarget(attacker.ID)
 			ctx.Explain("改打攻击者 %s", who(attacker))
 			return
 		}
 		if target := sys.combat.NearestHostile(entity, radius); target != nil {
-			entity.Target = target.ID
+			entity.SetTarget(target.ID)
 			ctx.Explain("选最近的敌人 %s", who(target))
 			return
 		}

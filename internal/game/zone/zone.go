@@ -53,7 +53,7 @@ func (sys *System) pulse(zone *core.Zone) {
 	})
 	for _, entity := range targets {
 		before := entity.HP
-		entity.HP = math.Min(entity.Attr.MaxHP, entity.HP+math.Round(entity.Attr.MaxHP*zone.Cfg.Heal))
+		entity.SetHP(math.Min(entity.Attr.MaxHP, entity.HP+math.Round(entity.Attr.MaxHP*zone.Cfg.Heal)))
 		amount := math.Round(entity.HP - before) // 报实际回了多少（快满血时比 heal 少）
 		sys.state.Events.Emit(
 			entity,

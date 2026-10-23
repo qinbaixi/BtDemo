@@ -35,14 +35,14 @@ func pos(entity *core.Entity) nav.Vec { return nav.Vec{X: entity.X, Y: entity.Y}
 // By 让 entity 移动 (dx, dy)，遇到障碍物时沿其表面滑动。
 func (sys *System) By(entity *core.Entity, dx, dy float64) {
 	point := sys.nav.Resolve(nav.Vec{X: entity.X + dx, Y: entity.Y + dy}, entity.Radius)
-	entity.X, entity.Y = point.X, point.Y
+	entity.SetPos(point.X, point.Y)
 	sys.grid.Moved(entity)
 }
 
 // Place 把 entity 放到离 (x, y) 最近的空闲位置。
 func (sys *System) Place(entity *core.Entity, x, y float64) {
 	point := sys.nav.NearestFree(nav.Vec{X: x, Y: y}, entity.Radius)
-	entity.X, entity.Y = point.X, point.Y
+	entity.SetPos(point.X, point.Y)
 	sys.grid.Moved(entity)
 }
 
@@ -126,11 +126,11 @@ func (sys *System) Tick() {
 		switch {
 		case entity.MoveX != 0 || entity.MoveY != 0:
 			sys.By(entity, entity.MoveX*speed*dt, entity.MoveY*speed*dt)
-			entity.Action = "move"
+			entity.SetAction("move")
 		case entity.Blocking:
-			entity.Action = "block"
+			entity.SetAction("block")
 		default:
-			entity.Action = ""
+			entity.SetAction("")
 		}
 	})
 }

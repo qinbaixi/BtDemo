@@ -3,7 +3,6 @@ package game
 import (
 	"testing"
 
-
 	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )

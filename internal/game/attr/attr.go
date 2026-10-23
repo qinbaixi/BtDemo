@@ -95,16 +95,19 @@ func GearBonus(entity *core.Entity) config.StatBonus {
 func Recalc(entity *core.Entity) {
 	old := entity.Attr.MaxHP
 	entity.Attr = ComputeWithGear(entity.Base, entity.Speed, entity.Buffs, GearBonus(entity))
-	if old > 0 && entity.Attr.MaxHP != old {
-		entity.HP = entity.HP / old * entity.Attr.MaxHP
+	if entity.Attr.MaxHP != old {
+		entity.MarkDirty(core.DirtyMaxHP)
 	}
-	entity.HP = math.Max(0, math.Min(entity.HP, entity.Attr.MaxHP))
+	if old > 0 && entity.Attr.MaxHP != old {
+		entity.SetHP(entity.HP / old * entity.Attr.MaxHP)
+	}
+	entity.SetHP(math.Max(0, math.Min(entity.HP, entity.Attr.MaxHP)))
 }
 
 // Init 从零开始设置 entity 的属性，并将 HP 补满。
 func Init(entity *core.Entity) {
 	Recalc(entity)
-	entity.HP = entity.Attr.MaxHP
+	entity.SetHP(entity.Attr.MaxHP)
 }
 
 // ExpToNext 为从 level 升到 level+1 所需的经验：100*level。
@@ -120,7 +123,7 @@ func New(state *core.State) *System { return &System{state: state} }
 
 // LevelUp 使 entity 升一级：基础属性按 entity.Growth 增长。
 func LevelUp(entity *core.Entity) {
-	entity.Level++
+	entity.SetLevel(entity.Level + 1)
 	entity.Base.Str += entity.Growth.Str
 	entity.Base.Agi += entity.Growth.Agi
 	entity.Base.Int += entity.Growth.Int
