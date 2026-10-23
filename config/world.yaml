@@ -11,6 +11,9 @@ aoi:
 tick_rate: 20        # 世界逻辑帧率（每秒）
 sync_rate: 10        # 状态同步频率（每秒）
 
+session:
+  keep: 30           # 断线后角色保留多少秒：期间原地站着、照样会被打会死，重连能接着玩
+
 # 阵营敌对关系：key 会主动攻击 / 可以攻击 value 中的阵营
 hostile:
   player: [monster]

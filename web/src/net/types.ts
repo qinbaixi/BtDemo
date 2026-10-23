@@ -245,6 +245,8 @@ export interface WelcomeMsg {
   playerClass: string;    // 当前职业 id
   items: ItemInfo[];      // 全部装备种类（装备图鉴）
   pets: PetInfo[];        // 可以带的宠物，第一个是默认
+  token: string;          // 断线重连时交回服务端，接着用这个角色
+  resumed: boolean;       // true：还是原来的角色（重连或跟不上后的全量），清掉实体等 Enter 重发，保留玩家自己的选择
 }
 export interface EnterMsg { t: 'enter'; ents: EntityInfo[] }
 export interface LeaveMsg { t: 'leave'; ids: number[] }

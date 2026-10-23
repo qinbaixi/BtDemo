@@ -106,6 +106,15 @@ type World struct {
 	Loot Loot `yaml:"loot"`
 	// Pet 是宠物的复活、换宠物冷却和传送距离。
 	Pet PetRules `yaml:"pet"`
+	// Session 是连接断开后的处理。
+	Session SessionRules `yaml:"session"`
+}
+
+// SessionRules 是会话的断线规则。
+type SessionRules struct {
+	// Keep 是断线后角色保留多少秒：期间角色原地站着、照样会被打会死，
+	// 客户端带着 Welcome.token 重连就能接着玩；超时才删除角色。默认 30。
+	Keep float64 `yaml:"keep"`
 }
 
 // ZoneAspect 是回血区纵向半径和横向半径之比：地面上画成压扁的椭圆（和其他地面特效一样），
@@ -275,6 +284,9 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 	world.Addr = NormalizeAddr(world.Addr)
 	if world.SyncRate <= 0 {
 		world.SyncRate = 10
+	}
+	if world.Session.Keep <= 0 {
+		world.Session.Keep = 30
 	}
 	if world.Player.Level <= 0 {
 		world.Player.Level = 1

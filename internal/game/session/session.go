@@ -1,6 +1,14 @@
-// Package session 把玩家连接到世界：将客户端消息转换为动作，
-// 并在每次同步时向每个玩家发送 AOI 变化、
-// 其所见实体的状态、附近的事件以及其自身属性。
+// Package session 把玩家连接到世界：把客户端消息转换为动作，把世界里的变化推给附近的玩家。
+//
+// 推送都按 AOI 走（aoi.Grid 只遍历九宫格里的玩家）：
+//   - 视野进出（view.go）：实体出现、消失、换格子时 Grid 通知 Shown / Hidden，只给相关格子里的玩家发 Enter / Leave。
+//   - 实体状态：各系统改字段时记下脏标记（core.Dirty），每个同步帧只把变了的字段按实体位置广播。
+//   - 事件：按事件发生的位置广播。
+//   - 自身属性、背包、宠物状态：只发给自己，只在变了时发。
+//
+// 发送（outbox.go）：Broadcast / SendTo 放进玩家这一帧的待发列表，每个同步帧合成一个 Frame 写出；
+// BroadcastNow / SendNow 立即写出（玩家操作的回应、Welcome）。
+// 连接（connect.go）：断线保留角色，带 token 重连时把全部东西重新发一遍。
 package session
 
 import (
@@ -22,22 +30,38 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
-// Session 是一个已连接的玩家。
+// Session 是一个玩家（角色）。它比连接活得长：断线后角色保留 world.yaml session.keep 秒，
+// 客户端带着 token 重连就换上新的 Link 接着用，见 connect.go。
 type Session struct {
 	Player  *core.Entity
-	Out     chan []byte // 编码后的 pb.ServerMsg 帧
-	Inbox   *Inbox      // 网络读协程放进来的客户端消息，世界 goroutine 每个 tick 开头处理
-	Watch   int         // 本会话想要查看其行为树跟踪的实体
-	defSent string      // 已经给本会话发过结构的行为树名；换了观察对象或树时重发
+	Inbox   *Inbox // 网络读协程放进来的客户端消息，世界 goroutine 每个 tick 开头处理
+	Watch   int    // 本会话想要查看其行为树跟踪的实体
+	defSent string // 已经给本会话发过结构的行为树名；换了观察对象或树时重发
+	// visible 是已经给这个玩家发过 Enter、还没发 Leave 的实体
 	visible map[int]bool
 	// zonesSent 是已经发给本会话的回血区版本（core.Zones.Version）
 	zonesSent int
+	// selfSent 是上次发出的完整自身信息，用来算这次变了什么；nil 表示下次发全部
+	selfSent *pb.SelfInfo
+
+	token      string          // 重连时认出这个角色用，在 Welcome 里发给客户端
+	link       *Link           // 当前连接的发送队列；断线期间为 nil
+	detachedAt float64         // 断线的时刻（游戏时间），link 为 nil 时有效
+	pending    []*pb.ServerMsg // 这一帧待发的消息，同步帧结束时合成一个 Frame
+	resync     bool            // 客户端跟不上了：下次 Flush 前先发一份全量
+	lag        lagMeter
 }
+
+// Token 是重连时认出这个角色的凭证（Welcome.token）。
+func (session *Session) Token() string { return session.token }
+
+// Link 返回会话当前连接的发送队列（断线时为 nil）。
+func (session *Session) Link() *Link { return session.link }
 
 // Visible 报告玩家当前是否看到实体 id（供测试使用）。
 func (session *Session) Visible(id int) bool { return session.visible[id] }
 
-// System 保存已连接的会话。
+// System 保存所有会话。
 type System struct {
 	state    *core.State
 	grid     *aoi.Grid
@@ -48,13 +72,15 @@ type System struct {
 	pets     *pet.System
 	nav      *nav.Map
 	sessions map[*Session]bool
+	byToken  map[string]*Session
+	byPlayer map[int]*Session // 玩家实体 ID -> 会话，广播时由格子里的玩家找到会话
 
 	obstacles []*pb.Obstacle // 构建一次，并在每条欢迎消息中发送
 	itemInfos []*pb.ItemInfo // 装备图鉴，构建一次，并在每条欢迎消息中发送
 	petInfos  []*pb.PetInfo  // 宠物图鉴，构建一次，并在每条欢迎消息中发送
 }
 
-// New 创建会话系统。
+// New 创建会话系统，并让它接收 grid 的视野变化。
 func New(
 	state *core.State,
 	grid *aoi.Grid,
@@ -75,23 +101,42 @@ func New(
 		items:    itemSys,
 		pets:     petSys,
 		sessions: map[*Session]bool{},
+		byToken:  map[string]*Session{},
+		byPlayer: map[int]*Session{},
 	}
 	sys.obstacles = obstacles(navMap)
 	sys.itemInfos = itemInfos(state.Cfg.Items)
 	sys.petInfos = petInfos(state.Cfg.Pets)
+	grid.SetWatcher(sys)
 	return sys
 }
 
-// Join 为一个连接创建新角色，向其发送欢迎消息，再发新手装备的 Inventory。
-func (sys *System) Join() *Session {
+// Join 为连接 link 创建新角色：发欢迎消息，再把周围的实体、新手装备、宠物发给它。
+func (sys *System) Join(link *Link) *Session {
+	player := sys.spawn.Player() // 加入网格时，周围的玩家就收到了它的 Enter
 	session := &Session{
-		Player:    sys.spawn.Player(),
-		Out:       make(chan []byte, 64),
+		Player:    player,
 		Inbox:     &Inbox{},
 		visible:   map[int]bool{},
 		zonesSent: -1,
+		token:     newToken(),
+		link:      link,
 	}
 	sys.sessions[session] = true
+	sys.byToken[session.token] = session
+	sys.byPlayer[player.ID] = session
+	player.CanPick = true // 刚进游戏，放第一个技能之前可以挑技能
+	sys.SendNow(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Welcome{Welcome: sys.welcome(session)}})
+	sys.showAround(session)
+	sys.items.GiveStarter(player)
+	sys.pets.Join(player)
+	sys.publishGear(false)
+	sys.flushFrame(session) // 周围的实体、背包、宠物马上发出去，不等同步帧
+	return session
+}
+
+// welcome 是发给会话的欢迎消息：角色 id、地图、技能、职业、图鉴，以及重连用的 token。
+func (sys *System) welcome(session *Session) *pb.Welcome {
 	cfg := sys.state.Cfg.World
 	welcome := &pb.Welcome{
 		Id:        core.I32(session.Player.ID),
@@ -110,12 +155,8 @@ func (sys *System) Join() *Session {
 	for _, option := range cfg.Player.Classes {
 		welcome.Classes = append(welcome.Classes, classInfo(sys.state.Cfg, option))
 	}
-	session.Player.CanPick = true // 刚进游戏，放第一个技能之前可以挑技能
-	sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Welcome{Welcome: welcome}})
-	sys.items.GiveStarter(session.Player)
-	sys.pets.Join(session.Player)
-	sys.publishGear()
-	return session
+	welcome.Token = proto.String(session.token)
+	return welcome
 }
 
 // 挑技能被拒绝的原因（以提示消息发给玩家）。
@@ -153,7 +194,7 @@ func (sys *System) loadout(entity *core.Entity, classID string, ids []string) st
 	if class.ID != entity.Class {
 		sys.spawn.ApplyClass(entity, class)
 		sys.items.ClassChanged(entity, class)
-		sys.forgetEntity(entity)
+		sys.reshow(entity)
 	}
 	skills := []*config.Skill{entity.Skills[0]}
 	for _, id := range ids {
@@ -163,28 +204,25 @@ func (sys *System) loadout(entity *core.Entity, classID string, ids []string) st
 	return ""
 }
 
-// forgetEntity 把 entity 从每个会话的可见集合里删掉，下次 Flush 会重新发它的 Enter，
-// 让其他玩家看到换了职业、皮肤或武器后的样子（客户端收到已存在实体的 Enter 时更新外观）。
-func (sys *System) forgetEntity(entity *core.Entity) {
-	for session := range sys.sessions {
-		delete(session.visible, entity.ID)
-	}
-}
-
-// Leave 移除会话的角色并关闭其输出。
+// Leave 删除会话的角色，并关闭它的连接（如果还连着）。
 func (sys *System) Leave(session *Session) {
 	if !sys.sessions[session] {
 		return
 	}
 	delete(sys.sessions, session)
+	delete(sys.byToken, session.token)
+	delete(sys.byPlayer, session.Player.ID)
 	sys.pets.Dismiss(session.Player)
-	sys.spawn.Remove(session.Player)
-	close(session.Out)
+	sys.spawn.Remove(session.Player) // 移出网格时，周围的玩家收到 Leave
+	if session.link != nil {
+		session.link.Close()
+		session.link = nil
+	}
 }
 
 // DrainInputs 按到达顺序处理每个会话排队的客户端消息。须在世界 goroutine 上、
 // 每个 tick 的系统运行之前调用，这样输入总在固定的时机生效。
-// 输入队列溢出过的会话直接断开（客户端异常或刷包），不影响其他人。
+// 输入队列溢出过的会话直接删除（客户端异常或刷包），不影响其他人。
 func (sys *System) DrainInputs() {
 	for session := range sys.sessions {
 		messages, overflow := session.Inbox.Take()
@@ -196,57 +234,68 @@ func (sys *System) DrainInputs() {
 		for _, msg := range messages {
 			sys.Input(session, msg)
 			if !sys.sessions[session] {
-				break // 处理消息时会话被断开了（例如发送缓冲满）
+				break // 处理消息时会话被删掉了
 			}
 		}
 	}
 }
 
-// CloseAll 断开所有会话（停服时调用）：删掉角色并关闭输出，写协程随之发出关闭帧。
+// CloseAll 删除所有会话（停服时调用）：关闭发送队列，写协程写完剩下的帧后发关闭帧。
 func (sys *System) CloseAll() {
 	for session := range sys.sessions {
+		sys.flushFrame(session)
 		sys.Leave(session)
 	}
 }
 
-// publishGear 把物品系统留下的变化发出去：每个玩家的提示（Toast）、变了的背包（Inventory），
-// 外观（皮肤、武器）变了的玩家从所有会话的可见集合里删掉，下次 Flush 重发 Enter。
-// 处理完客户端消息后和每次 Flush 之前调用，所以 Equip 等操作马上就有回应，
-// 战斗里的掉落最晚随下一次同步发出。
-func (sys *System) publishGear() {
+// publishGear 把物品和宠物系统留下的变化发出去：每个玩家的提示（Toast）、变了的背包（Inventory）、
+// 宠物状态（PetStatus），外观（皮肤、武器）变了的玩家给周围重发 Enter。
+// urgent 为 true（处理完客户端消息后）时立即发出，让操作马上有回应；
+// 同步帧里调用时随这一帧的包发出（例如战斗里的掉落）。
+func (sys *System) publishGear(urgent bool) {
 	for session := range sys.sessions {
 		player := session.Player
-		notices := player.Notices
-		player.Notices = nil
-		for _, text := range notices {
-			sys.toast(session, text)
+		var messages []*pb.ServerMsg
+		for _, text := range player.Notices {
+			messages = append(messages, toastMsg(text))
 		}
+		player.Notices = nil
 		if player.InventoryDirty {
 			player.InventoryDirty = false
 			inventory := inventoryInfo(player, sys.items.Capacity())
-			sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Inventory{Inventory: inventory}})
+			messages = append(messages, &pb.ServerMsg{Msg: &pb.ServerMsg_Inventory{Inventory: inventory}})
 		}
 		if player.PetDirty {
 			player.PetDirty = false
 			status := petStatus(sys.state, player)
-			sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_PetStatus{PetStatus: status}})
+			messages = append(messages, &pb.ServerMsg{Msg: &pb.ServerMsg_PetStatus{PetStatus: status}})
 		}
 		if player.LookDirty {
 			player.LookDirty = false
-			sys.forgetEntity(player)
+			sys.reshow(player)
+		}
+		for _, msg := range messages {
+			sys.SendTo(session, msg)
+		}
+		if urgent && len(messages) > 0 {
+			sys.flushFrame(session)
 		}
 	}
 }
 
-// toast 给会话发一行提示。
+// toastMsg 是一行提示。
+func toastMsg(text string) *pb.ServerMsg {
+	return &pb.ServerMsg{Msg: &pb.ServerMsg_Toast{Toast: &pb.Toast{Text: proto.String(text)}}}
+}
+
+// toast 立即给会话发一行提示（回应玩家的操作）。
 func (sys *System) toast(session *Session, text string) {
-	toast := &pb.Toast{Text: proto.String(text)}
-	sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Toast{Toast: toast}})
+	sys.SendNow(session, toastMsg(text))
 }
 
 // Input 应用一条客户端消息。
 func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
-	defer sys.publishGear()
+	defer sys.publishGear(true)
 	entity := session.Player
 	switch body := msg.Msg.(type) {
 	case *pb.ClientMsg_Move:
@@ -260,10 +309,10 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 	case *pb.ClientMsg_Block:
 		// 不能格挡的职业（游侠）忽略格挡消息；松开总是允许的
 		if on := body.Block.GetOn(); !on || sys.canBlock(entity) {
-			entity.Blocking = on
+			entity.SetBlocking(on)
 		}
 	case *pb.ClientMsg_Target:
-		entity.Target = int(body.Target.GetId())
+		entity.SetTarget(int(body.Target.GetId()))
 	case *pb.ClientMsg_Watch:
 		session.Watch = int(body.Watch.GetId())
 		session.defSent = ""
@@ -274,7 +323,7 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 			return
 		}
 		bar := &pb.SkillBar{Skills: skillBar(entity.Skills), Class: proto.String(entity.Class)}
-		sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_SkillBar{SkillBar: bar}})
+		sys.SendNow(session, &pb.ServerMsg{Msg: &pb.ServerMsg_SkillBar{SkillBar: bar}})
 	case *pb.ClientMsg_Cast:
 		slot := int(body.Cast.GetSlot())
 		if slot < 1 || slot > len(entity.Skills) {
@@ -293,7 +342,8 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 			// 未选择可用目标：选取范围内最近的怪物。
 			targetEnt = sys.combat.NearestMonster(entity, skill.Range+entity.Radius+40)
 			if targetEnt != nil {
-				target, entity.Target = targetEnt.ID, targetEnt.ID
+				target = targetEnt.ID
+				entity.SetTarget(targetEnt.ID)
 			}
 		}
 		aimX, aimY := float64(body.Cast.GetDx()), float64(body.Cast.GetDy())
@@ -339,86 +389,53 @@ func (sys *System) Watched() map[int]bool {
 	return ids
 }
 
-func (sys *System) send(session *Session, msg *pb.ServerMsg) {
-	if !sys.sessions[session] {
-		return
-	}
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		log.Printf("marshal: %v", err)
-		return
-	}
-	select {
-	case session.Out <- data:
-	default:
-		// 客户端落后了。丢弃一帧会使其 AOI
-		// 状态不同步，因此改为断开连接；客户端会以新的视野重新连接。
-		log.Printf("player %d: send buffer full, disconnecting", session.Player.ID)
-		sys.Leave(session)
-	}
-}
-
-// Flush 向每个会话发送 AOI 的进入/离开、可见实体的状态、排队中的事件
-// 以及玩家自身属性，然后清空事件队列。
+// Flush 是同步帧的结尾：先给跟不上的会话发全量，再把这一帧攒下的变化推出去——
+// 变了的实体字段（按实体位置广播）、事件（按发生位置广播）、每个玩家自己的属性、回血区、
+// 行为树跟踪——最后把每个会话的待发消息合成一个 Frame 写出。
 func (sys *System) Flush() {
-	sys.publishGear()
-	events := sys.state.Events.List()
-	cells := make([]int, len(events))
-	for i, pending := range events {
-		cells[i] = sys.grid.CellOf(pending.X, pending.Y)
-	}
 	for session := range sys.sessions {
-		player := session.Player
-		cell := sys.grid.CellOf(player.X, player.Y)
-		now := map[int]*core.Entity{}
-		sys.grid.Neighbors(cell, func(entity *core.Entity) { now[entity.ID] = entity })
-		enter := &pb.Enter{}
-		leave := &pb.Leave{}
-		for id, entity := range now {
-			if !session.visible[id] {
-				enter.Ents = append(enter.Ents, entityInfo(entity))
-			}
+		if session.resync {
+			sys.sendFull(session)
 		}
-		for id := range session.visible {
-			if now[id] == nil {
-				leave.Ids = append(leave.Ids, int32(id))
-			}
+	}
+	sys.publishGear(false)
+	sys.state.Ents.Each(func(entity *core.Entity) {
+		if entity.Dirty == 0 {
+			return
 		}
-		session.visible = map[int]bool{}
-		for id := range now {
-			session.visible[id] = true
+		if entity.Dirty&core.DirtyPos != 0 {
+			sys.grid.Moved(entity) // 保险：位置变了而调用方忘了更新格子时，先把视野进出补上
 		}
-		if len(leave.Ids) > 0 {
-			sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Leave{Leave: leave}})
-		}
-		if len(enter.Ents) > 0 {
-			sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Enter{Enter: enter}})
-		}
-
-		sync := &pb.Sync{
-			Time: core.F32(core.Round1(sys.state.Now())),
-			Self: selfInfo(player, sys.state.Now()),
-		}
-		for _, entity := range now {
-			sync.Ents = append(sync.Ents, entityState(entity))
-		}
-		for i, pending := range events {
-			if sys.grid.Sees(cell, cells[i]) {
-				sync.Ev = append(sync.Ev, pending.Event)
-			}
-		}
-		if version := sys.state.Zones.Version; session.zonesSent != version {
-			sync.Zones, sync.ZonesSet = zoneInfos(sys.state.Zones.List()), proto.Bool(true)
-			session.zonesSent = version
-		}
-		if session.Watch != 0 && now[session.Watch] != nil {
-			sync.Ai = sys.aiSys.Trace(now[session.Watch], session.defSent)
-			if def := sync.Ai.GetDef(); def != nil {
-				session.defSent = sync.Ai.GetTree()
-			}
-		}
-		sys.send(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Sync{Sync: sync}})
+		delta := entityDelta(entity, entity.Dirty)
+		entity.Dirty = 0
+		sys.Broadcast(entity.X, entity.Y, &pb.ServerMsg{Msg: &pb.ServerMsg_State{State: delta}})
+	})
+	for _, pending := range sys.state.Events.List() {
+		sys.Broadcast(pending.X, pending.Y, &pb.ServerMsg{Msg: &pb.ServerMsg_Event{Event: pending.Event}})
 	}
 	sys.state.Events.Clear()
+	now := sys.state.Now()
+	for session := range sys.sessions {
+		current := selfInfo(session.Player, now)
+		if delta := selfDelta(session.selfSent, current); delta != nil {
+			sys.SendTo(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Self{Self: delta}})
+		}
+		session.selfSent = current
+		if version := sys.state.Zones.Version; session.zonesSent != version {
+			zones := &pb.ZoneList{Zones: zoneInfos(sys.state.Zones.List())}
+			sys.SendTo(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Zones{Zones: zones}})
+			session.zonesSent = version
+		}
+		if watched := sys.state.Ents.Get(session.Watch); watched != nil && session.visible[watched.ID] {
+			trace := sys.aiSys.Trace(watched, session.defSent)
+			if trace.GetDef() != nil {
+				session.defSent = trace.GetTree()
+			}
+			sys.SendTo(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Ai{Ai: trace}})
+		}
+	}
 	sys.aiSys.ClearTraces()
+	for session := range sys.sessions {
+		sys.flushFrame(session)
+	}
 }

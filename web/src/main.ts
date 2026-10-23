@@ -11,7 +11,7 @@ import './styles/debug.css';
 import './styles/debug-proto.css';
 
 import { faceToward, fxAuras, fxResolve, posOf, QUALITY_NAMES, setQuality, state } from './game/state';
-import { handleMessage, resetOnClose } from './game/sync';
+import { handleMessage } from './game/sync';
 import { castSlot, initInput, resendMove } from './input';
 import { createConnection } from './net/connection';
 import { createProtocol } from './net/protocol';
@@ -34,8 +34,7 @@ const canvas = document.getElementById('game') as HTMLCanvasElement;
 const protocol = createProtocol();
 const conn = createConnection(protocol, {
   onMessage: (m) => handleMessage(m, { send: conn.send, debug, resendMove }),
-  onStatus: setConn,
-  onClose: resetOnClose,
+  onStatus: setConn,   // 断线时画面停在原处，重连后服务端接着发（或发全量）
 });
 const debug = createDebug({ send: conn.send, entity: (id: number) => state.ents.get(id) });
 protocol.tap = (dir, type, bytes, obj) => debug.frame(dir, type, bytes, obj);

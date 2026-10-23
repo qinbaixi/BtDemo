@@ -39,7 +39,6 @@ func TestFlushEnterLeave(t *testing.T) {
 }
 
 func drain(session *Session) {
-	for len(session.Out) > 0 {
-		<-session.Out
+	for range sentFrames(session) {
 	}
 }

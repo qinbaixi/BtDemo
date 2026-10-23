@@ -530,7 +530,7 @@ func TestPetTreeCanBeWatched(t *testing.T) {
 	world.Sessions.Flush()
 	var trace *pb.AiTrace
 	for _, msg := range readMessages(t, session) {
-		if ai := msg.GetSync().GetAi(); ai != nil {
+		if ai := msg.GetAi(); ai != nil {
 			trace = ai
 		}
 	}

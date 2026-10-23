@@ -168,6 +168,7 @@ func (world *World) Step() {
 	world.Zone.Tick()
 	world.Move.Tick()
 	world.AI.Tick(world.Sessions.Watched())
+	world.Sessions.ExpireDetached()
 	cfg := world.State.Cfg.World
 	if world.State.Clock.Tick%max(1, cfg.TickRate/cfg.SyncRate) == 0 {
 		world.Sessions.Flush()
@@ -177,10 +178,22 @@ func (world *World) Step() {
 // Get 返回具有给定 id 的实体，若不存在则返回 nil。
 func (world *World) Get(id int) *core.Entity { return world.State.Ents.Get(id) }
 
-// Join 为一个连接创建新角色。须在世界 goroutine 上调用。
-func (world *World) Join() *Session { return world.Sessions.Join() }
+// Join 创建一个新角色，连着一个新的发送队列（测试用）。须在世界 goroutine 上调用。
+func (world *World) Join() *Session { return world.Sessions.Join(session.NewLink()) }
 
-// Leave 移除会话的角色。须在世界 goroutine 上调用。
+// Attach 把一条新连接接到 token 对应的角色上并把全部东西重新发一遍，认不得 token 就创建新角色。
+// 须在世界 goroutine 上调用。
+func (world *World) Attach(link *session.Link, token string) *Session {
+	return world.Sessions.Attach(link, token)
+}
+
+// Detach 处理连接 link 断开：角色保留 world.yaml session.keep 秒等它重连。
+// 须在世界 goroutine 上调用。
+func (world *World) Detach(client *Session, link *session.Link) {
+	world.Sessions.Detach(client, link)
+}
+
+// Leave 立即删除会话的角色。须在世界 goroutine 上调用。
 func (world *World) Leave(client *Session) { world.Sessions.Leave(client) }
 
 // Input 应用一条客户端消息。须在世界 goroutine 上调用。

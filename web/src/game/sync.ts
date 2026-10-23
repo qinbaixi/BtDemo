@@ -2,7 +2,7 @@
 
 import type { Debug } from '../ui/debug';
 import { buildSkillBar, renderPetHud, renderSelf, setConn, showToast } from '../ui/hud';
-import { closeBag, refreshBag, renderBagStats } from '../ui/bag';
+import { refreshBag, renderBagStats } from '../ui/bag';
 import { closePicker, openPicker } from '../ui/picker';
 import { rememberedSkin, rememberSkin, takePendingSkin } from '../ui/skins';
 import { rememberedPet } from '../ui/bag';
@@ -155,15 +155,6 @@ function setZones(zones: ZoneInfo[], serverTime: number, now: number): void {
 // 是否已经收到过回血区列表（第一次收到的直接显示，不播铺开动画）
 let zonesSeen = false;
 
-// resetOnClose 在连接断开时清掉旧角色的状态。
-export function resetOnClose(): void {
-  closePicker();
-  closeBag();
-  state.ents.clear();
-  state.self = null;
-  state.target = 0;
-}
-
 function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   state.myId = m.id;
   state.map = m.map || state.map;
@@ -186,7 +177,8 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   state.skillPool = m.pool || [];
   state.skillPick = m.pick || 0;
 
-  // welcome 表示一个全新的角色：旧角色的东西全部丢掉。
+  // welcome 之后服务端会把视野里的实体全部重新 Enter：旧的实体、特效全部丢掉。
+  // resumed 表示还是原来的角色（重连后接不上、或者客户端跟不上时的全量），玩家自己的选择保留。
   state.ents.clear();
   state.fx!.clear();
   state.lands.clear();
@@ -197,7 +189,7 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   state.bubbles.clear();
   state.self = null;
   state.cds = {};
-  state.target = 0;
+  if (!m.resumed) state.target = 0;
   state.hoverSlot = 0;
 
   loadScene().catch((err) => console.error('场景创建失败', err));
@@ -207,6 +199,11 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   buildSkillBar();
   refreshBag();
   renderPetHud();
+  setConn('ok', '已连接');
+  deps.resendMove();
+  if (m.resumed) return;
+
+  // 新角色：
   // 服务端进游戏默认召唤第一只宠物；本地记住的选择和默认不同就发过去换上
   const remembered = rememberedPet();
   if (remembered !== null && remembered !== (state.pets[0]?.id ?? '') && state.pets.some((pet) => pet.id === remembered)) {
@@ -218,8 +215,6 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   openPicker('join');   // 新角色：先挑技能
   deps.debug.setTarget(0);
   deps.debug.reset();
-  setConn('ok', '已连接');
-  deps.resendMove();
 }
 
 function onSync(m: SyncMsg, now: number, deps: SyncDeps): void {

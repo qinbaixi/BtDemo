@@ -11,6 +11,7 @@ option go_package = "github.com/qinbaixi/BtDemo/internal/pb";
 
 // ---------- browser -> server ----------
 
+// The first frame of every connection is Hello.
 message ClientMsg {
   oneof msg {
     Move move = 1;
@@ -23,7 +24,17 @@ message ClientMsg {
     Unequip unequip = 8;
     SetSkin skin = 9;
     SetPet pet = 10;
+    Hello hello = 11;
   }
+}
+
+// Hello is the first frame of a connection. token empty (or unknown, or
+// expired) = start a new character, answered with Welcome. A known token
+// takes the character back (it stays in the world for world.yaml
+// session.keep seconds after a disconnect): the server answers with
+// Welcome{resumed} and then sends everything again, as for a new player.
+message Hello {
+  optional string token = 1;     // Welcome.token of the character to take back
 }
 
 // SetPet picks the pet that follows the player (swap cooldown, see world.yaml pet).
@@ -86,19 +97,33 @@ message Cast {
 }
 
 // Watch asks for the behavior tree trace of one monster or NPC (the debug
-// panel); 0 stops. The trace arrives in Sync.ai while the entity is visible.
+// panel); 0 stops. The trace arrives as ServerMsg.ai while the entity is visible.
 message Watch {
   required int32 id = 1;
 }
 
 // ---------- server -> browser ----------
 
+// Frame is one WebSocket frame from the server. Everything that happened
+// near the player during one sync tick (world.yaml sync_rate) arrives in one
+// Frame, in order; replies to the player's own actions (Toast, SkillBar, ...)
+// and Welcome are sent right away in a Frame of their own.
+message Frame {
+  required float time = 1;      // server time (seconds) when the frame was sent; *_at fields use this clock
+  repeated ServerMsg msgs = 2;
+}
+
 message ServerMsg {
+  reserved 4;  // was Sync: replaced by the separate state / event / self / zones / ai messages
   oneof msg {
     Welcome welcome = 1;
     Enter enter = 2;
     Leave leave = 3;
-    Sync sync = 4;
+    EntityState state = 9;   // some fields of one visible entity changed
+    Event event = 10;        // something happened nearby
+    SelfInfo self = 11;      // some of the player's own stats changed
+    ZoneList zones = 12;     // the heal zones changed (whole list)
+    AiTrace ai = 13;         // debug panel: behavior tree trace of the watched entity
     Toast toast = 5;
     SkillBar skill_bar = 6;
     Inventory inventory = 7;
@@ -211,6 +236,11 @@ message Welcome {
   optional string class = 11;         // the player's current class (pool/pick above are for it)
   repeated ItemInfo items = 12;       // every item kind (equipment catalogue)
   repeated PetInfo pets = 13;         // every pet kind; the first is summoned on join
+  optional string token = 14;         // send it back in Hello after a disconnect to keep this character
+  // resumed: the same character as before (reconnected, or the client fell
+  // behind): drop every entity and expect Enter for all again; keep the
+  // player's own choices (no join picker).
+  optional bool resumed = 15;
 }
 
 enum ObstacleShape {
@@ -237,17 +267,16 @@ enum EntityKind {
 }
 
 // EntityInfo is the static part of an entity, sent when it enters the AOI.
+// EntityInfo is what the client learns when an entity comes into view (or its
+// look changed): what it is, how to draw it, and its whole current state.
 message EntityInfo {
   required int32 id = 1;
   required EntityKind kind = 2;
   required string name = 3;
   optional string color = 4;
   optional float r = 5;
-  optional int32 lv = 6;
-  required float x = 7;
-  required float y = 8;
-  optional float hp = 9;
-  optional float max_hp = 10;
+  reserved 6 to 10;            // were lv, x, y, hp, max_hp: now in state
+  required EntityState state = 15;  // every field set
   optional string model = 11;  // which look the client draws, e.g. knight, slime
   optional string skin = 12;   // player skin id (empty = default look)
   optional string gear = 13;   // equipped weapon's ItemInfo.look (empty = class default weapon)
@@ -262,11 +291,14 @@ message Leave {
   repeated int32 ids = 1 [packed = true];
 }
 
-// EntityState is the dynamic part of a visible entity, sent on every sync.
+// EntityState is the dynamic part of a visible entity. Inside EntityInfo every
+// field is set; as a ServerMsg it is a delta: only the fields that changed
+// since the last one are set (a set field may be 0 / false / empty), the
+// client keeps the rest.
 message EntityState {
   required int32 id = 1;
-  required float x = 2;
-  required float y = 3;
+  optional float x = 2;
+  optional float y = 3;
   optional float hp = 4;
   optional float max_hp = 5;
   optional int32 lv = 6;
@@ -339,38 +371,36 @@ message Derived {
 
 message SkillCooldown {
   required string skill = 1;
-  required float left = 2;
+  required float ready_at = 2;   // Frame.time when the skill can be used again
 }
 
 message BuffInfo {
   required string name = 1;
-  required float left = 2;
+  required float until = 2;      // Frame.time when the buff ends
 }
 
-// SelfInfo is the player's own character sheet.
+// SelfInfo is the player's own character sheet, sent only to that player and
+// only when something in it changed. The first one after Welcome has every
+// field set; later ones only the fields that changed (base / attr are always
+// whole; cds / buffs are the whole new list when cds_set / buffs_set).
 message SelfInfo {
-  required int32 lv = 1;
-  required int32 exp = 2;
-  required int32 next = 3;
-  required float hp = 4;
+  optional int32 lv = 1;
+  optional int32 exp = 2;
+  optional int32 next = 3;
+  optional float hp = 4;
   optional Attrs base = 5;
   optional Derived attr = 6;
-  repeated SkillCooldown cds = 7;
+  repeated SkillCooldown cds = 7;   // skills still cooling down
   repeated BuffInfo buffs = 8;
   optional bool dead = 9;
-  optional float respawn_in = 10;
+  optional float respawn_at = 10;   // Frame.time of the respawn (while dead)
+  optional bool cds_set = 11;
+  optional bool buffs_set = 12;
 }
 
-message Sync {
-  required float time = 1;
-  repeated EntityState ents = 2;
-  repeated Event ev = 3;
-  optional SelfInfo self = 4;
-  optional AiTrace ai = 5;
-  // zones_set: zones is the whole new list of heal zones (sent when it changes;
-  // otherwise zones is empty and the client keeps what it has).
-  repeated Zone zones = 6;
-  optional bool zones_set = 7;
+// ZoneList is the whole new list of heal zones (sent when it changes).
+message ZoneList {
+  repeated Zone zones = 1;
 }
 
 // Zone is a healing area on the ground: a permanent spring from world.yaml or
@@ -384,7 +414,7 @@ message Zone {
   optional string color = 6;
   optional string look = 7;      // spring | rune
   optional int32 owner = 8;      // entity that cast it; 0 = part of the map
-  optional float until = 9;      // Sync.time when it disappears; 0 = permanent
+  optional float until = 9;      // Frame.time when it disappears; 0 = permanent
   optional float dur = 10;       // total seconds it lasts, for the countdown ring
   optional float interval = 11;  // seconds between heals
   optional float heal = 12;      // fraction of max HP per heal

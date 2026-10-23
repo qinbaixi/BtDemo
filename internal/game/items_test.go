@@ -574,8 +574,8 @@ func TestSkinSwitch(t *testing.T) {
 	}
 	readMessages(t, session)
 	sendSkin(world, session, "obsidian")
-	if player.Skin != "obsidian" || observer.Visible(player.ID) {
-		t.Fatalf("skin %q, observer still sees the old look %v", player.Skin, observer.Visible(player.ID))
+	if player.Skin != "obsidian" {
+		t.Fatalf("skin %q", player.Skin)
 	}
 	world.Sessions.Flush()
 	if info := enteredInfo(readMessages(t, observer), player.ID); info == nil || info.GetSkin() != "obsidian" {

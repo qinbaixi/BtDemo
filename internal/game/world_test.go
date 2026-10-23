@@ -34,7 +34,7 @@ func TestWorldWithShippedConfig(t *testing.T) {
 		attacker.Kind != core.KindMonster {
 		t.Fatalf("attacker %v is not a monster", attacker)
 	}
-	if len(session.Out) == 0 {
+	if len(sentFrames(session)) == 0 {
 		t.Fatal("no messages sent to the session")
 	}
 }
@@ -60,13 +60,9 @@ func TestWatchSendsAITrace(t *testing.T) {
 	}
 	drain := func() *pb.AiTrace {
 		var last *pb.AiTrace
-		for len(session.Out) > 0 {
-			var msg pb.ServerMsg
-			if err := proto.Unmarshal(<-session.Out, &msg); err != nil {
-				t.Fatal(err)
-			}
-			if syncMsg := msg.GetSync(); syncMsg != nil && syncMsg.Ai != nil {
-				last = syncMsg.Ai
+		for _, msg := range sentMessages(t, session) {
+			if msg.GetAi() != nil {
+				last = msg.GetAi()
 			}
 		}
 		return last

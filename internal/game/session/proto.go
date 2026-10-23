@@ -19,7 +19,7 @@ var kindToPB = map[core.Kind]pb.EntityKind{
 	core.KindPet:     pb.EntityKind_PET,
 }
 
-// entityInfo 是实体进入视野时客户端获知的信息。
+// entityInfo 是实体进入视野（或外观变了）时客户端获知的信息，带全部状态。
 func entityInfo(entity *core.Entity) *pb.EntityInfo {
 	return &pb.EntityInfo{
 		Id:    core.I32(entity.ID),
@@ -27,11 +27,7 @@ func entityInfo(entity *core.Entity) *pb.EntityInfo {
 		Name:  proto.String(entity.Name),
 		Color: proto.String(entity.Color),
 		R:     core.F32(entity.Radius),
-		Lv:    core.I32(entity.Level),
-		X:     core.F32(core.Round1(entity.X)),
-		Y:     core.F32(core.Round1(entity.Y)),
-		Hp:    core.F32(math.Ceil(entity.HP)),
-		MaxHp: core.F32(math.Ceil(entity.Attr.MaxHP)),
+		State: entityDelta(entity, core.DirtyAll),
 		Model: proto.String(entity.Model),
 		Skin:  proto.String(entity.Skin),
 		Gear:  proto.String(entity.GearLook()),
@@ -39,22 +35,42 @@ func entityInfo(entity *core.Entity) *pb.EntityInfo {
 	}
 }
 
-// entityState 是可见实体在每次同步时的状态。
-func entityState(entity *core.Entity) *pb.EntityState {
-	return &pb.EntityState{
-		Id:       core.I32(entity.ID),
-		X:        core.F32(core.Round1(entity.X)),
-		Y:        core.F32(core.Round1(entity.Y)),
-		Hp:       core.F32(math.Ceil(entity.HP)),
-		MaxHp:    core.F32(math.Ceil(entity.Attr.MaxHP)),
-		Lv:       core.I32(entity.Level),
-		Act:      proto.String(entity.Action),
-		Tg:       core.I32(entity.Target),
-		Dead:     proto.Bool(entity.Dead),
-		Shield:   core.F32(math.Ceil(entity.Shield())),
-		Blocking: proto.Bool(entity.Blocking),
-		Looks:    core.I32(int(entity.Looks())),
+// entityDelta 是实体的状态里 dirty 这些位对应的字段（其余字段不设置，客户端保持原值）。
+// 加同步字段时，在 core.Dirty 加一位，在这里加一个分支。
+func entityDelta(entity *core.Entity, dirty core.Dirty) *pb.EntityState {
+	delta := &pb.EntityState{Id: core.I32(entity.ID)}
+	if dirty&core.DirtyPos != 0 {
+		delta.X = core.F32(core.Round1(entity.X))
+		delta.Y = core.F32(core.Round1(entity.Y))
 	}
+	if dirty&core.DirtyHP != 0 {
+		delta.Hp = core.F32(math.Ceil(entity.HP))
+	}
+	if dirty&core.DirtyMaxHP != 0 {
+		delta.MaxHp = core.F32(math.Ceil(entity.Attr.MaxHP))
+	}
+	if dirty&core.DirtyLevel != 0 {
+		delta.Lv = core.I32(entity.Level)
+	}
+	if dirty&core.DirtyAction != 0 {
+		delta.Act = proto.String(entity.Action)
+	}
+	if dirty&core.DirtyTarget != 0 {
+		delta.Tg = core.I32(entity.Target)
+	}
+	if dirty&core.DirtyDead != 0 {
+		delta.Dead = proto.Bool(entity.Dead)
+	}
+	if dirty&core.DirtyShield != 0 {
+		delta.Shield = core.F32(math.Ceil(entity.Shield()))
+	}
+	if dirty&core.DirtyBlocking != 0 {
+		delta.Blocking = proto.Bool(entity.Blocking)
+	}
+	if dirty&core.DirtyLooks != 0 {
+		delta.Looks = core.I32(int(entity.Looks()))
+	}
+	return delta
 }
 
 // skillInfo 是一个技能在技能栏（slot 从 1 起）或技能池（slot 为 0）里的样子。
@@ -175,7 +191,8 @@ func skillBar(skills []*config.Skill) []*pb.SkillInfo {
 	return bar
 }
 
-// selfInfo 是玩家自身的属性、冷却和增益效果。
+// selfInfo 是玩家自身的属性、冷却和增益效果（全部字段）。时间都是到期的时间点（Frame.time 的时钟），
+// 不是剩余秒数，这样它们只在施法、加 Buff 时变一次，不会每帧都变。
 func selfInfo(entity *core.Entity, now float64) *pb.SelfInfo {
 	self := &pb.SelfInfo{
 		Lv:   core.I32(entity.Level),
@@ -198,27 +215,87 @@ func selfInfo(entity *core.Entity, now float64) *pb.SelfInfo {
 			CritDmg: core.F32(entity.Attr.CritDmg),
 			Speed:   core.F32(entity.Attr.Speed),
 		},
-		Dead:      proto.Bool(entity.Dead),
-		RespawnIn: core.F32(math.Max(0, core.Round1(entity.RespawnAt-now))),
+		Dead:     proto.Bool(entity.Dead),
+		CdsSet:   proto.Bool(true),
+		BuffsSet: proto.Bool(true),
+	}
+	if entity.Dead {
+		self.RespawnAt = core.F32(core.Round1(entity.RespawnAt))
+	} else {
+		self.RespawnAt = core.F32(0)
 	}
 	for _, skill := range entity.Skills {
-		if left := entity.Cooldowns[skill.ID] - now; left > 0 {
-			self.Cds = append(
-				self.Cds,
-				&pb.SkillCooldown{Skill: proto.String(skill.ID), Left: core.F32(core.Round1(left))},
-			)
+		if readyAt := entity.Cooldowns[skill.ID]; readyAt > now {
+			self.Cds = append(self.Cds, &pb.SkillCooldown{
+				Skill:   proto.String(skill.ID),
+				ReadyAt: core.F32(core.Round1(readyAt)),
+			})
 		}
 	}
 	for _, buff := range entity.Buffs {
-		self.Buffs = append(
-			self.Buffs,
-			&pb.BuffInfo{
-				Name: proto.String(buff.Cfg.Name),
-				Left: core.F32(core.Round1(buff.Until - now)),
-			},
-		)
+		self.Buffs = append(self.Buffs, &pb.BuffInfo{
+			Name:  proto.String(buff.Cfg.Name),
+			Until: core.F32(core.Round1(buff.Until)),
+		})
 	}
 	return self
+}
+
+// selfDelta 返回 current 相对上次发出的 previous 变了的部分；没变返回 nil。previous 为 nil 时返回全部。
+// base / attr 变了就整个发；cds / buffs 变了就整个列表发并设 *_set。
+func selfDelta(previous, current *pb.SelfInfo) *pb.SelfInfo {
+	if previous == nil {
+		return current
+	}
+	delta := &pb.SelfInfo{}
+	changed := false
+	if previous.GetLv() != current.GetLv() {
+		delta.Lv, changed = current.Lv, true
+	}
+	if previous.GetExp() != current.GetExp() {
+		delta.Exp, changed = current.Exp, true
+	}
+	if previous.GetNext() != current.GetNext() {
+		delta.Next, changed = current.Next, true
+	}
+	if previous.GetHp() != current.GetHp() {
+		delta.Hp, changed = current.Hp, true
+	}
+	if previous.GetDead() != current.GetDead() {
+		delta.Dead, changed = current.Dead, true
+	}
+	if previous.GetRespawnAt() != current.GetRespawnAt() {
+		delta.RespawnAt, changed = current.RespawnAt, true
+	}
+	if !proto.Equal(previous.Base, current.Base) {
+		delta.Base, changed = current.Base, true
+	}
+	if !proto.Equal(previous.Attr, current.Attr) {
+		delta.Attr, changed = current.Attr, true
+	}
+	if !sameList(previous.Cds, current.Cds) {
+		delta.Cds, delta.CdsSet, changed = current.Cds, proto.Bool(true), true
+	}
+	if !sameList(previous.Buffs, current.Buffs) {
+		delta.Buffs, delta.BuffsSet, changed = current.Buffs, proto.Bool(true), true
+	}
+	if !changed {
+		return nil
+	}
+	return delta
+}
+
+// sameList 报告两个消息列表是否逐项相等。
+func sameList[Message proto.Message](previous, current []Message) bool {
+	if len(previous) != len(current) {
+		return false
+	}
+	for index := range previous {
+		if !proto.Equal(previous[index], current[index]) {
+			return false
+		}
+	}
+	return true
 }
 
 // obstacles 是欢迎消息中包含的障碍物形状（调试显示用；物件本身前端从 /map.tmj 读）。

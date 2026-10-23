@@ -20,9 +20,19 @@ const TO_OBJECT = { enums: String, longs: Number, defaults: false, oneofs: true 
 // 收发的每一帧都会交给 tap：tap(方向, 消息类型, 字节数, 普通对象)。调试面板用它。
 export type Tap = (dir: 'in' | 'out', type: string, bytes: number, obj: unknown) => void;
 
+// Received 是解出来的一帧：消息本身（不认识的类型为 null）、它的序号、服务端已处理到的输入序号。
+export interface Received {
+  m: ServerMessage | null;
+  seq: number;
+  inputAck: number;
+}
+
 export interface Protocol {
-  decode(buf: ArrayBuffer): ServerMessage | null;
-  encode(msg: ClientMessage): Uint8Array | null;
+  decode(buf: ArrayBuffer): Received;
+  // encode 组装一条游戏消息；seq 是这条消息的序号，ack 是已收到的最大服务端序号
+  encode(msg: ClientMessage, seq: number, ack: number): Uint8Array | null;
+  encodeHello(token: string, lastSeq: number): Uint8Array;   // 每条连接的第一帧
+  encodePing(ack: number): Uint8Array;                       // 心跳，顺带 ack
   tap: Tap | null;
 }
 
@@ -112,12 +122,16 @@ function self(s: any): SelfInfo {
 }
 
 export function createProtocol(): Protocol {
-  const api: Protocol = { decode, encode, tap: null };
+  const api: Protocol = { decode, encode, encodeHello, encodePing, tap: null };
 
-  function decode(buf: ArrayBuffer): ServerMessage | null {
+  function decode(buf: ArrayBuffer): Received {
     const pb = btdemo.ServerMsg.decode(new Uint8Array(buf));
     const m = tidy(btdemo.ServerMsg.toObject(pb, TO_OBJECT));
     if (api.tap) api.tap('in', m.msg, buf.byteLength, m[m.msg]);
+    return { m: message(m), seq: pb.seq || 0, inputAck: pb.inputAck || 0 };
+  }
+
+  function message(m: any): ServerMessage | null {
     switch (m.msg) {
       case 'welcome': {
         const w = m.welcome;
@@ -132,6 +146,8 @@ export function createProtocol(): Protocol {
           items: (w.items || []).map(itemInfo),
           pets: (w.pets || []).map(petInfo),
           obstacles: (w.obstacles || []).map((o: any): Obstacle => ({ ...o, shape: String(o.shape).toLowerCase() })),
+          token: w.token || '',
+          resumed: !!w.resumed,
         };
       }
       case 'enter': return { t: 'enter', ents: (m.enter.ents || []).map(entity) };
@@ -158,7 +174,15 @@ export function createProtocol(): Protocol {
     return null;
   }
 
-  function encode(o: ClientMessage): Uint8Array | null {
+  function encodeHello(token: string, lastSeq: number): Uint8Array {
+    return btdemo.ClientMsg.encode(btdemo.ClientMsg.create({ hello: { token, lastSeq } })).finish();
+  }
+
+  function encodePing(ack: number): Uint8Array {
+    return btdemo.ClientMsg.encode(btdemo.ClientMsg.create({ ack, ping: {} })).finish();
+  }
+
+  function encode(o: ClientMessage, seq: number, ack: number): Uint8Array | null {
     let body: btdemo.IClientMsg;
     switch (o.t) {
       case 'move': body = { move: { dx: o.dx, dy: o.dy } }; break;
@@ -173,7 +197,7 @@ export function createProtocol(): Protocol {
       case 'pet': body = { pet: { pet: o.pet || '' } }; break;
       default: return null;
     }
-    const data = btdemo.ClientMsg.encode(btdemo.ClientMsg.create(body)).finish();
+    const data = btdemo.ClientMsg.encode(btdemo.ClientMsg.create({ ...body, seq, ack })).finish();
     if (api.tap) {
       const type = Object.keys(body)[0];
       api.tap('out', type, data.length, (body as any)[type]);

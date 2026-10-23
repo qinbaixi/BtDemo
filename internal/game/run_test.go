@@ -12,6 +12,26 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
+// sentFrames 取走会话发送队列里的全部帧。
+func sentFrames(client *Session) [][]byte {
+	frames, _ := client.Link().Take()
+	return frames
+}
+
+// sentMessages 取走会话发送队列里的全部帧，按顺序展开成消息。
+func sentMessages(t *testing.T, client *Session) []*pb.ServerMsg {
+	t.Helper()
+	var msgs []*pb.ServerMsg
+	for _, data := range sentFrames(client) {
+		frame := &pb.Frame{}
+		if err := proto.Unmarshal(data, frame); err != nil {
+			t.Fatal(err)
+		}
+		msgs = append(msgs, frame.Msgs...)
+	}
+	return msgs
+}
+
 func shippedWorld(t *testing.T) *World {
 	t.Helper()
 	cfg, err := config.Load("../../config", TreeNames())
@@ -40,6 +60,7 @@ func TestRunAppliesInputsAndStopsCleanly(t *testing.T) {
 		t.Fatal("Do refused before stop")
 	}
 	client := <-joined
+	link := client.Link()
 	move := &pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Float32(1), Dy: proto.Float32(0)}}}
 	if err := client.Inbox.Push(move); err != nil {
 		t.Fatal(err)
@@ -68,7 +89,8 @@ func TestRunAppliesInputsAndStopsCleanly(t *testing.T) {
 	if world.Do(func() {}) {
 		t.Fatal("Do should refuse after stop")
 	}
-	for range client.Out { // 停服关闭了会话的输出
+	if _, closed := link.Take(); !closed {
+		t.Fatal("stopping the world should close the session's connection")
 	}
 }
 

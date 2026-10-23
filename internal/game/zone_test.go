@@ -3,7 +3,6 @@ package game
 import (
 	"testing"
 
-	"google.golang.org/protobuf/proto"
 
 	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/pb"
@@ -102,31 +101,24 @@ func TestSpawnSpringAndSync(t *testing.T) {
 	// 客户端连上来先拿到整份列表，之后没变化就不再重发
 	client := world.Join()
 	world.Sessions.Flush()
-	first := lastSync(t, client)
-	if !first.GetZonesSet() || len(first.GetZones()) != 1 || first.GetZones()[0].GetLook() != "spring" {
-		t.Fatalf("first sync zones: set %v %v", first.GetZonesSet(), first.GetZones())
+	first := lastZones(t, client)
+	if first == nil || len(first.GetZones()) != 1 || first.GetZones()[0].GetLook() != "spring" {
+		t.Fatalf("first sync zones: %v", first)
 	}
 	world.Sessions.Flush()
-	if again := lastSync(t, client); again.GetZonesSet() {
+	if again := lastZones(t, client); again != nil {
 		t.Fatalf("zones resent without a change")
 	}
 }
 
-// lastSync 取出会话收到的最后一条 Sync。
-func lastSync(t *testing.T, client *Session) *pb.Sync {
+// lastZones 取出会话收到的最后一份回血区列表，没收到返回 nil。
+func lastZones(t *testing.T, client *Session) *pb.ZoneList {
 	t.Helper()
-	var sync *pb.Sync
-	for len(client.Out) > 0 {
-		var msg pb.ServerMsg
-		if err := proto.Unmarshal(<-client.Out, &msg); err != nil {
-			t.Fatal(err)
-		}
-		if msg.GetSync() != nil {
-			sync = msg.GetSync()
+	var zones *pb.ZoneList
+	for _, msg := range sentMessages(t, client) {
+		if msg.GetZones() != nil {
+			zones = msg.GetZones()
 		}
 	}
-	if sync == nil {
-		t.Fatalf("no sync sent")
-	}
-	return sync
+	return zones
 }

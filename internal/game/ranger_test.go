@@ -239,15 +239,7 @@ func skillIDs(skills []*config.Skill) []string {
 // readMessages 取出会话 Out 里排着的所有消息。
 func readMessages(t *testing.T, session *Session) []*pb.ServerMsg {
 	t.Helper()
-	var msgs []*pb.ServerMsg
-	for len(session.Out) > 0 {
-		msg := &pb.ServerMsg{}
-		if err := proto.Unmarshal(<-session.Out, msg); err != nil {
-			t.Fatal(err)
-		}
-		msgs = append(msgs, msg)
-	}
-	return msgs
+	return sentMessages(t, session)
 }
 
 func TestWelcomeIncludesClasses(t *testing.T) {
@@ -311,10 +303,7 @@ func TestLoadoutSwitchesClass(t *testing.T) {
 	if player.Blocking {
 		t.Fatal("ranger kept blocking")
 	}
-	// 所有会话都忘了这个实体，下次 Flush 重新发 Enter（带新模型）
-	if session.Visible(player.ID) || observer.Visible(player.ID) {
-		t.Fatal("entity still visible after class change")
-	}
+	// 能看到它的会话都会收到新的 Enter（带新模型）
 	readMessages(t, session)
 	world.Sessions.Flush()
 	var model string

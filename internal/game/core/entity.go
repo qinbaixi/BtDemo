@@ -41,6 +41,7 @@ type Entity struct {
 	Brain
 	Inventory
 	Companion
+	Sync
 }
 
 // Identity 描述实体是什么，以及客户端如何绘制它。
