@@ -4,10 +4,10 @@
 
 ```text
 main goroutine ── http.Server.Serve ──► 每个 WebSocket 连接 2 个 goroutine
-                                         ├─ 读：收 ClientMsg → world.Do(Input)
+                                         ├─ 读：收 ClientMsg → session.Inbox.Push(msg)
                                          └─ 写：从 Session.Out 取字节 → 发给浏览器
 
-world goroutine ── World.Run：for { select { inbox 里的函数 | 定时器到了就 Step() } }
+world goroutine ── World.Run：每个 tick：执行 Do 排队的命令 → 处理各会话 Inbox → Step()
 ```
 
 入口是 `cmd/server/main.go`，它只做四件事：
@@ -23,10 +23,13 @@ world goroutine ── World.Run：for { select { inbox 里的函数 | 定时器
 
 ```go
 // internal/server/server.go
-w.Do(func() { w.Input(s, msg) })   // 把“要做的事”丢进 inbox
+session.Inbox.Push(msg)                    // 玩家输入：放进这个会话自己的输入队列
+world.Do(func() { world.Leave(session) })  // 其他命令（加入、离开）：放进世界的命令队列
 ```
 
-`World.Run` 的 `select` 会在两帧之间把 inbox 里的函数逐个执行。好处：
+两个队列都是“互斥锁 + 切片”，提交永远不阻塞、也不会因为满了丢掉。`World.Run` 每个 tick 开头先执行命令、再按到达顺序处理每个会话的输入，然后才跑各系统，所以输入总在固定的时机生效。
+输入队列里连续的同类“状态型”消息（移动、选目标、格挡、观察）只留最新的一条；一个会话两个 tick 之间排了超过 `session.InboxLimit` 条就判定为异常客户端，断开它。
+停服时 `Run` 会先跑完已经接受的命令，再断开所有会话；之后 `Do` 返回 false。好处：
 
 - 游戏代码里一把锁都没有，读写实体不用考虑并发。
 - 一帧之内状态是一致的：AI 看到的位置和战斗结算用的位置一定相同。
@@ -57,8 +60,8 @@ if 该同步了 { w.Sessions.Flush() } // 6. 给每个玩家发 AOI 变化、视
 玩家按 `1`（斩击）攻击一只史莱姆：
 
 1. **浏览器** `input.ts` 调 `protocol.ts` 的 `encode({t:'cast', slot:1, target:id})`，编码成 protobuf `ClientMsg{cast}` 通过 WebSocket 发出。
-2. **server** 读 goroutine 解码成 `pb.ClientMsg`，调用 `world.Do(func(){ world.Input(session, msg) })`。
-3. **world goroutine** 执行 `session.Input`：找到技能槽 1；目标无效时自动选最近的怪；调用 `combat.Cast`。
+2. **server** 读 goroutine 解码成 `pb.ClientMsg`，放进 `session.Inbox`。
+3. **world goroutine** 在下一个 tick 开头（`Sessions.DrainInputs`）执行 `session.Input`：找到技能槽 1；目标无效时自动选最近的怪；调用 `combat.Cast`。
 4. **combat.Cast** 检查冷却、距离，算伤害（`CalcDamage`），扣血（`applyDamage`），往 `State.Events` 里放 `CAST`、`DAMAGE` 事件；血量归零就 `Kill`：标记死亡、安排复活、给玩家加经验（可能触发 `LEVEL_UP` 事件）。
 5. 到了同步帧，**session.Flush** 给每个玩家：
    - 算出九宫格内的实体，和上次比较，发 `Leave`（离开视野）和 `Enter`（进入视野，带名字、模型等静态信息）；

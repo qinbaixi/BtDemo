@@ -4,7 +4,7 @@
 
 ## 分工
 
-- **server** 只管网络：HTTP、WebSocket、protobuf 编解码、读写 goroutine。它不碰游戏状态，所有操作都通过 `world.Do` 交给世界 goroutine。
+- **server** 只管网络：HTTP、WebSocket、protobuf 编解码、读写 goroutine。它不碰游戏状态：玩家输入放进 `Session.Inbox`，加入、离开通过 `world.Do` 交给世界 goroutine，都在下一个 tick 开头处理。
 - **session** 是游戏里的“连接”：把客户端消息变成游戏操作，并在同步时决定每个玩家该收到什么。它运行在世界 goroutine 里。
 
 ## 一个连接的生命周期（server.go）
@@ -15,7 +15,7 @@
        ├─ w.Do(Join)：创建角色、发 Welcome，拿到 *Session
        ├─ 写 goroutine：for data := range s.Out { conn.Write(data) }
        ├─ 读循环（当前 goroutine）：
-       │     收到二进制帧 → proto.Unmarshal 成 pb.ClientMsg → w.Do(Input)
+       │     收到二进制帧 → proto.Unmarshal 成 pb.ClientMsg → s.Inbox.Push（队列溢出就断开）
        └─ 读出错（断开）→ w.Do(Leave)：删除角色，关闭 s.Out → 写 goroutine 结束
 ```
 

@@ -26,6 +26,7 @@ import (
 type Session struct {
 	Player  *core.Entity
 	Out     chan []byte // 编码后的 pb.ServerMsg 帧
+	Inbox   *Inbox      // 网络读协程放进来的客户端消息，世界 goroutine 每个 tick 开头处理
 	Watch   int         // 本会话想要查看其行为树跟踪的实体
 	defSent string      // 已经给本会话发过结构的行为树名；换了观察对象或树时重发
 	visible map[int]bool
@@ -86,6 +87,7 @@ func (sys *System) Join() *Session {
 	session := &Session{
 		Player:    sys.spawn.Player(),
 		Out:       make(chan []byte, 64),
+		Inbox:     &Inbox{},
 		visible:   map[int]bool{},
 		zonesSent: -1,
 	}
@@ -178,6 +180,33 @@ func (sys *System) Leave(session *Session) {
 	sys.pets.Dismiss(session.Player)
 	sys.spawn.Remove(session.Player)
 	close(session.Out)
+}
+
+// DrainInputs 按到达顺序处理每个会话排队的客户端消息。须在世界 goroutine 上、
+// 每个 tick 的系统运行之前调用，这样输入总在固定的时机生效。
+// 输入队列溢出过的会话直接断开（客户端异常或刷包），不影响其他人。
+func (sys *System) DrainInputs() {
+	for session := range sys.sessions {
+		messages, overflow := session.Inbox.Take()
+		if overflow {
+			log.Printf("player %d: input queue overflow, disconnecting", session.Player.ID)
+			sys.Leave(session)
+			continue
+		}
+		for _, msg := range messages {
+			sys.Input(session, msg)
+			if !sys.sessions[session] {
+				break // 处理消息时会话被断开了（例如发送缓冲满）
+			}
+		}
+	}
+}
+
+// CloseAll 断开所有会话（停服时调用）：删掉角色并关闭输出，写协程随之发出关闭帧。
+func (sys *System) CloseAll() {
+	for session := range sys.sessions {
+		sys.Leave(session)
+	}
 }
 
 // publishGear 把物品系统留下的变化发出去：每个玩家的提示（Toast）、变了的背包（Inventory），

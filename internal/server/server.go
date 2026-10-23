@@ -50,7 +50,9 @@ func Handler(world *game.World, static fs.FS) http.Handler {
 func serve(world *game.World, conn *websocket.Conn) {
 	defer conn.Close()
 	joined := make(chan *game.Session, 1)
-	world.Do(func() { joined <- world.Join() })
+	if !world.Do(func() { joined <- world.Join() }) {
+		return // 正在停服
+	}
 	session := <-joined
 	log.Printf("player %d joined", session.Player.ID)
 	defer log.Printf("player %d left", session.Player.ID)
@@ -83,7 +85,11 @@ func serve(world *game.World, conn *websocket.Conn) {
 		if proto.Unmarshal(data, msg) != nil {
 			continue
 		}
-		world.Do(func() { world.Input(session, msg) })
+		if err := session.Inbox.Push(msg); err != nil {
+			// 世界下一个 tick 会看到溢出并删掉角色；这里不再读，直接断开
+			log.Printf("player %d: %v", session.Player.ID, err)
+			break
+		}
 	}
 	world.Do(func() { world.Leave(session) })
 }

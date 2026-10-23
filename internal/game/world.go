@@ -17,6 +17,7 @@ package game
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/qinbaixi/BtDemo/internal/config"
@@ -39,7 +40,8 @@ import (
 type Session = session.Session
 
 // World 持有所有游戏状态。一切都在调用 Run 的 goroutine 上运行；
-// 其他 goroutine 通过 Do 与它通信。
+// 其他 goroutine 通过 Do 提交命令、通过 Session.Inbox 提交玩家输入，
+// 两者都在每个 tick 开头统一处理。
 type World struct {
 	State    *core.State
 	Grid     *aoi.Grid
@@ -54,7 +56,15 @@ type World struct {
 	Zone     *zone.System
 	Sessions *session.System
 
-	inbox chan func()
+	commands commandQueue
+}
+
+// commandQueue 是其他 goroutine 交给世界执行的命令（加入、离开等）。
+// 用互斥锁加切片而不是有界 channel：提交永远不阻塞，也不会因为满了而丢。
+type commandQueue struct {
+	mutex   sync.Mutex
+	pending []func()
+	stopped bool // 世界已停止：之后提交的命令被拒绝
 }
 
 // NewWorld 构建所有系统，加载并校验行为树，
@@ -65,7 +75,7 @@ func NewWorld(cfg *config.Config, seed int64) (*World, error) {
 
 // newWorld 与 NewWorld 相同，但直接传入障碍物。
 func newWorld(cfg *config.Config, seed int64, obstacles []nav.Shape) (*World, error) {
-	world := &World{State: core.NewState(cfg, seed), inbox: make(chan func(), 256)}
+	world := &World{State: core.NewState(cfg, seed)}
 	world.Grid = aoi.NewGrid(cfg.World.Map.Width, cfg.World.Map.Height, cfg.World.AOI.Cell)
 	world.Attr = attr.New(world.State)
 	world.Nav = nav.New(cfg.World.Map.Width, cfg.World.Map.Height, obstacles)
@@ -102,20 +112,48 @@ func newWorld(cfg *config.Config, seed int64, obstacles []nav.Shape) (*World, er
 // TreeNames 列出编译进二进制文件的行为树。
 func TreeNames() map[string]bool { return ai.TreeNames() }
 
-// Do 在世界 goroutine 上运行 fn。
-func (world *World) Do(fn func()) { world.inbox <- fn }
+// Do 让 fn 在世界 goroutine 上、下一个 tick 开头运行。不阻塞调用方。
+// 世界已经停止时返回 false，fn 不会运行；返回 true 的 fn 一定会运行（停服时也会先跑完）。
+func (world *World) Do(fn func()) bool {
+	world.commands.mutex.Lock()
+	defer world.commands.mutex.Unlock()
+	if world.commands.stopped {
+		return false
+	}
+	world.commands.pending = append(world.commands.pending, fn)
+	return true
+}
 
-// Run 推进世界运行，直到 ctx 结束。
+// takeCommands 取走排队的命令；stop 为 true 时同时关闭队列，之后的 Do 都返回 false。
+func (world *World) takeCommands(stop bool) []func() {
+	world.commands.mutex.Lock()
+	defer world.commands.mutex.Unlock()
+	pending := world.commands.pending
+	world.commands.pending = nil
+	if stop {
+		world.commands.stopped = true
+	}
+	return pending
+}
+
+// Run 推进世界运行，直到 ctx 结束。每个 tick 依次：执行命令、处理玩家输入、运行各系统。
+// 结束时先跑完已经接受的命令，再断开所有会话，让客户端收到关闭帧。
 func (world *World) Run(ctx context.Context) {
 	ticker := time.NewTicker(time.Duration(float64(time.Second) * world.State.Clock.Dt))
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
+			for _, command := range world.takeCommands(true) {
+				command()
+			}
+			world.Sessions.CloseAll()
 			return
-		case fn := <-world.inbox:
-			fn()
 		case <-ticker.C:
+			for _, command := range world.takeCommands(false) {
+				command()
+			}
+			world.Sessions.DrainInputs()
 			world.Step()
 		}
 	}

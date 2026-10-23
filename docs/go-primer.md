@@ -115,19 +115,19 @@ agent := ctx.Agent.(*Agent)   // 类型断言：我知道它其实是 *Agent
 ```go
 go world.Run(ctx)            // go 关键字：开一个并发执行的 goroutine（轻量线程）
 
-inbox := make(chan func(), 256)   // channel：goroutine 之间传数据的队列
-inbox <- fn                       // 发送
-fn := <-inbox                     // 接收
+done := make(chan bool, 1)   // channel：goroutine 之间传数据的队列
+done <- true                 // 发送
+ok := <-done                 // 接收
 
-select {                          // 同时等多个 channel，哪个先来处理哪个
-case fn := <-w.inbox:
-    fn()
+select {                     // 同时等多个 channel，哪个先来处理哪个
+case <-ctx.Done():
+    return
 case <-ticker.C:
-    w.Step()
+    world.Step()
 }
 ```
 
-这个项目的并发模型只有一条规则：**游戏状态只在 World 的 goroutine 里读写**。网络 goroutine 想改状态时，把要做的事包成函数，通过 `World.Do(fn)` 发进 inbox，由 World 的 goroutine 执行。详见[整体架构](architecture.md)。
+这个项目的并发模型只有一条规则：**游戏状态只在 World 的 goroutine 里读写**。网络 goroutine 想改状态时，把要做的事包成函数，通过 `World.Do(fn)` 放进命令队列（玩家输入则放进 `Session.Inbox`），由 World 的 goroutine 在下一个 tick 开头执行。详见[整体架构](architecture.md)。
 
 ## defer
 
