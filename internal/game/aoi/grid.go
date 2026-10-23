@@ -85,9 +85,10 @@ func (grid *Grid) Remove(entity *core.Entity) {
 	}
 }
 
-// Moved 在 entity 的位置变化后更新其所在格子；换了格子时通知视野变化：
+// Moved 在 entity 的位置变化后更新其所在格子，并把位置标脏；换了格子时通知视野变化：
 // 旧九宫格有、新九宫格没有的格子看不到它了，新九宫格有、旧九宫格没有的格子新看到它。
 func (grid *Grid) Moved(entity *core.Entity) {
+	entity.MarkDirty(core.DirtyPos) // 调用方直接改了 X/Y 没用 SetPos 时，也保证位置会同步出去
 	old, ok := grid.where[entity.ID]
 	if !ok {
 		return

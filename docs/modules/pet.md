@@ -5,7 +5,7 @@
 数据：`config/pets.yaml`、`config/skills.yaml`（宠物技能）、`config/world.yaml` 的 `pet` 段、`bt/trees/pet_*.json`；
 测试：`internal/game/pet_test.go`、`internal/config/pets_test.go`
 
-每个玩家可以带一只宠物。宠物是普通实体（`kind = pet`），完全由行为树驱动：跟随主人、协助主人打怪、治疗主人。调试面板可以像看怪物一样看宠物的行为树（宠物和怪物一样带 `Sync.ai`）。
+每个玩家可以带一只宠物。宠物是普通实体（`kind = pet`），完全由行为树驱动：跟随主人、协助主人打怪、治疗主人。调试面板可以像看怪物一样看宠物的行为树（宠物和怪物一样有 `ServerMsg.ai` 追踪）。
 
 ## 数据
 

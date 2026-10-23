@@ -38,7 +38,7 @@ healing_spring: { name: 治愈之泉, kind: zone, cooldown: 40, fx: zone, color:
 - `zone.New` 在世界创建时放下 `heal_zones`。
 - `combat.CastAimed` 的 `zone` 分支：发 `CAST` 事件（带 `x`、`y`、`radius`），用 `State.Zones.Replace` 在施法者脚下放一块区域；**同一个人再放一次，旧的消失**。
 - `zone.System.Tick`（每个 tick，在 `Combat.Tick` 之后）：去掉到时间的区域；到了回血时间的区域给里面的友方回血。
-- `core.Zones.Version` 在区域增减时变化。`session.Flush` 发现某个会话收到的版本旧了，就在这次 `Sync` 里带上**整份**列表（`zones` + `zones_set = true`）。区域很少，不做 AOI 过滤。`Zone.until` 是服务端时间（和 `Sync.time` 同一个时钟），客户端换成本地时间画倒计时。
+- `core.Zones.Version` 在区域增减时变化。`session.Flush` 发现某个会话收到的版本旧了，就在这一帧里发一条 `ZoneList`，带**整份**列表。区域很少，不做 AOI 过滤。`Zone.until` 是服务端时间（和 `Frame.time` 同一个时钟），客户端换成本地时间画倒计时。
 
 ## 客户端
 

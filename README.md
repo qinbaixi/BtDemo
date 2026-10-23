@@ -90,7 +90,7 @@ tools/btregistry/    扫描导出文件生成 registry.go
 
 ## 协议
 
-客户端和服务端之间每个 WebSocket 二进制帧是一个 protobuf 消息，定义在 `proto/btdemo.proto`（`syntax = "proto2"`）：浏览器发 `ClientMsg`（移动、选目标、施法），服务端发 `ServerMsg`（`Welcome`、AOI 的 `Enter` / `Leave`、10Hz 的 `Sync`、`Toast`）。
+客户端和服务端之间用 protobuf 二进制编码，定义在 `proto/btdemo.proto`（`syntax = "proto2"`）：浏览器每帧发一条 `ClientMsg`（第一帧是带重连 token 的 `Hello`，之后是移动、选目标、施法等），服务端每帧发一个 `Frame`，里面是这一同步帧（10Hz）合在一起的 `ServerMsg`：`Welcome`、AOI 的 `Enter` / `Leave`、只带变化字段的 `EntityState`、`Event`、`SelfInfo`、`Toast` 等。详见 [docs/modules/session-server.md](docs/modules/session-server.md)。
 
 - Go 端用 `google.golang.org/protobuf`，生成代码在 `internal/pb`。修改 `.proto` 后运行 `go generate ./internal/pb`（需要 `protoc` 和 `protoc-gen-go@v1.36.6`），CI 会检查生成代码是否最新。
 - 浏览器端用 protobufjs：`web` 下 `npm run proto` 从同一份 `.proto` 生成 `src/net/pb.js` 和 TypeScript 类型（`npm run build` 会自动执行），`src/net/protocol.ts` 把它转成前端用的对象。
