@@ -39,15 +39,15 @@ web/
     main.ts             入口：把各模块接起来，每帧主循环
     input.ts            键盘鼠标：移动、选目标、放技能（J K L U I O）、G/Q/` 开关
     net/
-      types.ts          前端用的消息类型（Welcome、Sync、事件……）
+      types.ts          前端用的消息类型（Welcome、增量 State / Self、事件……）
       protocol.ts       protobuf ⇄ types.ts 的转换，协议收发都经过 tap（调试面板用）
-      connection.ts     WebSocket，断线 2 秒重连
+      connection.ts     WebSocket，断线自动重连（500ms、1s、2s、5s 退避），重连发 Hello{token}
       pb.js / pb.d.ts   生成的代码，不提交（npm run proto）
     game/
       config.ts         插值时长、动画时长、配色、属性表等常量
       math.ts           clamp、lerp、hypot、fmt
       state.ts          State 和 ClientEntity 类型、全局 state、插值 posOf、头顶位置 headY
-      sync.ts           处理 welcome / enter / leave / sync / toast；welcome 后下载地图建场景
+      sync.ts           处理 Frame 里的 welcome / enter / leave / state / event / self / zones / ai / toast 等消息；welcome 后下载地图建场景
       map.ts            下载并解析 /map.tmj（Tiled 地图，和服务端读同一份）
       events.ts         事件 → 动画、特效、飘字
     render/
@@ -122,6 +122,15 @@ web/
 
 收到消息不在帧里处理，而是 WebSocket 回调里直接改 `state`（`game/sync.ts`）。
 
+## 网络协议
+
+- **连接**（`net/connection.ts`）：连上后第一帧必须发 `ClientMsg{hello: Hello{token}}`。token 来自上一次 `Welcome.token`，存在 sessionStorage `btdemo.token`（读写都 try/catch），没有就发空串。协议里没有序号、确认和客户端心跳（服务端发 WebSocket ping，浏览器自动回 pong）。
+- **断线**：服务端把角色保留 30 秒。断线后按 500ms、1s、2s、5s 退避自动重连，重连发 `Hello{token}`，服务端回 `Welcome{resumed}` 加全量。断线期间不攒输入（`send` 直接丢掉），界面显示“连接已断开，正在重连”，画面不清空；收到 Welcome 后 `resendMove()` 把当前按键状态重发。
+- **帧**：服务端每个 WebSocket 帧是 `Frame{time, msgs}`，`protocol.decode` 返回 `{ time, msgs }`，`sync.ts` 的 `handleFrame` 按顺序处理每条消息；调试面板的协议查看器（`protocol.tap`）每条消息调一次。
+- **时钟**：每收到一帧就更新 `state.clockOffset`（本地 `performance.now()` 减服务端时间），`localTime(serverTime)` 把 `*_at` / `until` 这类服务端时间点换成本地毫秒，用来倒计时（技能冷却 `state.cds`、Buff `endsAt`、复活 `respawnAt`、回血区 `endsAt`）。
+- **增量**：`EntityInfo`（`enter`）带完整 `state`；之后的 `state` 消息只带变化的字段，`onState` 只覆盖出现了的字段（有 `x` / `y` 才做位置插值），不认识的实体 id 直接忽略。`self` 同理，`onSelf` 合并成完整的 `state.self`：`base` / `attr` 出现就整体替换，`cds_set` / `buffs_set` 为真时 `cds` / `buffs` 是完整新列表，`respawn_at` 是复活时间点（0 = 没死）。
+- **Welcome.resumed**：为真表示还是原来的角色，清空实体等 `enter` 重发，但保留玩家自己的选择（不弹选技能面板、不重发宠物选择、不清目标、不清 `state.self`）。
+
 ## 技能：按键、技能栏和选技能
 
 **按键**（`input.ts` 的 `SKILL_KEYS`）：`J K L U I O` 依次是 1～6 号格，`J` 是普攻。数字键 `1`～`6` 也还能用。放技能前 `castSlot` 会检查：选技能面板开着时不放（普攻也不发）；格挡中不放，提示“格挡中不能出招”。
@@ -129,7 +138,7 @@ web/
 **技能栏**（`ui/hud.ts`）：两行，`BAR_ORDER = [4, 5, 6, 1, 2, 3]`，上排 U I O（4～6 格），下排 J K L（1～3 格），和键盘上的位置一致。冷却是按钮上的遮罩加秒数，每帧 `renderSkillBar` 刷新。
 
 **选技能面板**（`ui/picker.ts`）：从技能池（`Welcome.pool`）里挑 `pick` 个，放到第 2 格起。
-- 打开：刚进游戏（`welcome` 时 `openPicker('join')`），死亡时（`sync` 里自己从活变成死，`openPicker('death')`，标题写“重新选择技能（复活后生效）”）。
+- 打开：刚进游戏（`welcome` 时 `openPicker('join')`），死亡时（`self` 里自己从活变成死，`openPicker('death')`，标题写“重新选择技能（复活后生效）”）。
 - 面板上半是一排格子，J 固定是普攻，后面按选的顺序排；下半是技能卡，点一下选上或取消，选满了其余的卡不能再点。
 - 确认：回车，或者按“出发”（新角色）/“确定”（死亡时）。Esc 关掉，不换技能。
 - 确认时，和当前技能栏一样就不发；不一样就发 `loadout`。服务端接受后回 `skillBar`，前端换栏并提示“技能已更换”；被拒绝时服务端只回一条 Toast，技能栏不变。

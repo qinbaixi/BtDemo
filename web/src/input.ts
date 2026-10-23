@@ -141,7 +141,7 @@ function tryAttack(): void {
   if (t.id !== state.target) state.target = t.id;
   deps.send({ t: 'cast', slot: ATTACK_SLOT, target: t.id });
   // 先在本地记上冷却，不等下一次同步，否则按住左键时这段时间里会一直发、一直被拒
-  state.cds[sk.id] = (sk.cooldown || 0) + (now - state.cdsAt) / 1000;
+  state.cds[sk.id] = now + (sk.cooldown || 0) * 1000;
 }
 
 // forgetBlock 在换成不能格挡的职业时丢掉本地的格挡状态（服务端那边已经取消了，不用再发）。

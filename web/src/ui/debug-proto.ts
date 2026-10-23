@@ -1,9 +1,10 @@
 // debug-proto.ts: WebSocket protobuf 收发协议调试面板（纯内容，容器由外部抽屉提供）
-// 用法: const panel = createProtoPanel(div); panel.log('in', 'sync', 123, obj); panel.setVisible(true);
+// 用法: const panel = createProtoPanel(div); panel.log('in', 'state', 123, obj); panel.setVisible(true);
 
 const CAP = 600;            // 环形缓冲与 DOM 行数上限
 const PREVIEW_MAX = 120;    // JSON 预览最大字符数
-const SYNC_TYPE = 'sync';
+// 每个 tick 都有的高频消息：“隐藏”开关把它们藏起来
+const NOISY_TYPES = new Set(['state', 'self', 'ai']);
 
 function el<K extends keyof HTMLElementTagNameMap>(doc: Document, tag: K, cls?: string | null, text?: string | null): HTMLElementTagNameMap[K] {
   const n = doc.createElement(tag);
@@ -48,7 +49,7 @@ export function createProtoPanel(root: HTMLElement) {
   clearBtn.type = 'button';
   const filterInput = el(doc, 'input', 'dp-input');
   filterInput.type = 'text';
-  filterInput.placeholder = '按类型过滤，如 sync';
+  filterInput.placeholder = '按类型过滤，如 state';
 
   function makeCheck(text, checked) {
     const label = el(doc, 'label', 'dp-chk');
@@ -60,7 +61,7 @@ export function createProtoPanel(root: HTMLElement) {
   }
   const chkIn = makeCheck('收', true);
   const chkOut = makeCheck('发', true);
-  const chkHide = makeCheck('隐藏 sync', true);
+  const chkHide = makeCheck('隐藏 state/self/ai', true);
   toolbar.append(pauseBtn, clearBtn, filterInput, chkIn.label, chkOut.label, chkHide.label);
 
   const stats = el(doc, 'div', 'dp-stats', '收 0/s 0.0KB/s · 发 0/s 0.0KB/s · 共 0 条');
@@ -70,7 +71,7 @@ export function createProtoPanel(root: HTMLElement) {
   // ---- 过滤 ----
   function passes(e) {
     if (e.dir === 'in' ? !chkIn.input.checked : !chkOut.input.checked) return false;
-    if (chkHide.input.checked && e.type === SYNC_TYPE) return false;
+    if (chkHide.input.checked && NOISY_TYPES.has(e.type)) return false;
     const q = filterInput.value.trim().toLowerCase();
     if (q && !e.type.toLowerCase().includes(q)) return false;
     return true;
