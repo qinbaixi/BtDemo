@@ -789,3 +789,97 @@ h4 {
   .skin-card { min-width: 84px; }
   .bag-btn { top: auto; bottom: 150px; right: 8px; }
 }
+
+/* ======================= 场景牌子 / 线路面板 / 过场 ======================= */
+/* 顶部中间的场景牌子：场景名 · 线号，点开线路面板 */
+.scene-badge {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 16px;
+  border: 1px solid rgba(224, 178, 90, 0.5);
+  background: rgba(9, 6, 12, 0.8);
+  color: #fbe9c0;
+  font: 14px var(--display);
+  letter-spacing: 2px;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0 50%);
+}
+.scene-badge:hover { color: #fff; border-color: var(--gold); }
+.scene-badge::after { content: " ▾"; font-size: 10px; color: var(--muted); }
+
+.lines-panel {
+  top: 46px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(300px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lines-head { display: flex; justify-content: space-between; align-items: center; }
+.lines-title { font-family: var(--display); letter-spacing: 2px; color: #fbe9c0; }
+.lines-list { display: flex; flex-direction: column; gap: 4px; }
+.lines-empty { color: var(--muted); font-size: 12px; }
+.lines-row {
+  display: grid;
+  grid-template-columns: 3.2em 3em 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid rgba(224, 178, 90, 0.18);
+  background: rgba(9, 6, 12, 0.6);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.lines-row.current { border-color: rgba(224, 178, 90, 0.6); background: rgba(224, 178, 90, 0.08); }
+.lines-no { font-family: var(--display); color: #fbe9c0; }
+.lines-busy { font-size: 12px; }
+.lines-row.idle .lines-busy { color: var(--good); }
+.lines-row.normal .lines-busy { color: #cfe3d4; }
+.lines-row.busy .lines-busy { color: #ffb257; }
+.lines-row.full .lines-busy { color: var(--danger); }
+.lines-count { color: var(--muted); }
+.lines-here { font-size: 12px; color: var(--muted); }
+.lines-go {
+  padding: 2px 10px;
+  border: 1px solid rgba(224, 178, 90, 0.5);
+  background: rgba(224, 178, 90, 0.12);
+  color: #fbe9c0;
+  font: 12px var(--font);
+  cursor: pointer;
+}
+.lines-go:hover { border-color: var(--gold); color: #fff; }
+.lines-note { font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+/* 过场：换场景、换线时盖住画面，收到新的 welcome 后淡出 */
+.travel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(20, 12, 30, 0.88), rgba(4, 2, 6, 0.97));
+  pointer-events: auto;
+  animation: travel-in 0.25s ease-out;
+  transition: opacity 0.45s ease;
+}
+.travel.out { opacity: 0; pointer-events: none; }
+.travel-text {
+  font: 22px var(--display);
+  letter-spacing: 4px;
+  color: #fbe9c0;
+  text-shadow: 0 0 18px rgba(185, 155, 255, 0.6);
+}
+.travel-text::after { content: "…"; animation: travel-dots 1s steps(3) infinite; }
+@keyframes travel-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes travel-dots { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) {
+  .travel, .travel-text::after { animation: none; }
+}
+@media (max-width: 700px) {
+  .scene-badge { top: 8px; font-size: 12px; padding: 3px 12px; }
+}

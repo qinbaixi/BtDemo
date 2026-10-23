@@ -215,6 +215,9 @@ type Config struct {
 	Layout    Layout  // 对应 map.tmj
 	Items     []*Item // 对应 items.yaml，按文件里的顺序
 	Pets      []*Pet  // 对应 pets.yaml，按文件里的顺序；第一个是进游戏默认召唤的
+	// Scenes 是场景模板（scenes.yaml）。没有 scenes.yaml 时只有一个场景，用 Layout、Spawns 等旧字段。
+	// 有的时候 Layout、Spawns、World.HealZones、World.Player.Spawn、World.Map 是默认场景的。
+	Scenes Scenes
 
 	itemsByID map[string]*Item // 由 validate 建立
 }
@@ -255,11 +258,43 @@ func Load(dir string, knownTrees map[string]bool) (*Config, error) {
 		return nil, err
 	}
 	cfg.Pets = pets.Pets
-	var err error
-	if cfg.Layout, err = loadLayout(dir); err != nil {
+	hasScenes, err := loadScenes(dir, &cfg.Scenes)
+	if err != nil {
 		return nil, err
 	}
-	return cfg, cfg.validate(knownTrees)
+	if !hasScenes {
+		if cfg.Layout, err = loadLayout(dir); err != nil {
+			return nil, err
+		}
+		if err := cfg.validate(knownTrees); err != nil {
+			return nil, err
+		}
+		cfg.Scenes = Scenes{Default: "main", List: []*Scene{cfg.singleScene()}}
+		return cfg, cfg.validateScenes()
+	}
+	if len(cfg.Spawns) > 0 || len(cfg.World.HealZones) > 0 {
+		return nil, fmt.Errorf(
+			"with %s, monsters.yaml spawns and world.yaml heal_zones belong to each scene in %s",
+			ScenesFile,
+			ScenesFile,
+		)
+	}
+	cfg.useScene(cfg.Scenes.DefaultScene())
+	if err := cfg.validate(knownTrees); err != nil {
+		return nil, err
+	}
+	return cfg, cfg.validateScenes()
+}
+
+// Single 是只有一个场景的配置（没有 scenes.yaml 时 Load 的结果，或测试里手工搭的配置）
+// 补上场景列表：唯一的场景用 cfg 自己的地图、刷怪、回血区和出生点。已经有场景列表时什么都不做。
+func (cfg *Config) Single() *Config {
+	if len(cfg.Scenes.List) == 0 {
+		cfg.Scenes = Scenes{Default: "main", List: []*Scene{cfg.singleScene()}}
+		cfg.Scenes.fillLineRules()
+		cfg.Scenes.List[0].Cfg = cfg
+	}
+	return cfg
 }
 
 func readYAML(path string, out any) error {
@@ -356,18 +391,6 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 			}
 		}
 	}
-	for i, zone := range world.HealZones {
-		owner := fmt.Sprintf("world.yaml: heal_zones[%d]", i)
-		if _, ok := world.Hostile[zone.Faction]; !ok {
-			return fmt.Errorf("%s has faction %q missing from hostile", owner, zone.Faction)
-		}
-		if zone.Duration != 0 {
-			return fmt.Errorf("%s is permanent and must not have a duration", owner)
-		}
-		if err := checkZone(owner, zone); err != nil {
-			return err
-		}
-	}
 	checkSkills := func(owner string, ids []string) error {
 		for _, id := range ids {
 			if cfg.Skills[id] == nil {
@@ -459,38 +482,8 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 			}
 		}
 	}
-	if layout := cfg.Layout; layout.Source != nil &&
-		(layout.Width != world.Map.Width || layout.Height != world.Map.Height) {
-		return fmt.Errorf(
-			"%s is %gx%g but world.yaml map is %gx%g; change one to match",
-			MapFile,
-			layout.Width,
-			layout.Height,
-			world.Map.Width,
-			world.Map.Height,
-		)
-	}
-	for _, prop := range cfg.Layout.Props {
-		if prop.X < 0 || prop.Y < 0 || prop.X > world.Map.Width || prop.Y > world.Map.Height {
-			return fmt.Errorf(
-				"%s: prop %s at (%g, %g) is off the %gx%g map",
-				MapFile,
-				prop.Kind,
-				prop.X,
-				prop.Y,
-				world.Map.Width,
-				world.Map.Height,
-			)
-		}
-	}
-	for i, spawnCfg := range cfg.Spawns {
-		if cfg.Templates[spawnCfg.Template] == nil {
-			return fmt.Errorf(
-				"monsters.yaml: spawn %d uses unknown template %q",
-				i,
-				spawnCfg.Template,
-			)
-		}
+	if err := cfg.validatePlacement("world.yaml"); err != nil {
+		return err
 	}
 	return cfg.validateGear()
 }
@@ -538,4 +531,57 @@ func NormalizeAddr(addr string) string {
 		return ":" + addr
 	}
 	return addr
+}
+
+// validatePlacement 检查和地图有关的配置：回血区、地图尺寸、物件在地图内、刷怪模板存在。
+// 每个场景各查一遍；label 是报错时的来源。
+func (cfg *Config) validatePlacement(label string) error {
+	world := &cfg.World
+	for i, zone := range world.HealZones {
+		owner := fmt.Sprintf("%s: heal_zones[%d]", label, i)
+		if _, ok := world.Hostile[zone.Faction]; !ok {
+			return fmt.Errorf("%s has faction %q missing from hostile", owner, zone.Faction)
+		}
+		if zone.Duration != 0 {
+			return fmt.Errorf("%s is permanent and must not have a duration", owner)
+		}
+		if err := checkZone(owner, zone); err != nil {
+			return err
+		}
+	}
+	if layout := cfg.Layout; layout.Source != nil &&
+		(layout.Width != world.Map.Width || layout.Height != world.Map.Height) {
+		return fmt.Errorf(
+			"%s is %gx%g but world.yaml map is %gx%g; change one to match",
+			MapFile,
+			layout.Width,
+			layout.Height,
+			world.Map.Width,
+			world.Map.Height,
+		)
+	}
+	for _, prop := range cfg.Layout.Props {
+		if prop.X < 0 || prop.Y < 0 || prop.X > world.Map.Width || prop.Y > world.Map.Height {
+			return fmt.Errorf(
+				"%s: prop %s at (%g, %g) is off the %gx%g map",
+				MapFile,
+				prop.Kind,
+				prop.X,
+				prop.Y,
+				world.Map.Width,
+				world.Map.Height,
+			)
+		}
+	}
+	for i, spawnCfg := range cfg.Spawns {
+		if cfg.Templates[spawnCfg.Template] == nil {
+			return fmt.Errorf(
+				"%s: spawn %d uses unknown template %q",
+				label,
+				i,
+				spawnCfg.Template,
+			)
+		}
+	}
+	return nil
 }

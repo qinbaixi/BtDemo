@@ -66,6 +66,7 @@ type System struct {
 	items    *item.System
 	pets     *pet.System
 	nav      *nav.Map
+	host     Host // 所在的场景；nil 表示单场景（测试）
 	sessions map[*Session]bool
 	byToken  map[string]*Session
 	byPlayer map[int]*Session // 玩家实体 ID -> 会话，广播时由格子里的玩家找到会话
@@ -150,6 +151,9 @@ func (sys *System) welcome(session *Session) *pb.Welcome {
 		welcome.Classes = append(welcome.Classes, classInfo(sys.state.Cfg, option))
 	}
 	welcome.Token = proto.String(session.token)
+	if sys.host != nil {
+		welcome.Scene = sys.host.SceneInfo()
+	}
 	return welcome
 }
 
@@ -211,6 +215,9 @@ func (sys *System) Leave(session *Session) {
 	if session.link != nil {
 		session.link.Close()
 		session.link = nil
+	}
+	if sys.host != nil {
+		sys.host.Gone(session)
 	}
 }
 
@@ -363,6 +370,21 @@ func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
 		}
 	case *pb.ClientMsg_Skin:
 		if reason := sys.items.SetSkin(entity, body.Skin.GetSkin()); reason != "" {
+			sys.toast(session, reason)
+		}
+	case *pb.ClientMsg_Lines:
+		if sys.host == nil {
+			return
+		}
+		if lines := sys.host.Lines(session); lines != nil {
+			sys.SendNow(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Lines{Lines: lines}})
+		}
+	case *pb.ClientMsg_SwitchLine:
+		reason := reasonNoLines
+		if sys.host != nil {
+			reason = sys.host.SwitchLine(session, int(body.SwitchLine.GetLine()))
+		}
+		if reason != "" {
 			sys.toast(session, reason)
 		}
 	}

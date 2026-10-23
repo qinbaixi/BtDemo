@@ -1,0 +1,2983 @@
+{
+ "compressionlevel": -1,
+ "height": 50,
+ "infinite": false,
+ "layers": [
+  {
+   "id": 1,
+   "name": "zones",
+   "type": "objectgroup",
+   "draworder": "topdown",
+   "objects": [
+    {
+     "id": 4,
+     "name": "graveyard",
+     "type": "zone",
+     "x": 480,
+     "y": 800,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 5,
+     "name": "camp",
+     "type": "zone",
+     "x": 930,
+     "y": 1300,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    }
+   ],
+   "opacity": 1,
+   "visible": true,
+   "x": 0,
+   "y": 0
+  },
+  {
+   "id": 2,
+   "name": "roads",
+   "type": "objectgroup",
+   "draworder": "topdown",
+   "objects": [
+    {
+     "id": 7,
+     "name": "",
+     "type": "road",
+     "x": 60,
+     "y": 880,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "polyline": [
+      {
+       "x": 0,
+       "y": 0
+      },
+      {
+       "x": 180,
+       "y": -60
+      },
+      {
+       "x": 340,
+       "y": -80
+      }
+     ]
+    },
+    {
+     "id": 8,
+     "name": "",
+     "type": "road",
+     "x": 480,
+     "y": 860,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "polyline": [
+      {
+       "x": 0,
+       "y": 0
+      },
+      {
+       "x": 100,
+       "y": 140
+      },
+      {
+       "x": 240,
+       "y": 280
+      },
+      {
+       "x": 360,
+       "y": 400
+      }
+     ]
+    }
+   ],
+   "opacity": 1,
+   "visible": true,
+   "x": 0,
+   "y": 0
+  },
+  {
+   "id": 3,
+   "name": "props",
+   "type": "objectgroup",
+   "draworder": "topdown",
+   "objects": [
+    {
+     "id": 15,
+     "name": "",
+     "type": "crypt",
+     "x": 510,
+     "y": 530,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 16,
+     "name": "",
+     "type": "tent",
+     "x": 760,
+     "y": 1180,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      }
+     ]
+    },
+    {
+     "id": 17,
+     "name": "",
+     "type": "tent",
+     "x": 1080,
+     "y": 1150,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 18,
+     "name": "",
+     "type": "tent",
+     "x": 1140,
+     "y": 1360,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 24,
+     "name": "",
+     "type": "column",
+     "x": 120,
+     "y": 700,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 25,
+     "name": "",
+     "type": "column",
+     "x": 170,
+     "y": 1080,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 27,
+     "name": "",
+     "type": "column",
+     "x": 330,
+     "y": 520,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 33,
+     "name": "",
+     "type": "brazier",
+     "x": 470,
+     "y": 600,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 34,
+     "name": "",
+     "type": "campfire",
+     "x": 870,
+     "y": 1250,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 35,
+     "name": "",
+     "type": "totem",
+     "x": 970,
+     "y": 1100,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      }
+     ]
+    },
+    {
+     "id": 52,
+     "name": "",
+     "type": "stake",
+     "x": 613,
+     "y": 1332,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      }
+     ]
+    },
+    {
+     "id": 53,
+     "name": "",
+     "type": "stake",
+     "x": 610,
+     "y": 1307,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 54,
+     "name": "",
+     "type": "stake",
+     "x": 611,
+     "y": 1281,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      }
+     ]
+    },
+    {
+     "id": 55,
+     "name": "",
+     "type": "stake",
+     "x": 616,
+     "y": 1256,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 56,
+     "name": "",
+     "type": "stake",
+     "x": 625,
+     "y": 1231,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 57,
+     "name": "",
+     "type": "stake",
+     "x": 637,
+     "y": 1207,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 58,
+     "name": "",
+     "type": "stake",
+     "x": 654,
+     "y": 1184,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      }
+     ]
+    },
+    {
+     "id": 59,
+     "name": "",
+     "type": "stake",
+     "x": 673,
+     "y": 1163,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 60,
+     "name": "",
+     "type": "stake",
+     "x": 696,
+     "y": 1143,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      }
+     ]
+    },
+    {
+     "id": 61,
+     "name": "",
+     "type": "stake",
+     "x": 722,
+     "y": 1125,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 62,
+     "name": "",
+     "type": "stake",
+     "x": 750,
+     "y": 1110,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 63,
+     "name": "",
+     "type": "stake",
+     "x": 781,
+     "y": 1097,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 64,
+     "name": "",
+     "type": "stake",
+     "x": 813,
+     "y": 1086,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      }
+     ]
+    },
+    {
+     "id": 65,
+     "name": "",
+     "type": "stake",
+     "x": 847,
+     "y": 1078,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 66,
+     "name": "",
+     "type": "stake",
+     "x": 882,
+     "y": 1073,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      }
+     ]
+    },
+    {
+     "id": 67,
+     "name": "",
+     "type": "stake",
+     "x": 917,
+     "y": 1070,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 68,
+     "name": "",
+     "type": "stake",
+     "x": 953,
+     "y": 1071,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 69,
+     "name": "",
+     "type": "stake",
+     "x": 988,
+     "y": 1074,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 70,
+     "name": "",
+     "type": "stake",
+     "x": 1023,
+     "y": 1080,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      }
+     ]
+    },
+    {
+     "id": 71,
+     "name": "",
+     "type": "stake",
+     "x": 1057,
+     "y": 1089,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 72,
+     "name": "",
+     "type": "stake",
+     "x": 1089,
+     "y": 1100,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      }
+     ]
+    },
+    {
+     "id": 73,
+     "name": "",
+     "type": "stake",
+     "x": 1119,
+     "y": 1114,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 74,
+     "name": "",
+     "type": "stake",
+     "x": 1146,
+     "y": 1130,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 75,
+     "name": "",
+     "type": "stake",
+     "x": 1171,
+     "y": 1149,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 76,
+     "name": "",
+     "type": "stake",
+     "x": 1193,
+     "y": 1169,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      }
+     ]
+    },
+    {
+     "id": 77,
+     "name": "",
+     "type": "stake",
+     "x": 1212,
+     "y": 1191,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 78,
+     "name": "",
+     "type": "tomb",
+     "x": 241,
+     "y": 653,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 79,
+     "name": "",
+     "type": "tomb",
+     "x": 442,
+     "y": 655,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      }
+     ]
+    },
+    {
+     "id": 80,
+     "name": "",
+     "type": "tomb",
+     "x": 620,
+     "y": 650,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 81,
+     "name": "",
+     "type": "tomb",
+     "x": 701,
+     "y": 644,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      }
+     ]
+    },
+    {
+     "id": 82,
+     "name": "",
+     "type": "tomb",
+     "x": 250,
+     "y": 763,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 83,
+     "name": "",
+     "type": "tomb",
+     "x": 337,
+     "y": 749,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 84,
+     "name": "",
+     "type": "tomb",
+     "x": 618,
+     "y": 755,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 85,
+     "name": "",
+     "type": "tomb",
+     "x": 705,
+     "y": 757,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      }
+     ]
+    },
+    {
+     "id": 86,
+     "name": "",
+     "type": "tomb",
+     "x": 249,
+     "y": 862,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 87,
+     "name": "",
+     "type": "tomb",
+     "x": 334,
+     "y": 857,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 88,
+     "name": "",
+     "type": "tomb",
+     "x": 519,
+     "y": 867,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 89,
+     "name": "",
+     "type": "tomb",
+     "x": 614,
+     "y": 858,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 90,
+     "name": "",
+     "type": "tomb",
+     "x": 717,
+     "y": 859,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 91,
+     "name": "",
+     "type": "tomb",
+     "x": 246,
+     "y": 969,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      }
+     ]
+    },
+    {
+     "id": 92,
+     "name": "",
+     "type": "tomb",
+     "x": 339,
+     "y": 965,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 93,
+     "name": "",
+     "type": "tomb",
+     "x": 440,
+     "y": 965,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 94,
+     "name": "",
+     "type": "tomb",
+     "x": 523,
+     "y": 965,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 95,
+     "name": "",
+     "type": "tomb",
+     "x": 615,
+     "y": 964,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 96,
+     "name": "",
+     "type": "deadtree",
+     "x": 180,
+     "y": 590,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.25
+      }
+     ]
+    },
+    {
+     "id": 97,
+     "name": "",
+     "type": "deadtree",
+     "x": 770,
+     "y": 1010,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 98,
+     "name": "",
+     "type": "deadtree",
+     "x": 740,
+     "y": 560,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 101,
+     "name": "",
+     "type": "cypress",
+     "x": 298,
+     "y": 352,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      }
+     ]
+    },
+    {
+     "id": 104,
+     "name": "",
+     "type": "cypress",
+     "x": 197,
+     "y": 517,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 105,
+     "name": "",
+     "type": "cypress",
+     "x": 351,
+     "y": 481,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 106,
+     "name": "",
+     "type": "cypress",
+     "x": 88,
+     "y": 57,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      }
+     ]
+    },
+    {
+     "id": 108,
+     "name": "",
+     "type": "cypress",
+     "x": 400,
+     "y": 274,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      }
+     ]
+    },
+    {
+     "id": 109,
+     "name": "",
+     "type": "cypress",
+     "x": 222,
+     "y": 589,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      }
+     ]
+    },
+    {
+     "id": 111,
+     "name": "",
+     "type": "cypress",
+     "x": 328,
+     "y": 369,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 118,
+     "name": "",
+     "type": "cypress",
+     "x": 104,
+     "y": 222,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      }
+     ]
+    },
+    {
+     "id": 121,
+     "name": "",
+     "type": "cypress",
+     "x": 187,
+     "y": 213,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 122,
+     "name": "",
+     "type": "cypress",
+     "x": 336,
+     "y": 511,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 124,
+     "name": "",
+     "type": "cypress",
+     "x": 268,
+     "y": 483,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 132,
+     "name": "",
+     "type": "cypress",
+     "x": 487,
+     "y": 367,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.25
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 133,
+     "name": "",
+     "type": "cypress",
+     "x": 214,
+     "y": 417,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 135,
+     "name": "",
+     "type": "cypress",
+     "x": 493,
+     "y": 361,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 136,
+     "name": "",
+     "type": "cypress",
+     "x": 109,
+     "y": 1429,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 137,
+     "name": "",
+     "type": "cypress",
+     "x": 311,
+     "y": 1450,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.25
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 138,
+     "name": "",
+     "type": "cypress",
+     "x": 1215,
+     "y": 437,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 139,
+     "name": "",
+     "type": "cypress",
+     "x": 999,
+     "y": 261,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      }
+     ]
+    },
+    {
+     "id": 140,
+     "name": "",
+     "type": "cypress",
+     "x": 1058,
+     "y": 869,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      }
+     ]
+    },
+    {
+     "id": 141,
+     "name": "",
+     "type": "cypress",
+     "x": 1091,
+     "y": 207,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 143,
+     "name": "",
+     "type": "cypress",
+     "x": 755,
+     "y": 419,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 144,
+     "name": "",
+     "type": "cypress",
+     "x": 1201,
+     "y": 882,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 145,
+     "name": "",
+     "type": "cypress",
+     "x": 552,
+     "y": 225,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 146,
+     "name": "",
+     "type": "cypress",
+     "x": 398,
+     "y": 1158,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      }
+     ]
+    },
+    {
+     "id": 148,
+     "name": "",
+     "type": "cypress",
+     "x": 99,
+     "y": 1412,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 150,
+     "name": "",
+     "type": "cypress",
+     "x": 267,
+     "y": 1211,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.25
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      }
+     ]
+    },
+    {
+     "id": 151,
+     "name": "",
+     "type": "cypress",
+     "x": 368,
+     "y": 1177,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      }
+     ]
+    },
+    {
+     "id": 152,
+     "name": "",
+     "type": "cypress",
+     "x": 321,
+     "y": 1120,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 155,
+     "name": "",
+     "type": "tree",
+     "x": 470,
+     "y": 226,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.25
+      }
+     ]
+    },
+    {
+     "id": 157,
+     "name": "",
+     "type": "tree",
+     "x": 229,
+     "y": 45,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.25
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 161,
+     "name": "",
+     "type": "tree",
+     "x": 102,
+     "y": 343,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 162,
+     "name": "",
+     "type": "tree",
+     "x": 81,
+     "y": 598,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      }
+     ]
+    },
+    {
+     "id": 164,
+     "name": "",
+     "type": "tree",
+     "x": 33,
+     "y": 508,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.25
+      }
+     ]
+    },
+    {
+     "id": 171,
+     "name": "",
+     "type": "tree",
+     "x": 621,
+     "y": 294,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 172,
+     "name": "",
+     "type": "tree",
+     "x": 1160,
+     "y": 556,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 174,
+     "name": "",
+     "type": "tree",
+     "x": 948,
+     "y": 371,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 175,
+     "name": "",
+     "type": "tree",
+     "x": 887,
+     "y": 671,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 177,
+     "name": "",
+     "type": "tree",
+     "x": 1148,
+     "y": 717,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 178,
+     "name": "",
+     "type": "tree",
+     "x": 1060,
+     "y": 224,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 179,
+     "name": "",
+     "type": "tree",
+     "x": 1072,
+     "y": 591,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      }
+     ]
+    },
+    {
+     "id": 180,
+     "name": "",
+     "type": "tree",
+     "x": 757,
+     "y": 103,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      }
+     ]
+    },
+    {
+     "id": 181,
+     "name": "",
+     "type": "tree",
+     "x": 198,
+     "y": 1389,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.25
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 182,
+     "name": "",
+     "type": "tree",
+     "x": 582,
+     "y": 1533,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 183,
+     "name": "",
+     "type": "tree",
+     "x": 454,
+     "y": 100,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      }
+     ]
+    },
+    {
+     "id": 184,
+     "name": "",
+     "type": "tree",
+     "x": 1082,
+     "y": 873,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 185,
+     "name": "",
+     "type": "tree",
+     "x": 1067,
+     "y": 672,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      }
+     ]
+    },
+    {
+     "id": 189,
+     "name": "",
+     "type": "rock",
+     "x": 574,
+     "y": 224,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.75
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 190,
+     "name": "",
+     "type": "rock",
+     "x": 955,
+     "y": 92,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 195,
+     "name": "",
+     "type": "rock",
+     "x": 764,
+     "y": 551,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.25
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 197,
+     "name": "",
+     "type": "rock",
+     "x": 527,
+     "y": 305,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 199,
+     "name": "",
+     "type": "rock",
+     "x": 697,
+     "y": 989,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 200,
+     "name": "",
+     "type": "rock",
+     "x": 1249,
+     "y": 869,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.75
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 205,
+     "name": "",
+     "type": "rock",
+     "x": 377,
+     "y": 237,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 210,
+     "name": "",
+     "type": "rock",
+     "x": 698,
+     "y": 175,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 213,
+     "name": "",
+     "type": "rock",
+     "x": 1175,
+     "y": 1299,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 215,
+     "name": "",
+     "type": "rock",
+     "x": 1143,
+     "y": 1545,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 216,
+     "name": "",
+     "type": "rock",
+     "x": 904,
+     "y": 1008,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 217,
+     "name": "",
+     "type": "rock",
+     "x": 346,
+     "y": 1177,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.125
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 222,
+     "name": "",
+     "type": "rock",
+     "x": 205,
+     "y": 1284,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 1.25
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 223,
+     "name": "",
+     "type": "rock",
+     "x": 420,
+     "y": 1416,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 226,
+     "name": "",
+     "type": "rock",
+     "x": 125,
+     "y": 1221,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.75
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    },
+    {
+     "id": 233,
+     "name": "",
+     "type": "bones",
+     "x": 850,
+     "y": 1390,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true
+    },
+    {
+     "id": 234,
+     "name": "",
+     "type": "bones",
+     "x": 1000,
+     "y": 1440,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.875
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 1
+      },
+      {
+       "name": "flip",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 235,
+     "name": "",
+     "type": "bones",
+     "x": 710,
+     "y": 1340,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "s",
+       "type": "float",
+       "value": 0.75
+      },
+      {
+       "name": "v",
+       "type": "int",
+       "value": 2
+      }
+     ]
+    }
+   ],
+   "opacity": 1,
+   "visible": true,
+   "x": 0,
+   "y": 0
+  },
+  {
+   "draworder": "topdown",
+   "id": 4,
+   "name": "portals",
+   "objects": [
+    {
+     "class": "portal",
+     "height": 0,
+     "id": 236,
+     "name": "to_village",
+     "point": true,
+     "rotation": 0,
+     "visible": true,
+     "width": 0,
+     "x": 70,
+     "y": 870,
+     "properties": [
+      {
+       "name": "to",
+       "type": "string",
+       "value": "village"
+      },
+      {
+       "name": "r",
+       "type": "float",
+       "value": 36
+      }
+     ]
+    }
+   ],
+   "opacity": 1,
+   "type": "objectgroup",
+   "visible": true,
+   "x": 0,
+   "y": 0
+  }
+ ],
+ "nextlayerid": 5,
+ "nextobjectid": 237,
+ "orientation": "orthogonal",
+ "properties": [
+  {
+   "name": "shape.amphora",
+   "type": "string",
+   "value": "none"
+  },
+  {
+   "name": "shape.bones",
+   "type": "string",
+   "value": "none"
+  },
+  {
+   "name": "shape.brazier",
+   "type": "string",
+   "value": "circle 0 -2 13"
+  },
+  {
+   "name": "shape.campfire",
+   "type": "string",
+   "value": "circle 0 0 34"
+  },
+  {
+   "name": "shape.column",
+   "type": "string",
+   "value": "circle 0 -4 18"
+  },
+  {
+   "name": "shape.crypt",
+   "type": "string",
+   "value": "rect -56 -46 56 6"
+  },
+  {
+   "name": "shape.cypress",
+   "type": "string",
+   "value": "circle 0 -4 10"
+  },
+  {
+   "name": "shape.deadtree",
+   "type": "string",
+   "value": "circle 0 -2 12"
+  },
+  {
+   "name": "shape.house",
+   "type": "string",
+   "value": "rect -62 -44 62 6"
+  },
+  {
+   "name": "shape.rock",
+   "type": "string",
+   "value": "circle 0 -6 19"
+  },
+  {
+   "name": "shape.stake",
+   "type": "string",
+   "value": "circle 0 -2 7"
+  },
+  {
+   "name": "shape.tent",
+   "type": "string",
+   "value": "rect -50 -28 50 6"
+  },
+  {
+   "name": "shape.tomb",
+   "type": "string",
+   "value": "rect -15 -10 15 4"
+  },
+  {
+   "name": "shape.totem",
+   "type": "string",
+   "value": "circle 0 -2 12"
+  },
+  {
+   "name": "shape.tree",
+   "type": "string",
+   "value": "circle 0 -4 12"
+  },
+  {
+   "name": "shape.wall",
+   "type": "string",
+   "value": "capsule 8"
+  },
+  {
+   "name": "shape.well",
+   "type": "string",
+   "value": "circle 0 -8 30"
+  }
+ ],
+ "renderorder": "right-down",
+ "tiledversion": "1.11.0",
+ "tileheight": 32,
+ "tilesets": [],
+ "tilewidth": 32,
+ "type": "map",
+ "version": "1.10",
+ "width": 40
+}

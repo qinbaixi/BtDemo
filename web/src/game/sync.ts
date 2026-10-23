@@ -4,6 +4,7 @@ import type { Debug } from '../ui/debug';
 import { buildSkillBar, renderPetHud, renderSelf, setConn, showToast } from '../ui/hud';
 import { refreshBag, renderBagStats } from '../ui/bag';
 import { closePicker, openPicker } from '../ui/picker';
+import { hideTravel, renderLines, renderSceneBadge, showTravel } from '../ui/lines';
 import { rememberedSkin, rememberSkin, takePendingSkin } from '../ui/skins';
 import { rememberedPet } from '../ui/bag';
 import { forgetBlock } from '../input';
@@ -107,6 +108,8 @@ function handleMessage(m: ServerMessage, now: number, deps: SyncDeps): void {
       refreshBag();
       break;
     case 'petStatus': onPetStatus(m, now); break;
+    case 'lines': renderLines(m); break;
+    case 'travel': showTravel(m.scene); break;
   }
 }
 
@@ -177,6 +180,12 @@ function setZones(zones: ZoneInfo[], now: number): void {
 let zonesSeen = false;
 
 function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
+  const prevScene = state.scene;
+  state.scene = m.scene;
+  // 换了场景或线：新线的时钟和原来差不多，但不保证一样，下一帧重新取时钟偏移
+  if (prevScene && m.scene && (prevScene.id !== m.scene.id || prevScene.line !== m.scene.line)) state.clockSynced = false;
+  hideTravel();
+  renderSceneBadge();
   state.myId = m.id;
   state.map = m.map || state.map;
   state.cell = (m.aoi && m.aoi.cell) || state.cell;
@@ -319,14 +328,14 @@ async function loadScene(): Promise<void> {
   const { w, h } = state.map;
   let map = null;
   try {
-    map = await loadMap();
+    map = await loadMap(state.scene?.map);
   } catch (err) {
     console.error('地图加载失败', err);
     showToast('地图加载失败，刷新页面重试');
     if (state.scenery) return;
   }
   if (seq !== sceneLoad) return;   // 期间又收到了新的 welcome
-  const key = `${w}x${h}:${map?.key ?? ''}`;
+  const key = `${state.scene?.id ?? ''}:${w}x${h}:${map?.key ?? ''}`;
   if (state.scenery && state.sceneKey === key) return;
   state.scenery = createScenery(w, h, map);
   state.sceneKey = key;

@@ -4,8 +4,8 @@
 
 ## 分工
 
-- **server** 只管网络：HTTP、WebSocket、protobuf 编解码、读写 goroutine。它不碰游戏状态：玩家输入放进 `Session.Inbox`，连接、断开通过 `world.Do` 交给世界 goroutine，都在下一个 tick 开头处理。
-- **session** 是游戏里的“连接”：把客户端消息变成游戏操作，并在同步时决定每个玩家该收到什么。它运行在世界 goroutine 里。
+- **server** 只管网络：HTTP、WebSocket、protobuf 编解码、读写 goroutine。它不碰游戏状态：玩家输入放进 `Session.Inbox`，连接、断开交给 `game.Manager`，由它找到角色所在的线、`scene.Do` 交给那条线的 goroutine，都在下一个 tick 开头处理（见 [场景与分线](scene.md)）。
+- **session** 是游戏里的“连接”：把客户端消息变成游戏操作，并在同步时决定每个玩家该收到什么。它运行在所在那条线的 goroutine 里。换场景、换线时会话对象整个交给目标线（`TakeOut` / `Bring`，`session/travel.go`），连接和输入队列不变；跨场景的请求（线路列表、切线）通过 `session.Host` 交给场景。
 
 ## 一个连接的生命周期（server.go、session/connect.go）
 
@@ -13,14 +13,14 @@
 浏览器连 /ws
   └─ serve(conn)
        ├─ 读第一帧：必须是 ClientMsg{hello: Hello{token}}，10 秒内没来或不是 Hello 就断开
-       ├─ world.Do(Attach(link, token))：
+       ├─ manager.Attach(link, token)（等角色所在的线处理完）：
        │     token 认得 → 接回原来的角色，发 Welcome{resumed} + 全量
        │     token 为空 / 过期 / 伪造 → 创建新角色（Join），发 Welcome（带新 token）
        ├─ 写 goroutine：等 link.Wake() → link.Take() 取走全部帧逐个写出；每 5 秒发一次 WebSocket ping
        ├─ 读循环（当前 goroutine）：
        │     收到二进制帧 → proto.Unmarshal 成 pb.ClientMsg → s.Inbox.Push（队列溢出就断开）
        │     15 秒读不到任何东西（含 pong）就认为连接已死；解不开的帧超过 10 个就断开
-       └─ 读出错（断开）→ world.Do(Detach(session, link))：角色保留，不删除
+       └─ 读出错（断开）→ manager.Detach(session, link)：角色保留，不删除
 ```
 
 ### 发送队列 Link
@@ -40,7 +40,7 @@
 
 ## 协议（proto/btdemo.proto）
 
-用 protobuf（proto2）二进制编码，**每个 WebSocket 帧是一个二进制 `ClientMsg`（客户端 → 服务端）或一个 `Frame`（服务端 → 客户端）**。服务端用 `protoc` 生成的 `internal/pb`；前端用 protobufjs 从同一份 `.proto` 生成 JS 代码和 TypeScript 类型（`web` 下 `npm run proto`），字段对不上时编译期就报错。服务端仍在 `/btdemo.proto` 提供原文，方便查看；地图文件在 `/map.tmj` 原样提供（见 [地图](map.md)）。
+用 protobuf（proto2）二进制编码，**每个 WebSocket 帧是一个二进制 `ClientMsg`（客户端 → 服务端）或一个 `Frame`（服务端 → 客户端）**。服务端用 `protoc` 生成的 `internal/pb`；前端用 protobufjs 从同一份 `.proto` 生成 JS 代码和 TypeScript 类型（`web` 下 `npm run proto`），字段对不上时编译期就报错。服务端仍在 `/btdemo.proto` 提供原文，方便查看；地图文件在 `/maps/<文件名>` 原样提供（`/map.tmj` 是默认场景的，见 [地图](map.md)）。
 
 客户端 → 服务端 `ClientMsg`（oneof）。**连接后的第一帧必须是 `Hello`**：
 
@@ -57,12 +57,14 @@
 | `Unequip{slot}` | 卸下 weapon / armor / trinket 槽位里的物品 |
 | `SetSkin{skin}` | 换成当前职业的皮肤（空 = 默认） |
 | `SetPet{pet}` | 选择跟随的宠物（`PetInfo.id`），空 = 收回宠物；被拒绝（换宠物冷却中等）回 `Toast` |
+| `Lines{}` | 要这个场景的线路列表，回 `LineList` |
+| `SwitchLine{line}` | 换到这个场景的第 line 线（活着、5 秒内没挨打也没出手才行）；成功时回 `Travel` 和新线的 `Welcome{resumed}`，被拒绝回 `Toast` |
 
 服务端 → 客户端：每个 WebSocket 帧是一个 `Frame{time, msgs}`。一个同步帧（`sync_rate`，10 次/秒）里发生在玩家附近的所有消息按顺序合成**一个** `Frame`，一次写出；`time` 是发送时的服务端时间（秒，`*_at`、`until` 等字段用同一个时钟）。玩家自己操作的回应（`Toast`、`SkillBar`、`Inventory`……）和 `Welcome` 不等同步帧，立即用单独的 `Frame` 发出。`Frame.msgs` 里的每条是 `ServerMsg`：
 
 | 消息 | 何时发 | 内容 |
 | --- | --- | --- |
-| `Welcome` | 连接时一次；重连、客户端跟不上时再发一次（`resumed = true`） | 自己的 id、`token`（断线重连用）、地图尺寸、AOI 格子、技能栏、碰撞体 `obstacles`（调试显示用；场景物件前端从 `/map.tmj` 读）、当前职业的技能池 `pool`（slot 为 0）和要挑几个 `pick`、当前职业 `class`、所有职业 `classes`（`ClassInfo`：id、名字、说明、模型、颜色、默认技能栏 `skills`、技能池 `pool`、`pick`、`can_block`、皮肤 `skins`；第一个是默认职业）、装备图鉴 `items`（`ItemInfo`，属性按 str agi int vit max_hp atk matk def mdef crit crit_dmg speed cdr 的顺序，只列不为 0 的）、宠物图鉴 `pets`。`resumed`：还是同一个角色，客户端丢掉所有实体、等待重发的 `Enter`，保留自己的选择（不弹挑技能界面） |
+| `Welcome` | 连接时一次；重连、客户端跟不上时再发一次（`resumed = true`） | 自己的 id、`token`（断线重连用）、地图尺寸、AOI 格子、技能栏、碰撞体 `obstacles`（调试显示用；场景物件前端从 `scene.map` 的地址读）、所在场景 `scene`（id、名字、线号、地图地址、传送门）、当前职业的技能池 `pool`（slot 为 0）和要挑几个 `pick`、当前职业 `class`、所有职业 `classes`（`ClassInfo`：id、名字、说明、模型、颜色、默认技能栏 `skills`、技能池 `pool`、`pick`、`can_block`、皮肤 `skins`；第一个是默认职业）、装备图鉴 `items`（`ItemInfo`，属性按 str agi int vit max_hp atk matk def mdef crit crit_dmg speed cdr 的顺序，只列不为 0 的）、宠物图鉴 `pets`。`resumed`：还是同一个角色，客户端丢掉所有实体、等待重发的 `Enter`，保留自己的选择（不弹挑技能界面） |
 | `Enter` | 实体进入视野；换职业、皮肤、武器外观后重发 | `EntityInfo` 列表：静态信息（名字、种类、模型、半径、颜色、皮肤 `skin`、武器外观 `gear`、宠物的主人 `owner`）加上**完整的** `EntityState`（所有字段都设置）。已见过的实体再收到 `Enter` 就是更新外观 |
 | `Leave` | 实体离开视野（走远、被删除） | id 列表 |
 | `EntityState` | 视野内某个实体的字段变了（同步帧） | **增量**：只设置变了的字段（x、y、hp、max_hp、lv、act、tg、dead、shield、blocking、looks），设置了的字段可以是 0 / false / 空串，没设置的客户端保持原值。proto2 的 presence 就是用来区分这两种情况的 |
@@ -74,6 +76,8 @@
 | `PetStatus` | 宠物召唤、收回、死亡、复活，换宠冷却变化 | 当前宠物 `pet`、实体 id `entity`、复活倒计时 `respawn_in`、换宠冷却 `cooldown` |
 | `SkillBar` | 挑技能被接受后 | 新的技能栏（`skills`，slot 从 1 起）和换完后的职业 `class` |
 | `Toast` | 技能放不出来、挑技能被拒绝、穿脱装备被拒绝、背包满了等 | 一行提示 |
+| `LineList` | 回应 `Lines` | 场景 id、自己的线号 `current`、每条线的人数和 `soft`、`hard` |
+| `Travel` | 换场景、换线出发时 | 去的场景名：客户端显示过场，等新的 `Welcome`（`scene` 是新场景） |
 
 旧的 `Sync`（每次同步把视野内所有实体的位置血量整份发一遍）已经去掉：状态改成脏标记增量，进出视野改成 `Enter` / `Leave`，事件、自身属性、回血区、AI 追踪各用独立的消息。
 

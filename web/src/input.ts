@@ -9,6 +9,7 @@ import type { ClientMessage, SkillInfo } from './net/types';
 import type { Debug } from './ui/debug';
 import { showToast } from './ui/hud';
 import { bagKey, toggleBag } from './ui/bag';
+import { linesKey, toggleLines } from './ui/lines';
 import { pickerKey } from './ui/picker';
 
 // 切换画质时提示每一档有什么
@@ -211,6 +212,14 @@ function onKeyDown(e: KeyboardEvent): void {
   }
   if (state.bagOpen && bagKey(e.code)) {
     e.preventDefault();
+    return;
+  }
+  if (state.linesOpen && linesKey(e.code)) {
+    e.preventDefault();
+    return;
+  }
+  if (e.code === 'KeyN') {
+    if (!state.pickerOpen) toggleLines();
     return;
   }
   if (e.code === 'KeyE') {

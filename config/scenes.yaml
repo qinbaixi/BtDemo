@@ -1,0 +1,38 @@
+# 场景：每个场景是一张地图（maps/ 目录下，用 Tiled 编辑）和地图上的怪物、回血区、出生点。
+# 同一个场景可以同时开好几条线（分线），每条线是一个独立运行的世界，各自一个 goroutine。
+# 场景之间用地图里 portals 图层的传送门连起来，见 docs/modules/scene.md。
+#
+#   default: 新玩家进入的场景（默认第一个）
+#   lines:   分线规则，每个场景可以单独覆盖
+#     soft:       一条线的“满员”人数：超过它，新玩家优先去别的线，都超过了就开新线
+#     hard:       一条线最多多少人，到了就进不去（指定线号切线也不行）
+#     min:        常驻的线数，没人也不关
+#     idle_close: 多出来的线空了多少秒后关闭
+#   spawn:      在这个场景出生、复活的位置
+#   spawns:     刷怪点：在 (x, y) 周围 spread 半径内随机生成 count 个（模板见 monsters.yaml）
+#   heal_zones: 常驻的回血区：站在里面的友方每隔 interval 秒回复最大生命 × heal
+default: village
+lines: { soft: 40, hard: 60, min: 1, idle_close: 120 }
+
+scenes:
+  - id: village
+    name: 晨曦村
+    map: village.tmj
+    spawn: { x: 520, y: 800, spread: 60 }
+    spawns:
+      - { template: villager,        x: 520,  y: 760,  count: 4, spread: 140 }
+      - { template: guard,           x: 640,  y: 700,  count: 2, spread: 120 }
+      - { template: slime,           x: 1000, y: 900,  count: 5, spread: 200 }
+      - { template: wolf,            x: 900,  y: 330,  count: 4, spread: 160 }
+    heal_zones:
+      - { name: 生命之泉, x: 520, y: 800, radius: 130, heal: 0.05, interval: 1, faction: player, look: spring, color: "#7dffc4" }
+
+  - id: graveyard
+    name: 亡者墓园
+    map: graveyard.tmj
+    spawn: { x: 170, y: 870, spread: 40 }
+    spawns:
+      - { template: skeleton_archer, x: 480, y: 800,  count: 4, spread: 200 }
+      - { template: ogre_chief,      x: 930, y: 1300, count: 1, spread: 0 }
+    heal_zones:
+      - { name: 守夜人之泉, x: 170, y: 870, radius: 90, heal: 0.05, interval: 1, faction: player, look: spring, color: "#7dffc4" }

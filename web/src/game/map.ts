@@ -1,4 +1,4 @@
-// 地图：读服务端提供的 /map.tmj（Tiled 编辑器的 JSON 地图）。
+// 地图：读服务端提供的场景地图（Welcome.scene.map，比如 /maps/village.tmj；旧的单场景服务端是 /map.tmj，Tiled 编辑器的 JSON 地图）。
 // 服务端用同一个文件做碰撞，所以前端画出来的物件和服务端挡路的位置总是一致的。
 //
 // 用到的图层（都是对象图层，见 docs/modules/map.md）：

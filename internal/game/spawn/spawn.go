@@ -108,6 +108,14 @@ func (sys *System) ApplyClass(entity *core.Entity, class *config.Class) {
 	attr.Recalc(entity)
 }
 
+// Place 把从别的场景过来的实体放进这个场景，落在 (x, y) 附近的空地上（加入网格时周围的玩家收到 Enter）。
+func (sys *System) Place(entity *core.Entity, x, y float64) {
+	x, y = sys.move.FreeSpot(entity, x, y)
+	entity.X, entity.Y = x, y
+	entity.HomeX, entity.HomeY = x, y
+	sys.add(entity)
+}
+
 func (sys *System) add(entity *core.Entity) {
 	sys.state.Ents.Add(entity)
 	sys.grid.Add(entity)

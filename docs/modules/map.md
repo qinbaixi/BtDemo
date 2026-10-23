@@ -1,16 +1,19 @@
-# 地图：config/map.tmj（Tiled）
+# 地图：config/maps/*.tmj（Tiled）
 
-地图用 [Tiled 地图编辑器](https://www.mapeditor.org)（1.10 或更新版本）编辑，保存成 JSON 格式的 `config/map.tmj`。
+地图用 [Tiled 地图编辑器](https://www.mapeditor.org)（1.10 或更新版本）编辑，保存成 JSON 格式。每个场景一张（`config/scenes.yaml` 的 `map`，见 [场景与分线](scene.md)）：
+`config/maps/village.tmj`（晨曦村）和 `config/maps/graveyard.tmj`（亡者墓园），两张图用传送门连起来。
 **前后端读的是同一个文件**：
 
 - 服务端启动时读它（`internal/config/layout.go`），把物件换算成碰撞体，用来做移动碰撞和 A* 寻路（见 [nav 和 move](nav-move.md)）。
-- 浏览器从服务端的 `/map.tmj` 下载同一个文件（`web/src/game/map.ts`），按它画地表和物件。
+- 浏览器从服务端的 `/maps/<文件名>` 下载同一个文件（`web/src/game/map.ts`，地址在 Welcome 的 `scene.map` 里），按它画地表和物件。
+
+没有 `scenes.yaml` 时还按旧的单场景方式：只有一张 `config/map.tmj`，浏览器从 `/map.tmj` 下载。
 
 所以在 Tiled 里挪一棵树，保存后重启服务端、刷新页面，树的位置和它挡路的位置会一起变。
 
 ## 怎么编辑
 
-1. 用 Tiled 打开 `config/btdemo.tiled-project`（菜单“文件 → 打开项目”），再打开 `map.tmj`。
+1. 用 Tiled 打开 `config/btdemo.tiled-project`（菜单“文件 → 打开项目”），再打开 `maps/` 里要改的地图。
    项目文件里定义了每种物件的“类”（class）和它们的属性 `s`、`v`、`flip`，选对象时可以直接下拉选。
 2. 改完保存（Ctrl+S），重启服务端（`start.bat` 或 `go run ./cmd/server`），刷新浏览器。
 3. 服务端启动时会检查地图，写错了会直接报出是哪个对象、哪里不对，不会带着错误地图跑起来。
@@ -19,13 +22,14 @@
 
 ## 文件结构
 
-地图尺寸 = 格子数 × 格子边长（现在是 75×50 格、每格 32 像素，即 2400×1600），**必须和 `world.yaml` 的 `map` 一致**，否则服务端拒绝启动。地图里没有图块层，全是对象图层：
+地图尺寸 = 格子数 × 格子边长（现在两张都是 40×50 格、每格 32 像素，即 1280×1600），场景的大小就按地图来（旧的单场景方式下必须和 `world.yaml` 的 `map` 一致）。地图里没有图块层，全是对象图层：
 
 | 图层 | 对象 | 谁用 | 含义 |
 | --- | --- | --- | --- |
 | `zones` | 点 | 前端 | 区域中心。名字是区域种类：`village` 圣所广场、`meadow` 极乐草地、`forest` 柏树林、`graveyard` 墓地（雾和亡魂）、`camp` 塔尔塔罗斯营地（岩浆和火星）。同一种可以放多处 |
 | `roads` | 折线 | 前端 | 石板路，沿折线铺 |
 | `props` | 点 / 两点折线 | 前后端 | 场景物件，见下 |
+| `portals` | 点 | 前后端 | 传送门（类 `portal`）：属性 `to` 是去的场景 id，`r` 是半径（默认 36）。玩家站进去 0.6 秒就被送过去，落在那边通回来的门外面 |
 
 ### props 图层
 
@@ -58,7 +62,7 @@
 ## 加一种新物件
 
 1. 前端 `scenery.ts` 的 `KINDS` 加画法（尺寸、脚底偏移、绘制函数）。
-2. `map.tmj` 加地图属性 `shape.新种类`。
+2. 场景地图（`config/maps/*.tmj`）加地图属性 `shape.新种类`。
 3. `btdemo.tiled-project` 加同名的类（在 Tiled 的“视图 → 自定义类型编辑器”里加，带 `s`、`v`、`flip` 三个成员），以后在 Tiled 里就能直接选。
 4. 在 `props` 图层里摆放。
 
@@ -66,10 +70,10 @@
 
 | 位置 | 做什么 |
 | --- | --- |
-| `internal/config/layout.go` | 解析 map.tmj：`shape.*` 属性 → `Layout.Shapes`，`props` 图层 → `Layout.Props`；检查数值、种类、墙的折线 |
+| `internal/config/layout.go` | 解析场景地图：`shape.*` 属性 → `Layout.Shapes`，`props` 图层 → `Layout.Props`；检查数值、种类、墙的折线 |
 | `internal/config/config.go` | 检查地图尺寸和 `world.yaml` 一致、物件都在地图内 |
 | `internal/game/nav` | `ShapesFromLayout` 把物件换算成碰撞体 |
-| `internal/server/server.go` | 在 `/map.tmj` 原样提供文件 |
+| `internal/server/server.go` | 在 `/maps/<文件名>` 原样提供各场景的地图（`/map.tmj` 是默认场景的） |
 | `web/src/game/map.ts` | 下载并解析地图（和服务端同样的规则） |
 | `web/src/game/sync.ts` | 收到 `welcome` 后下载地图、建场景（内容没变就不重画） |
 | `web/src/render/scenery.ts` | 按区域画地表、按物件画场景 |

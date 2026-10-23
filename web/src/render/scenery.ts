@@ -3,7 +3,7 @@
 // depth-sorts together with the characters, plus the light sources that the
 // lighting pass carves out of the dark.
 //
-// 地表按地图（config/map.tmj）里的区域画，区域位置和 config/monsters.yaml 的刷怪点对应：
+// 地表按地图（config/maps/*.tmj）里的区域画，区域位置和 config/scenes.yaml 的刷怪点对应：
 //   village   -> a Greek sanctuary: marble plaza with a meander border,
 //                columns, braziers, terracotta houses and amphorae
 //   meadow    -> Elysian fields: warm grass and glowing asphodels
@@ -106,7 +106,7 @@ export function createScenery(mapW: number, mapH: number, map: MapData | null, s
   ROADS = map?.roads || [];
   LAVA = makeLava();
   const unknown = new Set((map?.props || []).filter((p) => !kindDef(p)).map((p) => p.kind));
-  if (unknown.size) console.error(`map.tmj 里的物件种类前端不会画：${[...unknown].join(', ')}（加美术图，或在 scenery.ts 的 KINDS 里加画法）`);
+  if (unknown.size) console.error(`地图里的物件种类前端不会画：${[...unknown].join(', ')}（加美术图，或在 scenery.ts 的 KINDS 里加画法）`);
   const blocking = (map?.props || []).filter((p) => kindDef(p));
   const of = (kind) => blocking.filter((p) => p.kind === kind);
   const tombs = of('tomb');

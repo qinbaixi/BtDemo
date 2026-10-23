@@ -20,7 +20,7 @@
 | 构建 | Vite（开发热更新，`npm run build` 输出到 `web/dist`） | |
 | 协议 | protobufjs：`npm run proto` 从 `proto/btdemo.proto` 生成 `src/net/pb.js` 和类型 | |
 | 渲染 | PixiJS 8（WebGL）：地表、物件、角色、光照；描边和轮廓光是着色器。技能特效暂时用 Canvas 2D 画（开后期处理时交给 Pixi 以便发光），头顶文字画在叠加的 2D 画布上 | 特效改成 Pixi 粒子；模型换成美术贴图 / Spine |
-| 地图 | （旧）服务端 `config/map.yaml` 下发物件 | Tiled 编辑器（`config/map.tmj`），前后端读同一份（已完成，见 [地图](map.md)） |
+| 地图 | （旧）服务端 `config/map.yaml` 下发物件 | Tiled 编辑器（`config/maps/*.tmj`，每个场景一张），前后端读同一份（已完成，见 [地图](map.md)） |
 | 界面 | DOM（HUD、调试面板） | 保持 DOM |
 
 选型理由：Pixi 只管渲染、不带游戏逻辑，适合“服务端权威、客户端只做表现”的结构；2D 性能好，描边光照可以写成着色器；Spine 骨骼动画有官方运行时。
@@ -48,7 +48,7 @@ web/
       math.ts           clamp、lerp、hypot、fmt
       state.ts          State 和 ClientEntity 类型、全局 state、插值 posOf、头顶位置 headY
       sync.ts           处理 Frame 里的 welcome / enter / leave / state / event / self / zones / ai / toast 等消息；welcome 后下载地图建场景
-      map.ts            下载并解析 /map.tmj（Tiled 地图，和服务端读同一份）
+      map.ts            下载并解析所在场景的地图（/maps/*.tmj）（Tiled 地图，和服务端读同一份）
       events.ts         事件 → 动画、特效、飘字
     render/
       world.ts          Pixi 舞台和一帧的绘制：镜头、地面标记、角色、光照
@@ -282,6 +282,6 @@ npm run build         # 生成协议代码 + 类型检查 + 输出 web/dist
 - 新技能特效：`render/fx.ts` 的 `cast()` 按 `fx` 字段分支。护盾泡泡是常驻效果，由 `game/state.ts` 的 `fxAuras()` 每帧列出带护盾的实体，`fx.shieldAuras()` 画。
 - 新 Buff 外观：服务端 `internal/config` 的 `Looks` 加一个位，`game/config.ts` 加 `LOOK_*` 常量，`render/fx.ts` 的 `looks()` 冒粒子，需要的话在 `lookGlows()` 或 `world.ts` 的 `tint` 里加效果。
 - 鼠标操作在 `input.ts`：左键普攻（1 号技能，冷却中或身边没怪时不发请求，按住连续打），右键按住发 `block`。
-- 新场景物件：`render/scenery.ts` 的 `KINDS`，同时在 `config/map.tmj` 加碰撞形状并摆放（见 [地图](map.md#加一种新物件)）。
+- 新场景物件：`render/scenery.ts` 的 `KINDS`，同时在 这个场景的 `config/maps/*.tmj` 加碰撞形状并摆放（见 [地图](map.md#加一种新物件)）。
 - 新 HUD 元素：`index.html` 加元素，`ui/hud.ts` 取元素并刷新。
 - 新事件：`net/types.ts` 的 `EventKind`、`protocol.ts` 的 `EVENT_KIND`，再在 `game/events.ts` 处理。

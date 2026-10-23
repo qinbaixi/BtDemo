@@ -81,15 +81,8 @@ func (sys *System) Attach(link *Link, token string) *Session {
 	if token == "" || session == nil {
 		return sys.Join(link)
 	}
-	if session.link != nil {
-		session.link.Close() // 同一个角色又连了一条：旧连接作废
-	}
-	session.link = link
-	session.lag = lagMeter{}
 	log.Printf("player %d: reconnected, sending full state", session.Player.ID)
-	sys.sendFull(session)
-	sys.publishGear(true)
-	sys.flushFrame(session)
+	sys.Reattach(session, link)
 	return session
 }
 

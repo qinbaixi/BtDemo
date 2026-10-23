@@ -39,7 +39,7 @@ cmd/server/          入口
 bt/                  owl-bt 项目：owl-bt.json（游戏节点类型）+ trees/*.json（行为树），用 BtTree 编辑器打开
 internal/ai/trees/   BtTree 导出的 Go 文件（DO NOT EDIT）与 go generate 生成的 registry.go
 internal/bt/         行为树运行时：解释导出的 map[int]map[string]any
-internal/game/       World：创建各系统并按顺序驱动 Step（每个系统一个包）
+internal/game/       Scene（一个场景的一条线：创建各系统并按顺序驱动 Step，每个系统一个包）、Manager（场景和分线）、迁移
   core/              共享数据：Entity（按组件分组）、实体表、时钟、事件队列
   aoi/               九宫格 AOI
   attr/              属性公式、经验与升级
@@ -51,7 +51,7 @@ internal/game/       World：创建各系统并按顺序驱动 Step（每个系�
   session/           连接会话、输入、AOI 同步与协议转换
 internal/config/     YAML 配置加载与校验
 internal/server/     HTTP 与 WebSocket
-config/              world.yaml（地图、AOI、阵营、玩家）、skills.yaml、monsters.yaml、map.tmj（Tiled 地图：场景物件与碰撞）
+config/              world.yaml（AOI、阵营、玩家）、scenes.yaml（场景、分线、刷怪）、skills.yaml、monsters.yaml、maps/*.tmj（各场景的 Tiled 地图：物件、碰撞、传送门）
 proto/btdemo.proto   客户端与服务端协议（proto2）
 internal/pb/         protoc 生成的 Go 代码
 web/                 前端（TypeScript + Vite，构建到 web/dist 后由 go:embed 打进二进制），见 docs/modules/frontend.md
@@ -110,17 +110,22 @@ tools/btregistry/    扫描导出文件生成 registry.go
 
 ## 地图碰撞与寻路
 
-`config/map.tmj` 是地图的唯一数据源，用 [Tiled](https://www.mapeditor.org) 编辑（打开 `config/btdemo.tiled-project`）：
+`config/maps/` 下每个场景一张地图（`village.tmj` 晨曦村、`graveyard.tmj` 亡者墓园），是地图的唯一数据源，用 [Tiled](https://www.mapeditor.org) 编辑（打开 `config/btdemo.tiled-project`）：
 
 - `props` 图层摆物件（对象的类是物件种类，属性 `s` 缩放、`v` 外观变体、`flip` 翻转；两点折线是墙）；
 - 地图属性 `shape.<种类>` 给出每种物件的碰撞形状（`circle cx cy r`、`rect x0 y0 x1 y1`、墙用的 `capsule r`，`none` 表示只是装饰）；
-- `zones`、`roads` 图层决定前端怎么画地表（各区域的位置、石板路）。
+- `zones`、`roads` 图层决定前端怎么画地表（各区域的位置、石板路）；
+- `portals` 图层放传送门（类 `portal`，属性 `to` 目标场景、`r` 半径）。
 
-服务端启动时读它、校验，转成 `internal/game/nav` 的碰撞体；浏览器从 `/map.tmj` 下载同一个文件来画场景，两边看到的阻挡一致。格式和编辑方法见 [docs/modules/map.md](docs/modules/map.md)。
+服务端启动时读它、校验，转成 `internal/game/nav` 的碰撞体；浏览器从 `/maps/<文件名>` 下载同一个文件来画场景，两边看到的阻挡一致。格式和编辑方法见 [docs/modules/map.md](docs/modules/map.md)。
 
 - 移动：玩家和怪物按自身半径与碰撞体做推出，贴着墙会沿墙滑动而不是卡住；出生、复活、游荡和逃跑的落点都会挪到最近的空地。
 - 寻路：怪物追击时先做视线检测，看得见就直走；被挡住时在 16px 网格上跑 A*（按单位半径分档膨胀障碍，八方向、不切墙角），再把路径拉直。目标移动超过 24px、每隔 0.75 秒、或卡住 0.4 秒都会重新规划；目标走不到时走到离它最近的可达点。
 - 调试：按 `G` 用红色描出所有碰撞体；在调试面板里选中一个怪物，会用青色虚线画出它当前的寻路路线。
+
+## 场景与分线
+
+`config/scenes.yaml` 定义场景（现在是晨曦村和亡者墓园，用传送门连起来）。每个场景可以同时开好几条线，每条线是一个独立的世界，跑在自己的 goroutine 上，所以服务器能用上多个核。人多时自动开新线，多出来的线空了一段时间自动关掉；按 `N` 打开线路面板可以换线（战斗中不行），换线、换场景都不用重连。`/debug/scenes` 列出每条线的人数和 tick 耗时。详见 [docs/modules/scene.md](docs/modules/scene.md)。
 
 ## AOI
 

@@ -2,10 +2,7 @@
 # 启动参数 -addr 会覆盖这里的设置。
 addr: ":8090"
 
-# 地图与 AOI
-map:
-  width: 2400
-  height: 1600
+# AOI（地图、刷怪、回血区、出生点在 scenes.yaml 里，每个场景一份）
 aoi:
   cell: 320          # 九宫格格子边长（像素）；玩家只能看到自己所在格子及周围 8 格内的实体
 tick_rate: 20        # 世界逻辑帧率（每秒）
@@ -24,7 +21,6 @@ hostile:
 # 玩家模板：每个连接创建一个新角色
 player:
   name_prefix: 勇者
-  spawn: { x: 520, y: 800, spread: 60 }
   level: 1
   respawn: 3
   block: { reduce: 0.8, speed: 0.5 }   # 按住右键格挡（只有 can_block 的职业能格挡）：受到的伤害减少 80%，移动速度减半，不能放技能
@@ -74,8 +70,6 @@ player:
 
 # 常驻回血区：站在里面的友方（和 faction 互不敌对的阵营）每隔 interval 秒回复 最大生命 × heal
 #   look: 客户端画法 spring 泉水 | rune 法阵
-heal_zones:
-  - { name: 生命之泉, x: 520, y: 800, radius: 130, heal: 0.05, interval: 1, faction: player, look: spring, color: "#7dffc4" }
 
 # 装备掉落：怪物死亡时按概率给击杀者（打出致命一击的玩家）一件装备，直接进背包（背包满了就不给）
 #   chance: 普通怪掉落概率；bosses: 单独配置概率的怪物（模板 id: 概率）

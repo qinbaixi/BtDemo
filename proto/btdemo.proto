@@ -25,7 +25,21 @@ message ClientMsg {
     SetSkin skin = 9;
     SetPet pet = 10;
     Hello hello = 11;
+    Lines lines = 12;
+    SwitchLine switch_line = 13;
   }
+}
+
+// Lines asks for the lines (running copies) of the player's current scene;
+// answered with LineList.
+message Lines {
+}
+
+// SwitchLine moves the player to another line of the same scene. Allowed
+// only while alive and out of combat; the server answers with Travel and then
+// Welcome{resumed} from the new line, or a Toast when refused.
+message SwitchLine {
+  required int32 line = 1;
 }
 
 // Hello is the first frame of a connection. token empty (or unknown, or
@@ -128,7 +142,29 @@ message ServerMsg {
     SkillBar skill_bar = 6;
     Inventory inventory = 7;
     PetStatus pet_status = 8;
+    LineList lines = 14;     // answer to ClientMsg.lines
+    Travel travel = 15;      // the player is leaving for another scene or line; Welcome follows
   }
+}
+
+// LineList is every line of the player's current scene.
+message LineList {
+  required string scene = 1;    // SceneInfo.id
+  required int32 current = 2;   // the player's line
+  repeated LineInfo lines = 3;  // in line order
+}
+
+message LineInfo {
+  required int32 line = 1;
+  required int32 players = 2;
+  required int32 soft = 3;      // more players than this = busy (new players go elsewhere)
+  required int32 hard = 4;      // full: nobody else can join
+}
+
+// Travel says the player left the scene: show a loading screen until the
+// next Welcome (resumed, with the new SceneInfo).
+message Travel {
+  required string scene = 1;    // name of the scene being entered (SceneInfo.name)
 }
 
 // PetStatus is sent to the owner when the pet is summoned, dismissed, dies or respawns.
@@ -241,6 +277,25 @@ message Welcome {
   // behind): drop every entity and expect Enter for all again; keep the
   // player's own choices (no join picker).
   optional bool resumed = 15;
+  optional SceneInfo scene = 16;      // the scene and line the player is in
+}
+
+// SceneInfo is the scene the player is in. map_w / map_h in Welcome are its size.
+message SceneInfo {
+  required string id = 1;
+  required string name = 2;
+  required int32 line = 3;
+  required string map = 4;            // URL of the scene's Tiled map (props, ground zones, roads)
+  repeated PortalInfo portals = 5;
+}
+
+// PortalInfo is a gate to another scene: stand in it for a moment to travel.
+message PortalInfo {
+  required float x = 1;
+  required float y = 2;
+  required float r = 3;
+  required string to = 4;             // SceneInfo.id of the scene it leads to
+  required string to_name = 5;        // and its name
 }
 
 enum ObstacleShape {

@@ -26,15 +26,15 @@ func TestWebSocketProtocol(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	world, err := game.NewWorld(cfg, 1)
+	manager, err := game.NewManager(cfg, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go world.Run(ctx)
+	go manager.Run(ctx)
 
-	srv := httptest.NewServer(Handler(world, fstest.MapFS{"index.html": {Data: []byte("x")}}))
+	srv := httptest.NewServer(Handler(manager, fstest.MapFS{"index.html": {Data: []byte("x")}}))
 	defer srv.Close()
 
 	// 浏览器读到的地图和服务端加载的是同一份
@@ -137,14 +137,14 @@ func TestWebSocketReconnect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	world, err := game.NewWorld(cfg, 1)
+	manager, err := game.NewManager(cfg, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go world.Run(ctx)
-	srv := httptest.NewServer(Handler(world, fstest.MapFS{}))
+	go manager.Run(ctx)
+	srv := httptest.NewServer(Handler(manager, fstest.MapFS{}))
 	defer srv.Close()
 	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
 
@@ -195,14 +195,14 @@ func TestFirstFrameMustBeHello(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	world, err := game.NewWorld(cfg, 1)
+	manager, err := game.NewManager(cfg, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go world.Run(ctx)
-	srv := httptest.NewServer(Handler(world, fstest.MapFS{}))
+	go manager.Run(ctx)
+	srv := httptest.NewServer(Handler(manager, fstest.MapFS{}))
 	defer srv.Close()
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/ws", nil)
 	if err != nil {

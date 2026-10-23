@@ -22,6 +22,7 @@ type Layout struct {
 	Width, Height float64          // 地图像素尺寸（格子数 × 格子边长），必须和 world.yaml 一致
 	Shapes        map[string]Shape // 物件种类 -> 碰撞形状
 	Props         []Prop
+	Portals       []Portal
 	Source        []byte // map.tmj 原文，原样提供给浏览器
 }
 
@@ -45,6 +46,18 @@ type Prop struct {
 	DY      float64
 }
 
+// Portal 是地图上通往另一个场景的传送门（portals 图层的点对象，类为 portal）。
+// 玩家站进半径 Radius 的圆里一会儿就被送到场景 To，落在那个场景里通回来的传送门旁边。
+type Portal struct {
+	Name   string
+	To     string // 目标场景 id（scenes.yaml）
+	X, Y   float64
+	Radius float64
+}
+
+// DefaultPortalRadius 是传送门不写 r 属性时的半径。
+const DefaultPortalRadius = 36.0
+
 // tmjMap 是 Tiled JSON 地图格式里我们用到的字段。
 type tmjMap struct {
 	Orientation string     `json:"orientation"`
@@ -66,6 +79,7 @@ type tmjLayer struct {
 
 type tmjObject struct {
 	ID         int       `json:"id"`
+	Name       string    `json:"name"`
 	Type       string    `json:"type"`
 	Class      string    `json:"class"` // Tiled 1.9 用 class，1.10 起又改回 type
 	X          float64   `json:"x"`
@@ -140,6 +154,15 @@ func parseLayout(data []byte) (Layout, error) {
 		}
 		layout.Shapes[kind] = shape
 	}
+	if portals := findLayer(mapData.Layers, "portals"); portals != nil {
+		for _, obj := range portals.Objects {
+			portal, err := parsePortal(obj)
+			if err != nil {
+				return layout, fmt.Errorf("portals object %d: %w", obj.ID, err)
+			}
+			layout.Portals = append(layout.Portals, portal)
+		}
+	}
 	layer := findLayer(mapData.Layers, "props")
 	if layer == nil {
 		return layout, nil
@@ -181,6 +204,37 @@ func findLayer(layers []tmjLayer, name string) *tmjLayer {
 		}
 	}
 	return nil
+}
+
+// parsePortal 解析一个传送门：点对象，属性 to 是目标场景，r 是半径（默认 DefaultPortalRadius）。
+func parsePortal(obj tmjObject) (Portal, error) {
+	portal := Portal{Name: obj.Name, X: obj.X, Y: obj.Y, Radius: DefaultPortalRadius}
+	if !obj.Point {
+		return portal, errors.New("portal must be a point")
+	}
+	for _, raw := range obj.Properties {
+		var err error
+		switch raw.Name {
+		case "to":
+			err = json.Unmarshal(raw.Value, &portal.To)
+		case "r":
+			err = json.Unmarshal(raw.Value, &portal.Radius)
+		}
+		if err != nil {
+			return portal, fmt.Errorf("property %s: %w", raw.Name, err)
+		}
+	}
+	if portal.To == "" {
+		return portal, errors.New("portal needs a to property (the scene it leads to)")
+	}
+	if !(portal.Radius > 0) || math.IsInf(portal.Radius, 0) ||
+		math.IsNaN(portal.X) || math.IsNaN(portal.Y) {
+		return portal, errors.New("portal needs a positive radius and a finite position")
+	}
+	if portal.Name == "" {
+		portal.Name = "to_" + portal.To
+	}
+	return portal, nil
 }
 
 func parseProp(obj tmjObject) (Prop, error) {

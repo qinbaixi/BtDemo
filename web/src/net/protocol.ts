@@ -148,6 +148,10 @@ export function createProtocol(): Protocol {
           obstacles: (w.obstacles || []).map((o: any): Obstacle => ({ ...o, shape: String(o.shape).toLowerCase() })),
           token: w.token || '',
           resumed: !!w.resumed,
+          scene: w.scene ? {
+            id: w.scene.id, name: w.scene.name, line: w.scene.line, map: w.scene.map,
+            portals: (w.scene.portals || []).map((p: any) => ({ x: p.x, y: p.y, r: p.r, to: p.to, toName: p.toName })),
+          } : null,
         };
       }
       case 'enter': return { t: 'enter', ents: (m.enter.ents || []).map(entity) };
@@ -162,6 +166,11 @@ export function createProtocol(): Protocol {
       case 'inventory': return {
         t: 'inventory', items: (m.inventory.items || []).map(itemSlotted), capacity: m.inventory.capacity || 0,
       };
+      case 'lines': return {
+        t: 'lines', scene: m.lines.scene, current: m.lines.current,
+        lines: (m.lines.lines || []).map((l: any) => ({ line: l.line, players: l.players || 0, soft: l.soft, hard: l.hard })),
+      };
+      case 'travel': return { t: 'travel', scene: m.travel.scene };
       case 'petStatus': return {
         t: 'petStatus', pet: m.petStatus.pet || '', entity: m.petStatus.entity || 0,
         respawnIn: m.petStatus.respawnIn || 0, cooldown: m.petStatus.cooldown || 0,
@@ -187,6 +196,8 @@ export function createProtocol(): Protocol {
       case 'unequip': body = { unequip: { slot: o.slot } }; break;
       case 'skin': body = { skin: { skin: o.skin || '' } }; break;
       case 'pet': body = { pet: { pet: o.pet || '' } }; break;
+      case 'lines': body = { lines: {} }; break;
+      case 'switchLine': body = { switchLine: { line: o.line } }; break;
       default: return null;
     }
     const data = btdemo.ClientMsg.encode(btdemo.ClientMsg.create(body)).finish();

@@ -10,9 +10,10 @@
 
 | 模块 | 文档 | 一句话 |
 | --- | --- | --- |
+| `internal/game`（Scene、Manager） | [场景与分线](modules/scene.md) | 多个场景各自一个 goroutine、分线、换场景 / 换线的迁移、传送门 |
 | `internal/game/core` | [core：共享数据](modules/core.md) | 实体、组件、实体表、时钟、事件队列，只有数据没有规则 |
 | `internal/game/aoi` | [aoi：九宫格视野](modules/aoi.md) | 谁能看见谁、范围查询 |
-| `config/map.tmj` | [地图：Tiled 编辑与格式](modules/map.md) | 地图文件格式、怎么在 Tiled 里编辑、加新物件 |
+| `config/maps/*.tmj` | [地图：Tiled 编辑与格式](modules/map.md) | 地图文件格式、怎么在 Tiled 里编辑、加新物件 |
 | `internal/game/nav` + `move` | [nav 和 move：碰撞、寻路、移动](modules/nav-move.md) | 地图阻挡、推出滑动、A* 寻路、沿路径走 |
 | `internal/game/attr` + `combat` | [attr 和 combat：属性与战斗](modules/attr-combat.md) | 属性公式、升级、技能、伤害、Buff、死亡 |
 | `internal/bt` + `internal/game/ai` | [bt 和 ai：行为树](modules/ai-bt.md) | 解释 BtTree 导出的树，把节点绑定到游戏代码 |
@@ -28,7 +29,7 @@
 ## 一张图看懂
 
 ```text
-浏览器 ──WebSocket(protobuf)──► internal/server ──Do(func)──► World 的 goroutine
+浏览器 ──WebSocket(protobuf)──► internal/server ──► Manager ──Do(func)──► 角色所在那条线（Scene）的 goroutine
                                                                    │ 每 50ms 一帧 Step()
                                                                    ▼
         Spawn.Tick → Combat.Tick → Move.Tick → AI.Tick → (每 2 帧) Sessions.Flush
@@ -38,6 +39,6 @@
 浏览器 ◄──────────── enter / leave / sync / toast ─────────────────┘
 ```
 
-- 整个游戏世界只在一个 goroutine 里运行，所以游戏代码里没有锁。
+- 每个场景的每条线（Scene）只在自己的 goroutine 里运行，场景之间不共享可变数据，所以游戏代码里没有锁；Manager 负责分线和玩家换场景（见 [场景与分线](modules/scene.md)）。
 - 每个系统是一个独立的包，彼此通过 `core.State` 共享数据，通过构造时传入的指针调用对方。
 - 配置（`config/*.yaml`）和行为树（`bt/` 导出的 Go）在启动时加载并校验，出错直接启动失败并指出位置。

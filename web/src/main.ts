@@ -25,6 +25,7 @@ import {
 } from './ui/hud';
 import { initBag } from './ui/bag';
 import { initPicker } from './ui/picker';
+import { initLines } from './ui/lines';
 
 declare global {
   interface Window { btdemo: { state: typeof state; debug?: typeof debug; bake?: () => Promise<unknown> } }
@@ -96,6 +97,7 @@ async function init(): Promise<void> {
   initHud(castSlot);
   initPicker(conn.send);
   initBag(conn.send);
+  initLines(conn.send);
   await loadArt();   // 美术资源要在建场景、建角色之前就绪
   await initWorld(canvas, document.getElementById('overlay') as HTMLCanvasElement);
   state.fx = new FX(fxResolve, fxAuras);

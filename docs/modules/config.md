@@ -10,11 +10,12 @@
 
 | 文件 | Go 类型 | 内容 |
 | --- | --- | --- |
-| `world.yaml` | `World` | `addr` 监听地址、`map` 尺寸、`aoi.cell`、`tick_rate`、`sync_rate`、`hostile` 阵营敌对表、`player` 玩家模板（公共字段 + `classes` 职业列表）、`loot` 装备掉落 |
+| `scenes.yaml` | `Scenes` | 场景模板：每个场景的地图、出生点、刷怪点、回血区，分线规则（见 [场景与分线](scene.md)）。每个场景有一份自己的 `Config`（`Scene.Cfg`）：和全局配置共用技能、模板、物品，地图、刷怪、回血区、出生点换成这个场景的 |
+| `world.yaml` | `World` | `addr` 监听地址、`aoi.cell`、`tick_rate`、`sync_rate`、`hostile` 阵营敌对表、`player` 玩家模板（公共字段 + `classes` 职业列表）、`loot` 装备掉落 |
 | `skills.yaml` | `map[string]*Skill` | 技能，key 是技能 id |
-| `monsters.yaml` | `map[string]*Template` + `[]Spawn` | 怪物 / NPC 模板和刷怪点 |
+| `monsters.yaml` | `map[string]*Template` | 怪物 / NPC 模板（刷怪点在 `scenes.yaml` 里） |
 | `items.yaml` | `[]*Item` | 装备，按文件里的顺序（`Config.Item(id)` 按 id 查），详见 [item](items.md) |
-| `map.tmj` | `Layout` | Tiled 地图：物件摆放和碰撞形状（JSON，不是 YAML；详见 [地图](map.md)） |
+| `maps/*.tmj` | `Layout` | Tiled 地图：物件摆放、碰撞形状、传送门（JSON，不是 YAML；详见 [地图](map.md)） |
 
 YAML 字段和 Go 字段的对应写在结构体标签里，例如：
 
@@ -34,7 +35,7 @@ type Skill struct {
 cfg, err := config.Load("config", game.TreeNames())
 ```
 
-1. 读四个 YAML 和 `map.tmj`（`map.tmj` 缺失时视为空地图）。
+1. 读 YAML、`scenes.yaml` 和每个场景的地图。没有 `scenes.yaml` 时按旧的单场景方式：读 `map.tmj`（缺失时视为空地图）、`monsters.yaml` 的 `spawns`、`world.yaml` 的 `map`、`heal_zones` 和 `player.spawn`。有 `scenes.yaml` 时 `Config` 顶层的 `Layout`、`Spawns`、`World.HealZones`、`World.Player.Spawn`、`World.Map` 是默认场景的。
 2. `validate` 补默认值并检查：
    - 地图尺寸、AOI 格子为正；`tick_rate` 默认 20、`sync_rate` 默认 10、`addr` 默认 `:8080`（只写端口时补冒号）。
    - 敌对表里引用的阵营都存在，且必须有 `player`。
@@ -48,7 +49,7 @@ cfg, err := config.Load("config", game.TreeNames())
    - `items.yaml`：`id`、`name` 都有且 `id` 不重复；`slot` 是 weapon、armor、trinket 之一；`class` 为空或是已有职业；`rarity` 是 common、rare、epic 之一；`stats` 的名字在 `config.StatNames` 里（换算成 `Item.Bonus`）；`effect` 的 `kind` 已知且参数齐（概率在 (0, 1]，比例、时长为正，chill 的 `speed` 在 -1 和 0 之间；chill 的减速 Buff 在这里生成）。
    - `player.bag` 默认 24；`player.starter` 和职业的 `starter` 里的物品存在，职业的还要本职业能用。
    - `loot`：`chance`、`bosses` 的概率、`class_bias` 在 0..1，`bosses` 的模板存在，`rarity` 的 key 是已知稀有度、权重不为负且有物品时至少一个为正。
-   - `map.tmj` 的尺寸和 `world.yaml` 的 `map` 一致，地图物件都在地图范围内。
+   - 每个场景（`validateScenes`）：地图物件都在地图范围内、刷怪点的模板存在、回血区合法；传送门在地图内、`to` 是别的已有场景；分线规则补默认值（soft 40、hard 60、min 1、idle_close 120），`hard` 不小于 `soft`。
 3. `loadLayout` 检查 `map.tmj`：每个 `shape.*` 属性格式正确、数值合法；`props` 里每个物件的种类都有 `shape.*`（`none` 表示不挡路的装饰）；缩放为正；物件是点或两点折线，墙必须是折线；不允许 NaN、无穷大。
 
 还有一项检查放在 ai 包里，因为它需要行为树：模板的技能数量要覆盖树里 `cast_skill` 用到的所有槽位。

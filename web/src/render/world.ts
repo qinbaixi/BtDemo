@@ -2,7 +2,7 @@
 //
 // 显示层次（从下到上）：
 //   scene        整个画面，高画质时加后期处理（扭曲 + 泛光 + 区域调色，见 pixi/postFilter.ts）
-//     world      跟随镜头：地表 → 回血区（render/zones.ts）→ 地面标记（AOI、射程、目标圈）→ 地面特效 → 角色和物件（按脚底 y 排序）
+//     world      跟随镜头：地表 → 回血区（render/zones.ts）、传送门（render/portals.ts）→ 地面标记（AOI、射程、目标圈）→ 地面特效 → 角色和物件（按脚底 y 排序）
 //     darkness   光照的暗色层（屏幕空间）
 //     glow       光源的彩色叠加（跟随镜头）
 //     fx         技能特效和环境粒子：刀光和尾迹是 GPU 丝带（pixi/trail.ts），粒子和光晕是 GPU 精灵
@@ -25,6 +25,7 @@ import { PostFilter, type Distort } from './pixi/postFilter';
 import { SceneView, type Mover } from './pixi/sceneView';
 import { SpriteCtx } from './pixi/spriteCtx';
 import { RibbonPool } from './pixi/trail';
+import { PortalLayer, portalLights } from './portals';
 import { pruneZones, ZoneLayer, zoneLights } from './zones';
 
 let app: Application;
@@ -39,6 +40,7 @@ let sparkFx: SpriteCtx;        // 粒子、光晕、环境粒子：GPU 精灵
 let trails: RibbonPool;        // 刀光、风刃、弹道尾迹：GPU 丝带
 let groundLayer: Container;
 let zoneLayer: ZoneLayer;      // 回血区：出生点泉水、技能法阵
+let portalLayer: PortalLayer;  // 通往别的场景的传送门
 let marks: Graphics;           // 地面标记
 let targetRing: Container;     // 目标脚下的旋转圈
 let targetRingArcs: Graphics;
@@ -90,6 +92,7 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
   xrayLayer = new RenderLayer();
   const zoneContainer = new Container();
   zoneLayer = new ZoneLayer(zoneContainer);
+  portalLayer = new PortalLayer(zoneContainer);
   world.addChild(groundLayer, zoneContainer, marks, targetRing, underFx, depth);
 
   const darkness = new Container();
@@ -180,6 +183,9 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
   state.zones = pruneZones(state.zones, now);
   zoneLayer.update(state.zones, now, view, state.dpr);
   zoneLayer.motes(state.fx, state.zones, now, dt, view);
+  const portals = state.scene?.portals ?? [];
+  portalLayer.update(portals, now, view, state.dpr);
+  portalLayer.motes(state.fx, portals, now, dt, view);
   drawMarks(mp, now);
   drawUnderFx(now);
   // 先收集光源：角色要知道附近最亮的光在哪
@@ -512,6 +518,7 @@ function updateLights(now: number, mp: Point | null, shake: Point): void {
     if (state.scenery) state.scenery.lights(L.add, state.cam, now);
     state.fx.lights(L.add, now);
     zoneLights(L.add, state.zones, now);
+    portalLights(L.add, state.scene?.portals ?? [], now);
   }
   // 光照跟着世界走，屏幕震动也算进去
   const c = state.cam;

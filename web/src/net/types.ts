@@ -259,7 +259,20 @@ export interface WelcomeMsg {
   pets: PetInfo[];        // 可以带的宠物，第一个是默认
   token: string;          // 断线重连时交回服务端，接着用这个角色
   resumed: boolean;       // true：还是原来的角色（重连或跟不上后的全量），清掉实体等 Enter 重发，保留玩家自己的选择
+  scene: SceneInfo | null;   // 所在的场景和线（单场景的服务端不发）
 }
+
+// PortalInfo 是一扇通往别的场景的传送门：站进去一会儿就出发。
+export interface PortalInfo { x: number; y: number; r: number; to: string; toName: string }
+
+// SceneInfo 是玩家所在的场景：哪个场景、第几线、地图文件地址、传送门。
+export interface SceneInfo { id: string; name: string; line: number; map: string; portals: PortalInfo[] }
+
+// LineInfo 是场景的一条线：人数，以及“拥挤”（soft）和“满”（hard）的人数。
+export interface LineInfo { line: number; players: number; soft: number; hard: number }
+export interface LinesMsg { t: 'lines'; scene: string; current: number; lines: LineInfo[] }
+// TravelMsg：玩家正在前往 scene（显示名），显示过场，等下一个 welcome。
+export interface TravelMsg { t: 'travel'; scene: string }
 export interface EnterMsg { t: 'enter'; ents: EntityInfo[] }
 export interface LeaveMsg { t: 'leave'; ids: number[] }
 export interface StateMsg { t: 'state'; state: EntityState }
@@ -281,7 +294,7 @@ export interface InventoryMsg { t: 'inventory'; items: ItemSlotted[]; capacity: 
 // respawnIn 是死后还有几秒复活（0 = 不在复活中）；cooldown 是换宠物的冷却还剩几秒（0 = 没有冷却）。
 export interface PetStatusMsg { t: 'petStatus'; pet: string; entity: number; respawnIn: number; cooldown: number }
 
-export type ServerMessage = WelcomeMsg | EnterMsg | LeaveMsg | StateMsg | EventMsg | SelfMsg | ZonesMsg | AiMsg | ToastMsg | SkillBarMsg | InventoryMsg | PetStatusMsg;
+export type ServerMessage = WelcomeMsg | EnterMsg | LeaveMsg | StateMsg | EventMsg | SelfMsg | ZonesMsg | AiMsg | ToastMsg | SkillBarMsg | InventoryMsg | PetStatusMsg | LinesMsg | TravelMsg;
 
 export type ClientMessage =
   | { t: 'move'; dx: number; dy: number }
@@ -293,4 +306,6 @@ export type ClientMessage =
   | { t: 'equip'; uid: number }      // 穿上背包里的一件（ItemSlotted.uid）
   | { t: 'unequip'; slot: string }   // 把这个槽位的卸回背包
   | { t: 'skin'; skin: string }     // 换当前职业的外观（空 = 默认）
-  | { t: 'pet'; pet: string };      // 换宠物（空 = 收回）
+  | { t: 'pet'; pet: string }       // 换宠物（空 = 收回）
+  | { t: 'lines' }                  // 要这个场景的线路列表（回 lines）
+  | { t: 'switchLine'; line: number };   // 换到第 line 线（不在战斗中才行）

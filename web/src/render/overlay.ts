@@ -4,6 +4,7 @@
 import { ACT_NAMES, DISPLAY, FONT, NAME_COLOR } from '../game/config';
 import { clamp, fmt } from '../game/math';
 import { headY, posOf, state, type ClientEntity, type Point } from '../game/state';
+import { drawPortalLabels } from './portals';
 
 let ctx: CanvasRenderingContext2D;
 let canvas: HTMLCanvasElement;
@@ -39,6 +40,7 @@ export function drawOverlay(
   if (tgt && mp && tgt.id !== state.myId) drawTargetLink(tgt, mp, now);
   if (state.showAOI) { drawObstacles(); drawAOILabel(mp); }
   if (debugOpen) drawAiPath(now);
+  drawPortalLabels(ctx, state.scene?.portals ?? [], mp, now);
   for (const it of ents) drawLabels(it.e, it.p, now);
   drawBubbles(now);
   drawFloats(now);

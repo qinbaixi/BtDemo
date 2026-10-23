@@ -7,25 +7,28 @@ main goroutine ── http.Server.Serve ──► 每个 WebSocket 连接 2 个 
                                          ├─ 读：收 ClientMsg → session.Inbox.Push(msg)
                                          └─ 写：等 Link.Wake → Link.Take 取走 Frame 字节 → 发给浏览器（另有 5 秒一次的 ping）
 
-world goroutine ── World.Run：每个 tick：执行 Do 排队的命令 → 处理各会话 Inbox → Step()
+manager goroutine ── Manager.Run：启动每条线，每 5 秒关掉空了太久的线
+
+每条线一个 goroutine ── Scene.Run：每个 tick：执行 Do 排队的命令 → 处理各会话 Inbox → Step()
                     每个同步帧：Step 末尾 Sessions.Flush，把攒下的消息按会话合成一个 Frame 推进 Link
+                    （场景模板见 config/scenes.yaml，每个模板可以开好几条线，详见 modules/scene.md）
 ```
 
 入口是 `cmd/server/main.go`，它只做四件事：
 
 1. `config.Load` 读 `config/*.yaml` 并校验（行为树名要存在、技能要存在、阵营要对得上……）。
-2. `game.NewWorld` 创建所有系统、加载行为树、按配置刷出怪物和 NPC。
-3. `go world.Run(ctx)` 在独立的 goroutine 里开始跑世界循环。
+2. `game.NewManager` 给每个场景模板开好常驻的线：每条线创建所有系统、加载行为树、按配置刷出怪物和 NPC。
+3. `go manager.Run(ctx)` 让每条线在自己的 goroutine 里开始跑世界循环。
 4. 启动 HTTP 服务：`/` 是前端静态文件（打包在二进制里），`/ws` 是游戏 WebSocket，`/btdemo.proto` 是协议定义（前端用它解码）。
 
-## 单线程世界：为什么没有锁
+## 单线程场景：为什么没有锁
 
-游戏状态（所有实体、AOI 格子、事件队列……）**只由 world goroutine 读写**。网络层收到消息后不直接改状态，而是：
+一条线的游戏状态（所有实体、AOI 格子、事件队列……）**只由这条线的 goroutine 读写**，别的线和 Manager 从不直接碰。下面说的“世界”都指一条线（`Scene`，测试里也叫 `World`）。网络层收到消息后不直接改状态，而是：
 
 ```go
 // internal/server/server.go
 session.Inbox.Push(msg)                    // 玩家输入：放进这个会话自己的输入队列
-world.Do(func() { world.Attach(link, token) })  // 其他命令（连接、断开）：放进世界的命令队列
+manager.Attach(link, token)                // 连接、断开：Manager 找到角色所在的线，scene.Do 放进那条线的命令队列
 ```
 
 输入和命令队列都是“互斥锁 + 切片”，提交永远不阻塞、也不会因为满了丢掉。`World.Run` 每个 tick 开头先执行命令、再按到达顺序处理每个会话的输入，然后才跑各系统，所以输入总在固定的时机生效。反方向（世界 → 网络）也是同样的做法：每个连接一个 `session.Link`（互斥锁 + 切片，按字节算积压），世界 goroutine 只管 `Push` 编码好的 `Frame`，从不阻塞在网络上；客户端跟不上时清掉积压、改发全量，而不是丢帧或阻塞。
@@ -37,7 +40,7 @@ world.Do(func() { world.Attach(link, token) })  // 其他命令（连接、断�
 - 一帧之内状态是一致的：AI 看到的位置和战斗结算用的位置一定相同。
 - 测试简单：不起服务器、不开 goroutine，直接 `world.Step()` 一帧一帧推进（见 `internal/game/*_test.go`）。
 
-代价是所有逻辑共用一个 CPU 核心；这个 Demo 的规模（几十个实体，一帧约 20µs）远远够用。
+代价是一条线的逻辑共用一个 CPU 核心；人多了靠分线把人分到别的线（别的核）上，见 [场景与分线](modules/scene.md)。
 
 ## 一帧（tick）里发生什么
 

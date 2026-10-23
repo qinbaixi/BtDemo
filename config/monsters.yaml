@@ -81,12 +81,3 @@ templates:
     skills: []
     respawn: 8
     exp: 5
-
-# 刷怪点：在 (x, y) 周围 spread 半径内随机生成 count 个
-spawns:
-  - { template: villager,        x: 520,  y: 760,  count: 4, spread: 140 }
-  - { template: guard,           x: 640,  y: 700,  count: 2, spread: 120 }
-  - { template: slime,           x: 1000, y: 900,  count: 5, spread: 200 }
-  - { template: wolf,            x: 900,  y: 330,  count: 4, spread: 160 }
-  - { template: skeleton_archer, x: 1600, y: 800,  count: 4, spread: 200 }
-  - { template: ogre_chief,      x: 2050, y: 1300, count: 1, spread: 0 }

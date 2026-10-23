@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/rand"
 	"slices"
+	"sync/atomic"
 
 	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/pb"
@@ -22,14 +23,41 @@ type State struct {
 	Zones  Zones
 }
 
-// NewState 创建一个空的世界状态。
+// NewState 创建一个空的世界状态，实体 ID 自己从 1 开始数。
 func NewState(cfg *config.Config, seed int64) *State {
+	return NewSceneState(cfg, seed, &IDSource{}, 0)
+}
+
+// NewSceneState 创建一个场景的世界状态：实体 ID 从所有场景共用的 ids 里分配，
+// 这样玩家换场景后 ID 不变；时钟从 start 秒开始，让各个场景的游戏时间对得上
+// （客户端按帧里的时间换算冷却，换了场景时钟不能跳）。
+func NewSceneState(cfg *config.Config, seed int64, ids *IDSource, start float64) *State {
+	dt := 1 / float64(cfg.World.TickRate)
+	ticks := int(start / dt)
 	return &State{
 		Cfg:   cfg,
 		Rand:  rand.New(rand.NewSource(seed)),
 		Luck:  rand.New(rand.NewSource(seed + 1)),
-		Clock: Clock{Dt: 1 / float64(cfg.World.TickRate)},
-		Ents:  Entities{byID: map[int]*Entity{}},
+		Clock: Clock{Dt: dt, Tick: ticks, Now: float64(ticks) * dt},
+		Ents:  Entities{byID: map[int]*Entity{}, source: ids},
+	}
+}
+
+// IDSource 分配实体 ID。所有场景共用一个，多个 goroutine 同时分配也不会重复。
+type IDSource struct {
+	last atomic.Int64
+}
+
+// Next 返回一个新的 ID。
+func (source *IDSource) Next() int { return int(source.last.Add(1)) }
+
+// Reserve 保证以后分配的 ID 都比 id 大（测试里直接用指定 ID 建实体时用）。
+func (source *IDSource) Reserve(id int) {
+	for {
+		last := source.last.Load()
+		if int64(id) <= last || source.last.CompareAndSwap(last, int64(id)) {
+			return
+		}
 	}
 }
 
@@ -69,15 +97,14 @@ func (clock *Clock) Advance() {
 // Entities 是世界中所有实体的表。
 type Entities struct {
 	byID   map[int]*Entity
-	ids    []int // 已排序，用于保证 Each 的确定性
-	nextID int
+	ids    []int     // 已排序，用于保证 Each 的确定性
+	source *IDSource // 新实体的 ID 从这里分配
 }
 
 // New 创建一个带有新 ID 的实体。在调用 Add 之前，它不在表中。
 func (entities *Entities) New() *Entity {
-	entities.nextID++
 	return &Entity{
-		Identity: Identity{ID: entities.nextID},
+		Identity: Identity{ID: entities.source.Next()},
 		Combat:   Combat{Cooldowns: map[string]float64{}},
 	}
 }
@@ -89,8 +116,11 @@ func (entities *Entities) Add(entity *Entity) {
 		entities.ids = slices.Insert(entities.ids, i, entity.ID)
 	}
 	entities.byID[entity.ID] = entity
-	entities.nextID = max(entities.nextID, entity.ID)
+	entities.source.Reserve(entity.ID)
 }
+
+// Count 是表里的实体数。
+func (entities *Entities) Count() int { return len(entities.ids) }
 
 // Remove 将 entity 从表中移除。
 func (entities *Entities) Remove(entity *Entity) {

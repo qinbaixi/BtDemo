@@ -2,9 +2,11 @@
 package server
 
 import (
+	"encoding/json"
 	"io/fs"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -18,8 +20,9 @@ import (
 
 var upgrader = websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 4096}
 
-// Handler 从 static 目录提供静态文件，在 /map.tmj 提供地图，并在 /ws 提供游戏 socket。
-func Handler(world *game.World, static fs.FS) http.Handler {
+// Handler 从 static 目录提供静态文件，在 /maps/<文件名> 提供各场景的地图（/map.tmj 是默认场景的），
+// 在 /debug/scenes 列出每条线的运行情况，并在 /ws 提供游戏 socket。
+func Handler(manager *game.Manager, static fs.FS) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.FS(static)))
 	mux.HandleFunc("/btdemo.proto", func(w http.ResponseWriter, _ *http.Request) {
@@ -27,22 +30,33 @@ func Handler(world *game.World, static fs.FS) http.Handler {
 		w.Write(btproto.Source)
 	})
 	// 地图文件原样提供给浏览器：前端用它画场景，服务端用同一份做碰撞。
-	mapSrc := world.State.Cfg.Layout.Source
-	mux.HandleFunc("/map.tmj", func(w http.ResponseWriter, r *http.Request) {
-		if mapSrc == nil {
+	serveMap := func(w http.ResponseWriter, r *http.Request, source []byte) {
+		if source == nil {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-cache")
-		w.Write(mapSrc)
+		w.Write(source)
+	}
+	mux.HandleFunc("/map.tmj", func(w http.ResponseWriter, r *http.Request) {
+		serveMap(w, r, manager.DefaultMap())
+	})
+	mux.HandleFunc("/maps/", func(w http.ResponseWriter, r *http.Request) {
+		serveMap(w, r, manager.MapSource(strings.TrimPrefix(r.URL.Path, "/maps/")))
+	})
+	mux.HandleFunc("/debug/scenes", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+		encoder.SetIndent("", "  ")
+		encoder.Encode(manager.Status())
 	})
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return
 		}
-		serve(world, conn)
+		serve(manager, conn)
 	})
 	return mux
 }
@@ -59,7 +73,7 @@ const (
 
 // serve 处理一条连接：先读 Hello，按 token 接回原来的角色或创建新角色，
 // 然后一个写协程负责发送，当前协程负责接收。连接断开时角色保留，等客户端重连。
-func serve(world *game.World, conn *websocket.Conn) {
+func serve(manager *game.Manager, conn *websocket.Conn) {
 	defer conn.Close()
 	conn.SetReadLimit(readLimit)
 	hello, ok := readHello(conn)
@@ -67,18 +81,17 @@ func serve(world *game.World, conn *websocket.Conn) {
 		return
 	}
 	link := session.NewLink()
-	attached := make(chan *game.Session, 1)
-	if !world.Do(func() { attached <- world.Attach(link, hello.GetToken()) }) {
+	client := manager.Attach(link, hello.GetToken())
+	if client == nil {
 		return // 正在停服
 	}
-	client := <-attached
 	playerID := client.Player.ID
 	log.Printf("player %d connected", playerID)
 	defer log.Printf("player %d disconnected", playerID)
 
 	go writeLoop(conn, link)
 	readLoop(conn, client, playerID)
-	world.Do(func() { world.Detach(client, link) })
+	manager.Detach(client, link)
 }
 
 // readHello 读连接的第一帧，它必须是 Hello。

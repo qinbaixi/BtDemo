@@ -39,6 +39,7 @@ func gearWorld(t *testing.T) *World {
 	}
 	cfg.Spawns = nil
 	cfg.World.HealZones = nil
+	cfg.World.Map.Width, cfg.World.Map.Height = 2400, 1600 // 比随附的地图大，测试里的坐标都放得下
 	world, err := newWorld(cfg, 1, nil)
 	if err != nil {
 		t.Fatal(err)

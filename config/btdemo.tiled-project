@@ -488,6 +488,28 @@
                     "value": 0
                 }
             ]
+        },
+        {
+            "id": 20,
+            "name": "portal",
+            "type": "class",
+            "useAs": [
+                "object"
+            ],
+            "color": "#ffb99bff",
+            "drawFill": true,
+            "members": [
+                {
+                    "name": "to",
+                    "type": "string",
+                    "value": ""
+                },
+                {
+                    "name": "r",
+                    "type": "float",
+                    "value": 36
+                }
+            ]
         }
     ]
 }

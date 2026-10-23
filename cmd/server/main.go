@@ -26,7 +26,7 @@ func main() {
 	cfgDir := flag.String(
 		"config",
 		"config",
-		"folder with world.yaml, skills.yaml and monsters.yaml",
+		"folder with world.yaml, scenes.yaml, skills.yaml and monsters.yaml",
 	)
 	open := flag.Bool("open", false, "open the game in the default browser once the server is up")
 	flag.Parse()
@@ -35,17 +35,17 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	world, err := game.NewWorld(cfg, time.Now().UnixNano())
+	manager, err := game.NewManager(cfg, time.Now().UnixNano())
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	worldDone := make(chan struct{})
+	scenesDone := make(chan struct{})
 	go func() {
-		world.Run(ctx)
-		close(worldDone)
+		manager.Run(ctx)
+		close(scenesDone)
 	}()
 
 	addr := cfg.World.Addr
@@ -59,7 +59,7 @@ func main() {
 			addr, filepath.Join(*cfgDir, "world.yaml"), err)
 	}
 	url := "http://" + browserHost(listener.Addr())
-	srv := &http.Server{Handler: server.Handler(world, web.FS)}
+	srv := &http.Server{Handler: server.Handler(manager, web.FS)}
 	go func() {
 		<-ctx.Done()
 		srv.Shutdown(context.Background())
@@ -74,9 +74,9 @@ func main() {
 	if err := srv.Serve(listener); err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
-	// 等世界跑完已接受的命令、给所有连接发出关闭帧再退出（最多等 3 秒）
+	// 等每个场景跑完已接受的命令、给所有连接发出关闭帧再退出（最多等 3 秒）
 	select {
-	case <-worldDone:
+	case <-scenesDone:
 	case <-time.After(3 * time.Second):
 	}
 	time.Sleep(200 * time.Millisecond) // 留一点时间给写协程把关闭帧写出去

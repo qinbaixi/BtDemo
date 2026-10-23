@@ -5,7 +5,7 @@ import type { Aura, FX } from '../render/fx';
 import type { createScenery } from '../render/scenery';
 import type {
   ClassInfo,
-  EntityInfo, EntityKind, EntityState, ItemInfo, ItemSlotted, Obstacle, PetInfo, SelfInfo, SkillInfo, SkinInfo, ZoneInfo,
+  EntityInfo, EntityKind, EntityState, ItemInfo, ItemSlotted, Obstacle, PetInfo, SceneInfo, SelfInfo, SkillInfo, SkinInfo, ZoneInfo,
 } from '../net/types';
 import { ATTACK_MS, KIND_COLOR, LERP_MS, MODEL_H, MODEL_SCALE } from './config';
 import { clamp, lerp } from './math';
@@ -91,11 +91,13 @@ export interface State {
   canBlock: boolean;              // 当前职业能不能格挡（右键）
   pickerOpen: boolean;            // 选技能面板开着（这时不放技能）
   bagOpen: boolean;               // 装备面板开着（这时也不放技能）
+  linesOpen: boolean;             // 线路面板开着
   items: Map<string, ItemInfo>;   // 全部装备种类（welcome 里带的），id -> ItemInfo
   inventory: { items: ItemSlotted[]; capacity: number };   // 自己的背包和身上的装备（服务端 Inventory 整份）
   skins: SkinInfo[];              // 当前职业的外观（从 classes 里取，第一个是默认）
   mySkin: string;                 // 自己现在的外观 id（空 = 默认），以服务端发来的自己的 Enter 为准
   pets: PetInfo[];                // 可以带的宠物（welcome 里带的，第一个是默认）
+  scene: SceneInfo | null;        // 所在的场景和线（welcome 里带的），传送门也在里面
   myPet: string;                  // 自己选的宠物 id（空 = 不带），以服务端 PetStatus 为准
   petEntity: number;              // 自己宠物的实体 id（没在视野或没召唤为 0）
   petRespawnAt: number;           // 宠物复活的时间（performance.now()），0 = 没在复活中
@@ -109,7 +111,7 @@ export interface State {
   hoverSlot: number;
   showAOI: boolean;
   fx: FX | null;
-  scenery: Scenery | null;        // 地表和物件，收到 welcome 后按 /map.tmj 生成
+  scenery: Scenery | null;        // 地表和物件，收到 welcome 后按所在场景的地图生成
   sceneKey: string;
   obstacles: Obstacle[];
   aiPath: { id: number; pts: number[]; at: number } | null;
@@ -171,11 +173,13 @@ export const state: State = {
   canBlock: true,
   pickerOpen: false,
   bagOpen: false,
+  linesOpen: false,
   items: new Map(),
   inventory: { items: [], capacity: 0 },
   skins: [],
   mySkin: '',
   pets: [],
+  scene: null,
   myPet: '',
   petEntity: 0,
   petRespawnAt: 0,
