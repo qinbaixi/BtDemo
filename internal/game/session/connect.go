@@ -66,7 +66,6 @@ func (sys *System) sendFull(session *Session) {
 	welcome := sys.welcome(session)
 	welcome.Resumed = proto.Bool(true)
 	sys.SendTo(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Welcome{Welcome: welcome}})
-	session.visible = map[int]bool{}
 	sys.showAround(session)
 	session.zonesSent = -1
 	session.defSent = ""

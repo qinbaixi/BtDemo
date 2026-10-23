@@ -279,7 +279,7 @@ func TestLoadoutSwitchesClass(t *testing.T) {
 	world.Sessions.Flush()
 	observer := world.Join()
 	world.Sessions.Flush()
-	if !observer.Visible(player.ID) {
+	if !canSee(world, observer, player.ID) {
 		t.Fatal("observer cannot see the player")
 	}
 	readMessages(t, observer)

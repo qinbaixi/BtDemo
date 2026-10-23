@@ -593,7 +593,7 @@ func TestSkinSwitch(t *testing.T) {
 	world.Sessions.Flush()
 	readMessages(t, observer)
 	sendSkin(world, session, "paladin")
-	if !observer.Visible(player.ID) {
+	if !canSee(world, observer, player.ID) {
 		t.Fatal("same skin re-sent Enter")
 	}
 }

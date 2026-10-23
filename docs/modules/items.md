@@ -42,7 +42,7 @@
 item 和 combat 不直接发消息，只在实体上做标记，由 session 的 `publishGear` 统一发：
 
 - `entity.InventoryDirty` → 发一份完整的 `Inventory`（所有物品 + `capacity`）；
-- `entity.LookDirty`（皮肤或武器外观变了）→ 把实体从所有会话的可见集合里删掉，下次 `Flush` 重发 `Enter`（带 `skin`、`gear`），和换职业一样；
+- `entity.LookDirty`（皮肤或武器外观变了）→ 给能看到它的玩家重发 `Enter`（带 `skin`、`gear`），和换职业一样；
 - `entity.Notices` → 每条发一个 `Toast`。
 
 `publishGear` 在每条客户端消息处理完之后、以及每次 `Flush` 开头调用。所以 Equip / Unequip / SetSkin / Loadout 马上就有回应；战斗里的掉落最晚随下一次同步发出。

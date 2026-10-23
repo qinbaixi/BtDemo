@@ -5,10 +5,13 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
-// 视野进出。aoi.Grid 在实体出现、消失、换格子时调用 Shown / Hidden（System 实现 aoi.Watcher）。
-// “玩家 P 能看到实体 E” 等价于 “两者的格子相邻”，所以一次通知同时决定两边：
+// 视野进出。谁能看到谁只由格子决定（两者格子相邻），不另外记录每个玩家看得到谁。
+// aoi.Grid 在实体出现、消失、换格子时调用 Shown / Hidden（System 实现 aoi.Watcher），
+// 这正是“看得见”和“看不见”切换的时刻，在这里发 Enter / Leave。
+// 能看到是相互的，所以一次通知同时决定两边：
 //   - cells 里的玩家看到 / 看不到 entity；
 //   - entity 自己是玩家时，它看到 / 看不到 cells 里的所有实体。
+// 平时的状态和事件广播直接问格子要九宫格里的玩家（outbox.go 的 Broadcast），和这里无关。
 
 // Shown 实现 aoi.Watcher：entity 出现在 cells 里的玩家视野中。
 func (sys *System) Shown(entity *core.Entity, cells []int) {
@@ -19,7 +22,11 @@ func (sys *System) Shown(entity *core.Entity, cells []int) {
 	})
 	if session := sys.byPlayer[entity.ID]; session != nil {
 		var seen []*core.Entity
-		sys.grid.EachIn(cells, func(other *core.Entity) { seen = append(seen, other) })
+		sys.grid.EachIn(cells, func(other *core.Entity) {
+			if other != entity { // 自己一直在自己的视野里，进游戏时由 showAround 发过
+				seen = append(seen, other)
+			}
+		})
 		sys.enter(session, seen)
 	}
 }
@@ -33,7 +40,11 @@ func (sys *System) Hidden(entity *core.Entity, cells []int) {
 	})
 	if session := sys.byPlayer[entity.ID]; session != nil {
 		var gone []int
-		sys.grid.EachIn(cells, func(other *core.Entity) { gone = append(gone, other.ID) })
+		sys.grid.EachIn(cells, func(other *core.Entity) {
+			if other != entity {
+				gone = append(gone, other.ID)
+			}
+		})
 		sys.leave(session, gone)
 	}
 }
@@ -52,36 +63,31 @@ func (sys *System) showAround(session *Session) {
 func (sys *System) reshow(entity *core.Entity) {
 	sys.grid.PlayersAround(entity.X, entity.Y, func(player *core.Entity) {
 		if session := sys.byPlayer[player.ID]; session != nil {
-			delete(session.visible, entity.ID)
 			sys.enter(session, []*core.Entity{entity})
 		}
 	})
 }
 
-// enter 给 session 发这些实体的 Enter（已经发过的跳过）。
+// enter 给 session 发这些实体的 Enter。
 func (sys *System) enter(session *Session, entities []*core.Entity) {
+	if len(entities) == 0 {
+		return
+	}
 	enter := &pb.Enter{}
 	for _, entity := range entities {
-		if !session.visible[entity.ID] {
-			session.visible[entity.ID] = true
-			enter.Ents = append(enter.Ents, entityInfo(entity))
-		}
+		enter.Ents = append(enter.Ents, entityInfo(entity))
 	}
-	if len(enter.Ents) > 0 {
-		sys.SendTo(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Enter{Enter: enter}})
-	}
+	sys.SendTo(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Enter{Enter: enter}})
 }
 
-// leave 给 session 发这些实体的 Leave（没发过 Enter 的跳过）。
+// leave 给 session 发这些实体的 Leave。
 func (sys *System) leave(session *Session, ids []int) {
+	if len(ids) == 0 {
+		return
+	}
 	leave := &pb.Leave{}
 	for _, id := range ids {
-		if session.visible[id] {
-			delete(session.visible, id)
-			leave.Ids = append(leave.Ids, int32(id))
-		}
+		leave.Ids = append(leave.Ids, int32(id))
 	}
-	if len(leave.Ids) > 0 {
-		sys.SendTo(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Leave{Leave: leave}})
-	}
+	sys.SendTo(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Leave{Leave: leave}})
 }

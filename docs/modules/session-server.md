@@ -143,7 +143,7 @@
 - 通知里那些格子里的玩家，看到 / 看不到 `entity`：发 `Enter`（`EntityInfo`，带完整状态）/ `Leave`；
 - `entity` 自己是玩家时，它看到 / 看不到那些格子里所有实体。
 
-`Session.visible` 记着发过 `Enter` 还没发 `Leave` 的实体 id，已发过的不重发。
+谁能看到谁只由格子决定，不为每个玩家另外记“看得到谁”：Enter / Leave 只在格子通知的那一刻发，平时的状态和事件广播直接问格子要九宫格里的玩家。需要判断时用 `Grid.CanSee(viewer, target)`。
 
 ### 实体状态：脏标记增量（core/dirty.go）
 

@@ -66,7 +66,7 @@ session 收到通知后（`view.go`）：
 1. 通知里那些格子里的玩家（`PlayersIn`）：看到 / 看不到 `entity`，发 `Enter`（`EntityInfo`：名字、模型、半径等静态信息加完整状态）/ `Leave`。
 2. `entity` 自己是玩家时：它也看到 / 看不到那些格子里的所有实体，发一条 `Enter` / `Leave`。
 
-之后实体的变化不再走 Grid：状态变化靠脏标记，每个同步帧把增量 `EntityState` 按实体位置广播给 `PlayersAround`，事件按发生位置广播（见 [session 和 server](session-server.md)）。静态信息只在进入视野时发一次，动态信息只发变化的字段，这是 AOI 节省流量的关键。`Session.visible` 记着发过 `Enter` 的实体，避免重复。
+之后实体的变化不再走 Grid：状态变化靠脏标记，每个同步帧把增量 `EntityState` 按实体位置广播给 `PlayersAround`，事件按发生位置广播（见 [session 和 server](session-server.md)）。静态信息只在进入视野时发一次，动态信息只发变化的字段，这是 AOI 节省流量的关键。谁能看到谁只由格子决定，session 不另外记录每个玩家看得到谁；需要判断时用 `Grid.CanSee(viewer, target)`。
 
 ## 设计取舍
 

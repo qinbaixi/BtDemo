@@ -199,6 +199,11 @@ func (grid *Grid) InRange(x, y, radius float64, fn func(*core.Entity)) {
 	}
 }
 
+// CanSee 报告 viewer 能否看到 target（两者所在格子相邻或相同）。谁能看到谁只由格子决定，不另外记录。
+func (grid *Grid) CanSee(viewer, target *core.Entity) bool {
+	return grid.Sees(grid.CellOf(viewer.X, viewer.Y), grid.CellOf(target.X, target.Y))
+}
+
 // Sees 报告位于格子 a 的观察者能否看到格子 b。
 func (grid *Grid) Sees(a, b int) bool {
 	ax, ay := a%grid.Cols, a/grid.Cols

@@ -32,6 +32,12 @@ func sentMessages(t *testing.T, client *Session) []*pb.ServerMsg {
 	return msgs
 }
 
+// canSee 报告会话的玩家能否看到实体 id（由格子决定）。
+func canSee(world *World, client *Session, id int) bool {
+	target := world.Get(id)
+	return target != nil && world.Grid.CanSee(client.Player, target)
+}
+
 func shippedWorld(t *testing.T) *World {
 	t.Helper()
 	cfg, err := config.Load("../../config", TreeNames())

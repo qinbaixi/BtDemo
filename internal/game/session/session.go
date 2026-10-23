@@ -37,8 +37,6 @@ type Session struct {
 	Inbox   *Inbox // 网络读协程放进来的客户端消息，世界 goroutine 每个 tick 开头处理
 	Watch   int    // 本会话想要查看其行为树跟踪的实体
 	defSent string // 已经给本会话发过结构的行为树名；换了观察对象或树时重发
-	// visible 是已经给这个玩家发过 Enter、还没发 Leave 的实体
-	visible map[int]bool
 	// zonesSent 是已经发给本会话的回血区版本（core.Zones.Version）
 	zonesSent int
 	// selfSent 是上次发出的完整自身信息，用来算这次变了什么；nil 表示下次发全部
@@ -57,9 +55,6 @@ func (session *Session) Token() string { return session.token }
 
 // Link 返回会话当前连接的发送队列（断线时为 nil）。
 func (session *Session) Link() *Link { return session.link }
-
-// Visible 报告玩家当前是否看到实体 id（供测试使用）。
-func (session *Session) Visible(id int) bool { return session.visible[id] }
 
 // System 保存所有会话。
 type System struct {
@@ -117,7 +112,6 @@ func (sys *System) Join(link *Link) *Session {
 	session := &Session{
 		Player:    player,
 		Inbox:     &Inbox{},
-		visible:   map[int]bool{},
 		zonesSent: -1,
 		token:     newToken(),
 		link:      link,
@@ -431,7 +425,7 @@ func (sys *System) Flush() {
 			sys.SendTo(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Zones{Zones: zones}})
 			session.zonesSent = version
 		}
-		if watched := sys.state.Ents.Get(session.Watch); watched != nil && session.visible[watched.ID] {
+		if watched := sys.state.Ents.Get(session.Watch); watched != nil && sys.grid.CanSee(session.Player, watched) {
 			trace := sys.aiSys.Trace(watched, session.defSent)
 			if trace.GetDef() != nil {
 				session.defSent = trace.GetTree()

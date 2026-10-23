@@ -17,23 +17,23 @@ func TestFlushEnterLeave(t *testing.T) {
 	world.Grid.Moved(session.Player)
 	far := addTestEntity(world, 50, "monster", 900, 900, config.Attrs{Vit: 5})
 	world.Sessions.Flush()
-	if session.Visible(far.ID) || !session.Visible(session.Player.ID) {
+	if canSee(world, session, far.ID) || !canSee(world, session, session.Player.ID) {
 		t.Fatalf(
 			"far visible %v, self visible %v",
-			session.Visible(far.ID),
-			session.Visible(session.Player.ID),
+			canSee(world, session, far.ID),
+			canSee(world, session, session.Player.ID),
 		)
 	}
 	far.X, far.Y = 250, 250
 	world.Grid.Moved(far)
 	world.Sessions.Flush()
-	if !session.Visible(far.ID) {
+	if !canSee(world, session, far.ID) {
 		t.Fatal("entity in view not entered")
 	}
 	far.X, far.Y = 900, 900
 	world.Grid.Moved(far)
 	world.Sessions.Flush()
-	if session.Visible(far.ID) {
+	if canSee(world, session, far.ID) {
 		t.Fatal("entity out of view not left")
 	}
 }
