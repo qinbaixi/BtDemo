@@ -225,6 +225,7 @@ func (sys *System) Leave(session *Session) {
 // 每个 tick 的系统运行之前调用，这样输入总在固定的时机生效。
 // 输入队列溢出过的会话直接删除（客户端异常或刷包），不影响其他人。
 func (sys *System) DrainInputs() {
+	applied := false // 这一批是否处理过消息；没有输入时不发布，掉落等变化照旧随同步帧发
 	for session := range sys.sessions {
 		messages, overflow := session.Inbox.Take()
 		if session.link == nil {
@@ -237,13 +238,16 @@ func (sys *System) DrainInputs() {
 		}
 		for _, msg := range messages {
 			sys.apply(session, msg)
+			applied = true
 			if !sys.sessions[session] {
 				break // 处理消息时会话被删掉了
 			}
 		}
 	}
 	// 一批输入处理完统一发布一次；逐条发布会让每条消息都扫一遍所有会话
-	sys.publishGear(true)
+	if applied {
+		sys.publishGear(true)
+	}
 }
 
 // CloseAll 删除所有会话（停服时调用）：关闭发送队列，写协程写完剩下的帧后发关闭帧。
