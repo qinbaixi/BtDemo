@@ -141,6 +141,9 @@ type Instance struct {
 	cooldowns   map[int]float64
 	serviceNext map[int]float64
 	serviceMem  map[int]map[string]any
+	// ctxCache 是传给处理器的 Ctx 的复用缓冲：处理器的调用都是同步完成的
+	// （处理器不得把 Ctx 保存下来），同一时刻只需要一份
+	ctxCache Ctx
 }
 
 // NewInstance 为 agent 创建一份可运行的 tree 副本。
@@ -207,22 +210,33 @@ func (instance *Instance) memOf(node *Node) (*nodeMem, bool) {
 	}
 	fresh := mem.lastRunning != instance.tick-1
 	if fresh {
-		mem.child, mem.order, mem.results, mem.data = 0, nil, nil, map[string]any{}
+		mem.child, mem.order, mem.results, mem.data = 0, nil, nil, nil
 	}
 	return mem, fresh
 }
 
-func (instance *Instance) ctx(node *Node, fresh bool, mem *nodeMem, step int) *Ctx {
-	return &Ctx{
+// ctxFor 把复用的 Ctx（ctxCache）填成传给 node 的处理器用的样子。
+// 所有处理器的调用都是同步完成的，所以一份缓冲就够；Fresh 按需由调用方覆盖。
+func (instance *Instance) ctxFor(node *Node, mem map[string]any, step int) *Ctx {
+	instance.ctxCache = Ctx{
 		Agent: instance.Agent,
 		Now:   instance.now,
 		Node:  node,
-		Fresh: fresh,
-		Mem:   mem.data,
+		Mem:   mem,
 		inst:  instance,
 		step:  step,
 		check: -1,
 	}
+	return &instance.ctxCache
+}
+
+func (instance *Instance) ctx(node *Node, fresh bool, mem *nodeMem, step int) *Ctx {
+	if mem.data == nil {
+		mem.data = map[string]any{} // 节点内存只在任务真的要用时才建
+	}
+	ctx := instance.ctxFor(node, mem.data, step)
+	ctx.Fresh = fresh
+	return ctx
 }
 
 func (instance *Instance) run(node *Node) Status {
@@ -272,15 +286,7 @@ func (instance *Instance) run(node *Node) Status {
 				before = len(instance.Trace[step].Notes)
 			}
 			instance.Reg.services[service.SubType](
-				&Ctx{
-					Agent: instance.Agent,
-					Now:   instance.now,
-					Node:  service,
-					Mem:   instance.serviceMem[service.ID],
-					inst:  instance,
-					step:  step,
-					check: -1,
-				},
+				instance.ctxFor(service, instance.serviceMem[service.ID], step),
 			)
 			// 服务没写说明时也记一笔“触发过”
 			if step >= 0 && len(instance.Trace[step].Notes) == before {
@@ -348,14 +354,8 @@ func (instance *Instance) checkDecorator(decorator *Node, step int) bool {
 			}
 		}
 	} else {
-		ctx := &Ctx{
-			Agent: instance.Agent,
-			Now:   instance.now,
-			Node:  decorator,
-			inst:  instance,
-			step:  step,
-			check: checkIdx,
-		}
+		ctx := instance.ctxFor(decorator, nil, step)
+		ctx.check = checkIdx
 		ok = instance.Reg.conditions[decorator.SubType](ctx) != decorator.Inverse
 	}
 	if checkIdx >= 0 {

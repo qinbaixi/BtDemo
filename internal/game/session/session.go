@@ -236,12 +236,14 @@ func (sys *System) DrainInputs() {
 			continue
 		}
 		for _, msg := range messages {
-			sys.Input(session, msg)
+			sys.apply(session, msg)
 			if !sys.sessions[session] {
 				break // 处理消息时会话被删掉了
 			}
 		}
 	}
+	// 一批输入处理完统一发布一次；逐条发布会让每条消息都扫一遍所有会话
+	sys.publishGear(true)
 }
 
 // CloseAll 删除所有会话（停服时调用）：关闭发送队列，写协程写完剩下的帧后发关闭帧。
@@ -297,9 +299,15 @@ func (sys *System) toast(session *Session, text string) {
 	sys.SendNow(session, toastMsg(text))
 }
 
-// Input 应用一条客户端消息。
+// Input 应用一条客户端消息，并把消息引起的背包、宠物等变化立即发出去（测试用；
+// 正常路径走 DrainInputs，一批输入只发布一次）。
 func (sys *System) Input(session *Session, msg *pb.ClientMsg) {
-	defer sys.publishGear(true)
+	sys.apply(session, msg)
+	sys.publishGear(true)
+}
+
+// apply 把 msg 应用到会话的角色上，不发布装备、宠物等变化。
+func (sys *System) apply(session *Session, msg *pb.ClientMsg) {
 	entity := session.Player
 	switch body := msg.Msg.(type) {
 	case *pb.ClientMsg_Move:

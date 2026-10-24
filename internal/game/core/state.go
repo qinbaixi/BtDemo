@@ -99,6 +99,11 @@ type Entities struct {
 	byID   map[int]*Entity
 	ids    []int     // 已排序，用于保证 Each 的确定性
 	source *IDSource // 新实体的 ID 从这里分配
+	// snapshot 是 Each 遍历用的 id 快照，在多次调用间复用（世界单 goroutine，
+	// 各系统串行调用 Each，正常情况下同时只有一层遍历）
+	snapshot []int
+	// iterating 为 true 表示快照正被某层 Each 使用，此时嵌套的 Each 另行分配。
+	iterating bool
 }
 
 // New 创建一个带有新 ID 的实体。在调用 Add 之前，它不在表中。
@@ -137,8 +142,19 @@ func (entities *Entities) Remove(entity *Entity) {
 func (entities *Entities) Get(id int) *Entity { return entities.byID[id] }
 
 // Each 按 ID 顺序对每个实体调用 fn，因此在给定种子下，tick 的执行是确定性的。
+// fn 中可能会添加或移除实体，所以先对 id 列表做一份快照再遍历；快照的缓冲
+// 复用上一次的（见 snapshot），嵌套调用 Each 时才另行分配。
 func (entities *Entities) Each(fn func(*Entity)) {
-	for _, id := range slices.Clone(entities.ids) { // fn 中可能会添加或移除实体
+	ids := &entities.snapshot
+	if entities.iterating {
+		ids = new([]int) // 嵌套的 Each 不能覆盖外层正在用的快照
+	}
+	*ids = append((*ids)[:0], entities.ids...)
+	if ids == &entities.snapshot {
+		entities.iterating = true
+		defer func() { entities.iterating = false }()
+	}
+	for _, id := range *ids {
 		if entity := entities.byID[id]; entity != nil {
 			fn(entity)
 		}

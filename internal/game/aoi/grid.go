@@ -22,6 +22,10 @@ type Grid struct {
 	players    []map[int]*core.Entity // 每个格子里的玩家（cells 的子集）
 	where      map[int]int            // 实体 ID -> 格子
 	watcher    Watcher
+	// around 是 Around 复用的结果缓冲，轮换使用：Moved 里新旧两份九宫格同时
+	// 存活，所以至少要两份；多留几份给将来可能更深的嵌套
+	around     [4][]int
+	aroundNext int
 }
 
 // Watcher 接收视野变化（由 session 实现）。cells 是格子索引，调用期间有效，不要保存。
@@ -125,14 +129,18 @@ func (grid *Grid) take(entity *core.Entity, cell int) {
 }
 
 // Around 返回 cell 和它周围的格子（九宫格，在地图边上时更少）。
+// 结果写在复用的缓冲里，只在同步调用期间有效，不要保存（Watcher 的 cells 参数同理）。
 func (grid *Grid) Around(cell int) []int {
 	cx, cy := cell%grid.Cols, cell/grid.Cols
-	around := make([]int, 0, 9)
+	slot := grid.aroundNext
+	grid.aroundNext = (slot + 1) % len(grid.around)
+	around := grid.around[slot][:0]
 	for y := max(cy-1, 0); y <= min(cy+1, grid.Rows-1); y++ {
 		for x := max(cx-1, 0); x <= min(cx+1, grid.Cols-1); x++ {
 			around = append(around, y*grid.Cols+x)
 		}
 	}
+	grid.around[slot] = around
 	return around
 }
 
