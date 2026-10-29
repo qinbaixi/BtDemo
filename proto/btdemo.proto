@@ -375,6 +375,7 @@ enum EventKind {
   SAY = 7;
   LEVEL_UP = 8;
   LOOT = 9;
+  INTERRUPT = 10;  // id: an entity whose windup was broken by a stagger (the pending hit never lands)
 }
 
 // Event is a one-off thing that happened inside the AOI. Which fields are set
@@ -404,6 +405,13 @@ message Event {
   optional int32 zone = 22;     // HEAL: from standing in this zone (Zone.id)
   optional string item = 23;    // LOOT: ItemInfo.id that dropped (src = the slain monster, dst = who got it)
   optional string proc = 24;    // DAMAGE / HEAL caused by an item effect: the effect kind (lifesteal, thorns, ignite, ...)
+  optional string weight = 25;  // CAST / DAMAGE: light | medium | heavy (skills.yaml weight)
+  optional float kx = 26;       // DAMAGE: the target is knocked back to (kx, ky) over knock_time seconds
+  optional float ky = 27;
+  optional float knock_time = 28;
+  optional float stun = 29;     // DAMAGE: the target is staggered (cannot move or act) for this many seconds
+  optional bool wall = 30;      // DAMAGE: the knockback slammed the target into an obstacle
+  optional float hit_at = 31;   // CAST with a windup: Frame.time when the hit lands
 }
 
 message Attrs {

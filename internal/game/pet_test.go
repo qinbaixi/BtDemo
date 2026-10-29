@@ -373,6 +373,7 @@ func TestPlayersCannotDamagePets(t *testing.T) {
 	if err := world.Combat.Cast(slime, slime.Skills[0], pup.ID); err != nil {
 		t.Fatal(err)
 	}
+	landWindup(world, slime)
 	if pup.HP >= pup.Attr.MaxHP {
 		t.Fatal("monster did not hurt the pet")
 	}

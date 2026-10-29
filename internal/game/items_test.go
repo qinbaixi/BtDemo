@@ -352,6 +352,7 @@ func TestThornsReflectsOnlyNearbyAttackers(t *testing.T) {
 	if err := world.Combat.Cast(near, bite, player.ID); err != nil {
 		t.Fatal(err)
 	}
+	landWindup(world, near)
 	thorns := queuedEvents(world, pb.EventKind_DAMAGE, "thorns")
 	if len(thorns) != 1 || thorns[0].GetSrc() != int32(player.ID) || thorns[0].GetDst() != int32(near.ID) {
 		t.Fatalf("thorns events = %v", thorns)
@@ -366,6 +367,7 @@ func TestThornsReflectsOnlyNearbyAttackers(t *testing.T) {
 	if err := world.Combat.Cast(far, arrow, player.ID); err != nil {
 		t.Fatal(err)
 	}
+	landWindup(world, far)
 	if len(queuedEvents(world, pb.EventKind_DAMAGE, "thorns")) != 0 {
 		t.Fatal("thorns reflected a far attacker")
 	}
@@ -401,6 +403,7 @@ func TestBlockHeal(t *testing.T) {
 	if err := world.Combat.Cast(monster, world.State.Cfg.Skills["bite"], player.ID); err != nil {
 		t.Fatal(err)
 	}
+	landWindup(world, monster)
 	heals := queuedEvents(world, pb.EventKind_HEAL, "block_heal")
 	if len(heals) != 1 || heals[0].GetValue() != float32(math.Round(player.Attr.MaxHP*0.04)) {
 		t.Fatalf("block heal events = %v", heals)
@@ -410,6 +413,7 @@ func TestBlockHeal(t *testing.T) {
 	monster.Cooldowns = map[string]float64{}
 	world.State.Events.Clear()
 	world.Combat.Cast(monster, world.State.Cfg.Skills["bite"], player.ID)
+	landWindup(world, monster)
 	if len(queuedEvents(world, pb.EventKind_HEAL, "block_heal")) != 0 {
 		t.Fatal("block heal without blocking")
 	}

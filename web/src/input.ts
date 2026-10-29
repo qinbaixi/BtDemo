@@ -1,6 +1,7 @@
 // 键盘和鼠标输入：移动、选目标、放技能、切换显示。
 
 import { play, toggleMute } from './audio/engine';
+import { castBusy, predictCast } from './game/events';
 import { MOVE_DIR, SKILL_KEYS } from './game/config';
 import { clamp, hypot } from './game/math';
 import {
@@ -60,8 +61,11 @@ export function castSlot(slot: number): void {
   const skill = state.skillBySlot[slot];
   if (!skill || state.pickerOpen || state.bagOpen) return;   // 挑技能时不放技能（放了就不能再换了），开着装备面板时也不放
   if (blocking) { showToast('格挡中不能出招'); play('ui.deny', { bus: 'ui' }); return; }   // 服务端也会拒绝，这里省一次来回
+  const now = performance.now();
+  if (stunned(now)) return;   // 硬直中服务端不收，按了也没用
   const aim = skill.kind === 'dash' || skill.kind === 'line' || skill.kind === 'rain' ? aimFor(skill.kind) : { dx: 0, dy: 0 };
   deps.send({ t: 'cast', slot, target: state.target || 0, ...aim });
+  if (cdRemaining(skill.id, now) <= 0.03) predictCast(skill, state.target, now);
 }
 
 // aimFor 给闪现、飞斧和箭雨定方向：飞斧优先扔向当前目标；箭雨有目标时落在目标上
@@ -137,13 +141,20 @@ function attackTarget(now: number): ClientEntity | null {
 function tryAttack(): void {
   const now = performance.now();
   const sk = state.skillBySlot[ATTACK_SLOT];
-  if (!sk || state.pickerOpen || state.bagOpen || blocking || cdRemaining(sk.id, now) > 0.03) return;
+  if (!sk || state.pickerOpen || state.bagOpen || blocking || stunned(now) || castBusy(now) || cdRemaining(sk.id, now) > 0.03) return;
   const t = attackTarget(now);
   if (!t) return;
   if (t.id !== state.target) state.target = t.id;
   deps.send({ t: 'cast', slot: ATTACK_SLOT, target: t.id });
+  predictCast(sk, t.id, now);
   // 先在本地记上冷却，不等下一次同步，否则按住左键时这段时间里会一直发、一直被拒
   state.cds[sk.id] = now + (sk.cooldown || 0) * 1000;
+}
+
+// stunned 说明自己正处于硬直（被重击打得踉跄，服务端不接受出招）。
+function stunned(now: number): boolean {
+  const me = state.ents.get(state.myId);
+  return !!me && now < me.stunUntil;
 }
 
 // forgetBlock 在换成不能格挡的职业时丢掉本地的格挡状态（服务端那边已经取消了，不用再发）。

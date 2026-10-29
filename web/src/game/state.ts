@@ -37,7 +37,8 @@ export interface ClientEntity {
   blocking: boolean;  // 正在格挡
   looks: number;      // 身上 Buff 的外观（LOOK_* 位）
   blinkFrom: { x: number; y: number; at: number } | null;   // 最近一次闪现的起点（画残影）
-  slide: { x0: number; y0: number; x1: number; y1: number; at: number; ms: number } | null;   // 翻滚：从起点滑到终点
+  // 翻滚和被击退：从起点滑到终点（knock 为 true 是击退，途中服务端发来的位置先不管，终点就是服务端的落点）
+  slide: { x0: number; y0: number; x1: number; y1: number; at: number; ms: number; knock?: boolean } | null;
   model: string;
   skin: string;       // 玩家外观 id（空 = 职业默认外观）
   gear: string;       // 当前武器的外观（ItemInfo.look，空 = 职业默认武器）
@@ -52,6 +53,8 @@ export interface ClientEntity {
   attackAt: number;
   action: string;      // 正在做的动作（玩家技能的 fx 名），空串是普通攻击
   attackMs: number;    // 这个动作的时长
+  windupFrom: number;  // 怪物前摇开始的时间（0 = 没在前摇）：动作停在举起的那一帧，等命中前一刻再砸下去
+  stunUntil: number;   // 硬直到什么时候（受击姿势停住）
   hitAt: number;
   deadAt: number;
   // 打击感
@@ -257,6 +260,8 @@ export function makeEntity(d: Partial<Omit<EntityInfo, 'state'>> & Partial<Entit
     attackAt: -1e9,
     action: '',
     attackMs: ATTACK_MS,
+    windupFrom: 0,
+    stunUntil: 0,
     hitAt: -1e9,
     deadAt: -1,
     freezeUntil: 0,

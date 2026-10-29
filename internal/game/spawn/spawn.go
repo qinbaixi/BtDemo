@@ -147,6 +147,7 @@ func (sys *System) Tick() {
 
 func (sys *System) respawn(entity *core.Entity) {
 	entity.SetDead(false)
+	entity.Impact = core.Impact{} // 尸体被打飞的那段击退不能带到复活之后
 	x, y := entity.HomeX, entity.HomeY
 	if entity.Kind == core.KindPlayer {
 		spawnAt := sys.state.Cfg.World.Player.Spawn

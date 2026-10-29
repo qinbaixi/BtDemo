@@ -35,6 +35,7 @@ type Entity struct {
 	Transform
 	Stats
 	Combat
+	Impact
 	Life
 	Control
 	Steering
@@ -110,6 +111,36 @@ type Combat struct {
 	// AmbushUntil 之前的下一次伤害必定暴击（ambush 特效，位移技能后设置）
 	AmbushUntil float64
 }
+
+// Impact 是挨打和出招的过程状态：前摇、击退、硬直、韧性（由 combat 管理，move 和 ai 读取）。
+type Impact struct {
+	// Windup 是正在前摇的技能；nil 表示没有在前摇
+	Windup *Windup
+	// Knock 是正在进行的击退位移；nil 表示没有
+	Knock *Knock
+	// StunUntil 之前处于硬直：不能移动、不能出招，行为树暂停
+	StunUntil float64
+	// PoiseTaken 是最近被打掉的韧性，PoiseHitAt 是最近一次被打掉的时间（过了 hit.poise_reset 秒清零）
+	PoiseTaken float64
+	PoiseHitAt float64
+}
+
+// Windup 是一次还没结算的出招：到 HitAt 才判定命中。
+type Windup struct {
+	Skill  *config.Skill
+	Target int // target 技能的目标；aoe 为 0
+	HitAt  float64
+}
+
+// Knock 是一段击退位移：从 From 在 Start 开始，Duration 秒内缓出地走到 To。
+type Knock struct {
+	From, To nav.Vec
+	Start    float64
+	Duration float64
+}
+
+// Stunned 报告 entity 在 now 时是否处于硬直。
+func (impact *Impact) Stunned(now float64) bool { return now < impact.StunUntil }
 
 // Buff 是一个生效中的限时修饰效果。
 type Buff struct {

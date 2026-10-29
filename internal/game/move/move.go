@@ -112,11 +112,19 @@ func (sys *System) Toward(entity *core.Entity, x, y, step float64) bool {
 // Stop 清除 entity 的路径。
 func (sys *System) Stop(entity *core.Entity) { entity.Steering = core.Steering{} }
 
-// Tick 让每个存活的玩家按其输入方向行走。
+// Tick 推进所有实体的击退位移，并让每个存活的玩家按其输入方向行走（硬直和被击退时不走）。
 func (sys *System) Tick() {
 	dt := sys.state.Clock.Dt
+	now := sys.state.Now()
 	sys.state.Ents.Each(func(entity *core.Entity) {
+		if entity.Knock != nil {
+			sys.knock(entity, now)
+		}
 		if entity.Kind != core.KindPlayer || entity.Dead {
+			return
+		}
+		if entity.Knock != nil || entity.Stunned(now) {
+			entity.SetAction("stagger")
 			return
 		}
 		speed := entity.Attr.Speed
@@ -133,4 +141,24 @@ func (sys *System) Tick() {
 			entity.SetAction("")
 		}
 	})
+}
+
+// knock 把 entity 沿击退路线推到 now 时的位置（先快后慢），走完就结束击退。
+// 路线在击退开始时已经用 nav.Reach 避开了障碍物，所以这里直接放上去。
+func (sys *System) knock(entity *core.Entity, now float64) {
+	knock := entity.Knock
+	progress := 1.0
+	if knock.Duration > 0 {
+		progress = max(0, (now-knock.Start)/knock.Duration)
+	}
+	if progress >= 1 {
+		progress = 1
+		entity.Knock = nil
+	}
+	eased := 1 - (1-progress)*(1-progress)
+	entity.SetPos(
+		knock.From.X+(knock.To.X-knock.From.X)*eased,
+		knock.From.Y+(knock.To.Y-knock.From.Y)*eased,
+	)
+	sys.grid.Moved(entity)
 }

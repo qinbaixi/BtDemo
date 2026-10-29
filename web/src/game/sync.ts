@@ -256,7 +256,9 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
 function onState(s: EntityState, now: number): void {
   const e = state.ents.get(s.id);
   if (!e) return;
-  if (s.x !== undefined || s.y !== undefined) {
+  // 击退途中：位置以击退曲线为准（终点就是服务端的落点），途中同步来的位置先不管
+  const knocked = !!e.slide?.knock && now < e.slide.at + e.slide.ms;
+  if ((s.x !== undefined || s.y !== undefined) && !knocked) {
     const x = s.x ?? e.x;
     const y = s.y ?? e.y;
     const cur = posOf(e, now);

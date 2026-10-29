@@ -12,7 +12,7 @@ import type {
 
 const EVENT_KIND: Record<string, GameEvent['k']> = {
   CAST: 'cast', DAMAGE: 'dmg', HEAL: 'heal', BUFF: 'buff',
-  DIE: 'die', RESPAWN: 'respawn', SAY: 'say', LEVEL_UP: 'lvl', LOOT: 'loot',
+  DIE: 'die', RESPAWN: 'respawn', SAY: 'say', LEVEL_UP: 'lvl', LOOT: 'loot', INTERRUPT: 'interrupt',
 };
 
 const TO_OBJECT = { enums: String, longs: Number, defaults: false, oneofs: true };

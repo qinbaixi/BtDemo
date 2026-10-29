@@ -42,6 +42,14 @@ func testWorld(obstacles ...nav.Shape) *World {
 	return world
 }
 
+// landWindup 让 entity 正在前摇的那一下马上落下（测试里不用等几个 tick）。
+func landWindup(world *World, entity *core.Entity) {
+	if entity.Windup != nil {
+		entity.Windup.HitAt = world.State.Now()
+		world.Combat.Tick()
+	}
+}
+
 // addTestEntity 在 world 中放入一个半径为 16 的存活实体。"player" 的 Kind 为 core.KindPlayer，其余为 core.KindMonster。
 func addTestEntity(
 	world *World,

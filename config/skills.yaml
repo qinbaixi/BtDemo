@@ -18,14 +18,17 @@
 #   buff.speed_pct 为负数时是减速
 #   buff.look: 客户端外观 haste 疾风 | holy 金光 | fire 火焰武器 | frost 冰冻
 #   debuff: 命中时加在目标身上的效果，格式同 buff
+#   weight: 命中分量 light 轻 | medium 中 | heavy 重（默认 light）：击退距离、硬直、打掉的韧性按 world.yaml 的 hit.weights，
+#           knock / stun / poise_dmg 可以单独覆盖；前端的顿帧、镜头、命中声也按它分档
+#   windup: 前摇秒数（只有 target 和 aoe）：出招后过这么久才结算命中，期间被打出硬直就打断，目标跑出范围就打空
 #   zone:   kind 为 zone 时放下的回血区：radius 半径、heal 每次回复最大生命的比例、
 #           interval 隔几秒回一次（默认 1）、duration 持续秒数、look 画法（rune 法阵）
 skills:
-  slash:      { name: 斩击,   kind: target, range: 70,  cooldown: 0.7, damage: physical, ratio: 1.0, base: 4,  fx: melee,      color: "#ffd166",
+  slash:      { weight: light, name: 斩击,   kind: target, range: 70,  cooldown: 0.7, damage: physical, ratio: 1.0, base: 4,  fx: melee,      color: "#ffd166",
                 desc: 普攻，砍面前的敌人 }
-  fireball:   { name: 火球术, kind: target, range: 280, cooldown: 2.0, damage: magic,    ratio: 1.5, base: 10, fx: projectile, color: "#ff7b39",
+  fireball:   { weight: medium, name: 火球术, kind: target, range: 280, cooldown: 2.0, damage: magic,    ratio: 1.5, base: 10, fx: projectile, color: "#ff7b39",
                 desc: 远程法术，打一个敌人 }
-  whirlwind:  { name: 旋风斩, kind: aoe,    radius: 110, cooldown: 5,  damage: physical, ratio: 1.2, base: 6,  fx: circle,     color: "#e0e0e0",
+  whirlwind:  { weight: heavy, windup: 0.08, name: 旋风斩, kind: aoe,    radius: 110, cooldown: 5,  damage: physical, ratio: 1.2, base: 6,  fx: circle,     color: "#e0e0e0",
                 desc: 原地转一圈，砍身边所有敌人 }
   heal:       { name: 治疗术, kind: self,   cooldown: 8,  heal: 0.35, fx: heal, color: "#7dff9b",
                 desc: 回复 35% 生命 }
@@ -46,9 +49,9 @@ skills:
   enchant:    { name: 烈焰附魔, kind: self, cooldown: 16, fx: enchant, color: "#ff8a3a",
                 desc: 8 秒内武器着火，物理技能额外造成法术伤害,
                 buff: { name: 烈焰附魔, duration: 8, bonus_magic: 0.6, look: fire } }
-  axe:        { name: 飞斧,   kind: line,   range: 320, cooldown: 3, damage: physical, ratio: 1.3, base: 6, fx: axe, color: "#d8dde6",
+  axe:        { weight: medium, name: 飞斧,   kind: line,   range: 320, cooldown: 3, damage: physical, ratio: 1.3, base: 6, fx: axe, color: "#d8dde6",
                 desc: 朝面向扔出飞斧，打中直线上第一个敌人 }
-  frost_nova: { name: 冰霜新星, kind: aoe,  radius: 120, cooldown: 12, damage: magic, ratio: 0.8, base: 6, fx: frost, color: "#8fd8ff",
+  frost_nova: { weight: medium, name: 冰霜新星, kind: aoe,  radius: 120, cooldown: 12, damage: magic, ratio: 0.8, base: 6, fx: frost, color: "#8fd8ff",
                 desc: 冻伤身边的敌人，3 秒内减速 50%,
                 debuff: { name: 冰冻, duration: 3, speed_pct: -0.5, look: frost } }
   healing_spring: { name: 治愈之泉, kind: zone, cooldown: 40, fx: zone, color: "#7dffb0",
@@ -56,42 +59,42 @@ skills:
                 zone: { name: 治愈之泉, radius: 110, heal: 0.03, interval: 1, duration: 60, look: rune, color: "#7dffb0" } }
 
   # 游侠
-  shot:        { name: 射击,   kind: target, range: 300, cooldown: 0.8, damage: physical, ratio: 1.0, base: 3, fx: arrow, color: "#f0e2b6",
+  shot:        { weight: light, name: 射击,   kind: target, range: 300, cooldown: 0.8, damage: physical, ratio: 1.0, base: 3, fx: arrow, color: "#f0e2b6",
                 desc: 普攻，朝一个敌人射箭 }
-  pierce_shot: { name: 穿云箭, kind: line, pierce: true, range: 380, cooldown: 5, damage: physical, ratio: 1.4, base: 8, fx: pierce, color: "#ffe08a",
+  pierce_shot: { weight: medium, name: 穿云箭, kind: line, pierce: true, range: 380, cooldown: 5, damage: physical, ratio: 1.4, base: 8, fx: pierce, color: "#ffe08a",
                 desc: 朝面向射出一支穿透的箭，打中直线上所有敌人 }
-  arrow_rain:  { name: 箭雨,   kind: rain,   range: 260, radius: 90, distance: 180, cooldown: 9, damage: physical, ratio: 0.9, base: 5, fx: rain, color: "#cfe6ff",
+  arrow_rain:  { weight: light, name: 箭雨,   kind: rain,   range: 260, radius: 90, distance: 180, cooldown: 9, damage: physical, ratio: 0.9, base: 5, fx: rain, color: "#cfe6ff",
                 desc: 在目标（没有目标就在前方）脚下降下箭雨，打范围内所有敌人 }
   roll:        { name: 翻滚,   kind: dash,   distance: 130, cooldown: 6, fx: roll, color: "#c8f0c0",
                 desc: 朝移动方向翻滚一段距离，撞墙就停 }
-  frost_arrow: { name: 冰霜箭, kind: target, range: 300, cooldown: 7, damage: magic, ratio: 1.0, base: 6, fx: frostarrow, color: "#8fd8ff",
+  frost_arrow: { weight: medium, name: 冰霜箭, kind: target, range: 300, cooldown: 7, damage: magic, ratio: 1.0, base: 6, fx: frostarrow, color: "#8fd8ff",
                 desc: 射出冰箭，3 秒内目标减速 40%,
                 debuff: { name: 冰冻, duration: 3, speed_pct: -0.4, look: frost } }
   focus:       { name: 鹰眼专注, kind: self, cooldown: 16, fx: focus, color: "#ffd27a",
                 desc: 6 秒内攻击 +35%，移速 +10%,
                 buff: { name: 鹰眼, duration: 6, atk_pct: 0.35, speed_pct: 0.1 } }
 
-  bite:       { name: 撕咬,   kind: target, range: 60,  cooldown: 1.2, damage: physical, ratio: 1.0, base: 2,  fx: melee, color: "#b8f28b" }
-  heavy_bite: { name: 猛扑,   kind: target, range: 60,  cooldown: 5,   damage: physical, ratio: 1.5, base: 3,  fx: melee, color: "#ffef5c" }
-  arrow:      { name: 骨箭,   kind: target, range: 260, cooldown: 1.6, damage: physical, ratio: 1.1, base: 3,  fx: projectile, color: "#e8e3d0" }
-  smash:      { name: 重锤,   kind: target, range: 75,  cooldown: 1.5, damage: physical, ratio: 1.3, base: 8,  fx: melee, color: "#ff9f43" }
-  boss_whirl: { name: 旋风斩, kind: aoe,    radius: 120, cooldown: 6,  damage: physical, ratio: 1.4, base: 10, fx: circle, color: "#ff6b6b" }
+  bite:       { weight: light, windup: 0.3, name: 撕咬,   kind: target, range: 60,  cooldown: 1.2, damage: physical, ratio: 1.0, base: 2,  fx: melee, color: "#b8f28b" }
+  heavy_bite: { weight: heavy, windup: 0.55, name: 猛扑,   kind: target, range: 60,  cooldown: 5,   damage: physical, ratio: 1.5, base: 3,  fx: melee, color: "#ffef5c" }
+  arrow:      { weight: light, windup: 0.45, name: 骨箭,   kind: target, range: 260, cooldown: 1.6, damage: physical, ratio: 1.1, base: 3,  fx: projectile, color: "#e8e3d0" }
+  smash:      { weight: heavy, windup: 0.6, name: 重锤,   kind: target, range: 75,  cooldown: 1.5, damage: physical, ratio: 1.3, base: 8,  fx: melee, color: "#ff9f43" }
+  boss_whirl: { weight: heavy, windup: 0.8, name: 旋风斩, kind: aoe,    radius: 120, cooldown: 6,  damage: physical, ratio: 1.4, base: 10, fx: circle, color: "#ff6b6b" }
   enrage:     { name: 狂暴,   kind: self,   cooldown: 20, fx: buff, color: "#ff0040",
                 buff: { name: 狂暴, duration: 8, atk_pct: 0.5, speed_pct: 0.3 } }
-  guard_hit:  { name: 长枪突刺, kind: target, range: 70, cooldown: 1.0, damage: physical, ratio: 1.1, base: 5, fx: melee, color: "#9ad0ff" }
+  guard_hit:  { weight: medium, windup: 0.3, name: 长枪突刺, kind: target, range: 70, cooldown: 1.0, damage: physical, ratio: 1.1, base: 5, fx: melee, color: "#9ad0ff" }
   guard_heal: { name: 包扎,   kind: self,   cooldown: 12, heal: 0.4, fx: heal, color: "#7dff9b" }
 
   # 宠物（技能槽见 pets.yaml）
-  pet_bite:     { name: 撕咬,   kind: target, range: 55,  cooldown: 0.9, damage: physical, ratio: 1.0, base: 3, fx: melee, color: "#e8c9a0",
+  pet_bite:     { weight: light, name: 撕咬,   kind: target, range: 55,  cooldown: 0.9, damage: physical, ratio: 1.0, base: 3, fx: melee, color: "#e8c9a0",
                 desc: 宠物近战普攻 }
   pet_howl:     { name: 嚎叫,   kind: self,   cooldown: 12, fx: buff, color: "#ffcf6e",
                 desc: 6 秒内攻击 +30%，移速 +20%,
                 buff: { name: 嚎叫, duration: 6, atk_pct: 0.3, speed_pct: 0.2 } }
-  pet_firebolt: { name: 小火球, kind: target, range: 260, cooldown: 1.8, damage: magic, ratio: 1.2, base: 6, fx: projectile, color: "#ff7b39",
+  pet_firebolt: { weight: light, name: 小火球, kind: target, range: 260, cooldown: 1.8, damage: magic, ratio: 1.2, base: 6, fx: projectile, color: "#ff7b39",
                 desc: 宠物远程法术 }
-  pet_flare:    { name: 爆燃,   kind: aoe,    radius: 90, cooldown: 6, damage: magic, ratio: 0.9, base: 4, fx: circle, color: "#ffb347",
+  pet_flare:    { weight: medium, name: 爆燃,   kind: aoe,    radius: 90, cooldown: 6, damage: magic, ratio: 0.9, base: 4, fx: circle, color: "#ffb347",
                 desc: 身边小范围爆炸 }
-  pet_thorn:    { name: 荆棘术, kind: target, range: 220, cooldown: 2.0, damage: magic, ratio: 0.6, base: 3, fx: projectile, color: "#8fe08f",
+  pet_thorn:    { weight: light, name: 荆棘术, kind: target, range: 220, cooldown: 2.0, damage: magic, ratio: 0.6, base: 3, fx: projectile, color: "#8fe08f",
                 desc: 弱攻击，骚扰敌人 }
   pet_mend:     { name: 愈合,   kind: ally,   range: 170, cooldown: 6, heal: 0.25, fx: heal, color: "#7dff9b",
                 desc: 给主人回复 25% 最大生命 }

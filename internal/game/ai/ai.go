@@ -126,10 +126,43 @@ func (sys *System) Tick(watched map[int]bool) {
 			return
 		}
 		entity.AI.Tracing = watched[entity.ID]
+		// 硬直、被击退和前摇期间行为树暂停：不追、不换招，前摇的那一下由 combat 到点结算
+		if reason := pauseReason(entity, now); reason != "" {
+			if entity.Windup != nil {
+				entity.SetAction("windup")
+			} else {
+				entity.SetAction("stagger")
+			}
+			if entity.AI.Tracing {
+				// 调试面板上这一帧只有根节点，写明为什么没跑
+				entity.AI.Trace = []bt.TraceStep{
+					{Node: entity.AI.Tree.Root, Status: bt.Running, Why: []string{reason}},
+				}
+				sys.recordTrace(entity)
+			}
+			return
+		}
 		entity.AI.Tick(now)
 		entity.SetAction(entity.AI.Active)
 		if entity.AI.Tracing {
 			sys.recordTrace(entity)
 		}
 	})
+}
+
+// pauseReason 说明 entity 的行为树这一帧为什么暂停；不暂停时返回空串。
+func pauseReason(entity *core.Entity, now float64) string {
+	switch {
+	case entity.Knock != nil:
+		return "被击退，行为树暂停"
+	case entity.Stunned(now):
+		return fmt.Sprintf("硬直中（还剩 %.2f 秒），行为树暂停", entity.StunUntil-now)
+	case entity.Windup != nil:
+		return fmt.Sprintf(
+			"%s 前摇中（%.2f 秒后命中），行为树暂停",
+			entity.Windup.Skill.Name,
+			entity.Windup.HitAt-now,
+		)
+	}
+	return ""
 }

@@ -38,3 +38,4 @@ pets:
     speed: 180
     radius: 12
     skills: [pet_thorn, pet_mend]
+    poise: 20

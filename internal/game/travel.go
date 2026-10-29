@@ -48,6 +48,9 @@ type travelPack struct {
 // packPlayer 清掉角色身上只属于源场景的状态，记下要带走的计时。
 // 切场景时 Buff 和减益全部清掉（和多数 MMO 一样）。
 func packPlayer(player *core.Entity, now float64) travelPack {
+	// 前摇、击退和韧性是源场景里的事（击退路线还是源场景的坐标），不带过去
+	player.Windup, player.Knock = nil, nil
+	player.PoiseTaken, player.PoiseHitAt = 0, 0
 	pack := travelPack{
 		cooldowns: map[string]float64{},
 		petSwapIn: max(0, player.PetSwapAt-now),

@@ -144,6 +144,18 @@ export const RECIPES: Record<string, Recipe> = {
     return 0.2;
   },
 
+  'wall': (k, t, p) => {
+    k.tone(t, 'sine', 70 * p, 30, 0.35, 0.8);
+    k.noise(t, 0.3, 'lowpass', 800, 120, 0.5, 0.7, 0.002);
+    k.noise(t + 0.05, 0.4, 'bandpass', 1500, 600, 1, 0.14, 0.03);
+    return 0.6;
+  },
+  'interrupt': (k, t, p) => {
+    k.metal(t, 1100 * p, [1, 1.47, 2.09], 0.25, 0.14, 0.2);
+    k.tone(t, 'triangle', 600 * p, 150, 0.22, 0.2);
+    return 0.4;
+  },
+
   // —— 击杀和生死
   'kill': (k, t, p) => {
     k.tone(t, 'sine', 80 * p, 30, 0.6, 0.9);

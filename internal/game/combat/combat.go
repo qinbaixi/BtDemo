@@ -27,6 +27,8 @@ var (
 	ErrBlocking = errors.New("格挡中不能出招")
 	ErrNoAim    = errors.New("没有方向")
 	ErrNoRoom   = errors.New("前面过不去")
+	ErrStunned  = errors.New("硬直中")
+	ErrBusy     = errors.New("正在出招")
 )
 
 // 投掷物的碰撞半径：飞行时被障碍物挡住、判定命中都按这个粗细
@@ -58,8 +60,9 @@ func New(
 	}
 }
 
-// Tick 清除已过期的 Buff，并结算装备的持续回血（regen）。
+// Tick 结算前摇到点的出招，清除已过期的 Buff，并结算装备的持续回血（regen）。
 func (sys *System) Tick() {
+	sys.resolveWindups()
 	sys.state.Ents.Each(func(entity *core.Entity) {
 		if !entity.Dead {
 			sys.UpdateBuffs(entity)
@@ -176,6 +179,12 @@ func (sys *System) CastAimed(
 	if entity.Blocking {
 		return ErrBlocking
 	}
+	if entity.Stunned(now) || entity.Knock != nil {
+		return ErrStunned
+	}
+	if entity.Windup != nil {
+		return ErrBusy
+	}
 	if now < entity.Cooldowns[skill.ID] {
 		return ErrCooldown
 	}
@@ -188,31 +197,22 @@ func (sys *System) CastAimed(
 		if core.EdgeDist(entity, target) > skill.Range {
 			return ErrTooFar
 		}
-		sys.state.Events.Emit(entity, castEvent(entity, target, skill))
-		dmg, crit := sys.CalcDamage(entity, target, skill)
-		sys.applyDamage(entity, target, dmg, crit, skill)
+		event := castEvent(entity, target, skill)
+		sys.state.Events.Emit(entity, event)
+		if skill.Windup > 0 {
+			sys.startWindup(entity, skill, target.ID, event) // 到点再结算，见 impact.go
+		} else {
+			sys.strike(entity, skill, target.ID, false)
+		}
 	case "aoe":
 		event := castEvent(entity, nil, skill)
 		event.Radius = core.F32(skill.Radius)
 		event.X, event.Y = core.F32(entity.X), core.F32(entity.Y)
 		sys.state.Events.Emit(entity, event)
-		// 先收集目标，使伤害（及其导致的击杀）不会在遍历过程中改变网格。
-		var targets []*core.Entity
-		// 先按中心距离筛选候选目标；下面的边缘距离判断是精确的。
-		sys.grid.InRange(
-			entity.X,
-			entity.Y,
-			skill.Radius+entity.Radius+core.MaxRadius,
-			func(other *core.Entity) {
-				if other.Alive() && sys.state.Hostile(entity, other) &&
-					core.EdgeDist(entity, other) <= skill.Radius {
-					targets = append(targets, other)
-				}
-			},
-		)
-		for _, other := range targets {
-			dmg, crit := sys.CalcDamage(entity, other, skill)
-			sys.applyDamage(entity, other, dmg, crit, skill)
+		if skill.Windup > 0 {
+			sys.startWindup(entity, skill, 0, event)
+		} else {
+			sys.strike(entity, skill, 0, false)
 		}
 	case "ally":
 		// 友方技能：对行为树指定的友方目标（宠物的主人）回血，目标要在 range 内
@@ -457,6 +457,7 @@ func (sys *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, sk
 	if result.immune {
 		return
 	}
+	sys.applyImpact(src, dst, skill, result.blocked > 0, result.event)
 	sys.afterHit(src, dst, skill, result)
 	if dst.Alive() && skill.Debuff != nil {
 		sys.addBuff(dst, skill.Debuff)
@@ -465,9 +466,10 @@ func (sys *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, sk
 
 // damageResult 是一次伤害结算的结果。
 type damageResult struct {
-	immune  bool    // 目标无敌，整次伤害被免掉
-	blocked float64 // 被格挡掉的伤害
-	taken   float64 // 实际扣掉的生命
+	immune  bool        // 目标无敌，整次伤害被免掉
+	blocked float64     // 被格挡掉的伤害
+	taken   float64     // 实际扣掉的生命
+	event   *core.Event // 发出的 DAMAGE 事件（还在队列里，applyImpact 往上补击退和硬直）
 }
 
 // damage 从 dst 中扣除 dmg，记录攻击者，发 DAMAGE 事件（skillID、proc 不空时写进事件），
@@ -502,7 +504,7 @@ func (sys *System) damage(
 	if crit && src.AmbushUntil > 0 {
 		src.AmbushUntil = 0 // 伏击的必暴用掉了
 	}
-	result := damageResult{}
+	result := damageResult{event: event}
 	if dst.Blocking {
 		result.blocked = math.Round(dmg * sys.state.Cfg.World.Player.Block.Reduce)
 		dmg -= result.blocked
@@ -560,6 +562,8 @@ func (sys *System) Kill(entity, killer *core.Entity) {
 	}
 	entity.SetDead(true)
 	entity.SetHP(0)
+	entity.Windup = nil // 前摇中被打死：这一下不会再落下（击退照常走完，尸体被打飞）
+	entity.StunUntil = 0
 	entity.SetTarget(0)
 	entity.Buffs = nil
 	entity.MarkDirty(core.DirtyShield | core.DirtyLooks)
@@ -596,6 +600,9 @@ func castEvent(entity, dst *core.Entity, skill *config.Skill) *core.Event {
 		Name:  proto.String(skill.Name),
 		Fx:    proto.String(skill.FX),
 		Color: proto.String(skill.Color),
+	}
+	if skill.Damage != "" {
+		event.Weight = proto.String(skill.Weight)
 	}
 	if dst != nil {
 		event.Dst = core.I32(dst.ID)

@@ -16,6 +16,9 @@ type Pet struct {
 	Radius float64 `yaml:"radius"`
 	// Skills 是技能槽，行为树里 CastSkill 的 Slot 从 1 开始对应这里的顺序
 	Skills []string `yaml:"skills"`
+	// Poise、Mass 是韧性和重量，含义同 monsters.yaml
+	Poise float64 `yaml:"poise"`
+	Mass  float64 `yaml:"mass"`
 }
 
 // PetRules 对应 world.yaml 的 pet 段：宠物的复活、换宠物冷却和传送距离。

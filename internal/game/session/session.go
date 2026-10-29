@@ -12,6 +12,7 @@
 package session
 
 import (
+	"errors"
 	"log"
 	"math"
 	"slices"
@@ -325,6 +326,9 @@ func (sys *System) apply(session *Session, msg *pb.ClientMsg) {
 	case *pb.ClientMsg_Block:
 		// 不能格挡的职业（游侠）忽略格挡消息；松开总是允许的
 		if on := body.Block.GetOn(); !on || sys.canBlock(entity) {
+			if on {
+				sys.combat.CancelWindup(entity) // 举盾就收招：前摇中的那一下不再落下
+			}
 			entity.SetBlocking(on)
 		}
 	case *pb.ClientMsg_Target:
@@ -364,7 +368,10 @@ func (sys *System) apply(session *Session, msg *pb.ClientMsg) {
 		}
 		aimX, aimY := float64(body.Cast.GetDx()), float64(body.Cast.GetDy())
 		if err := sys.combat.CastAimed(entity, skill, target, aimX, aimY); err != nil {
-			sys.toast(session, err.Error())
+			// 硬直中、前摇中连按是正常操作，不弹提示（客户端自己会响一声）
+			if !errors.Is(err, combat.ErrStunned) && !errors.Is(err, combat.ErrBusy) {
+				sys.toast(session, err.Error())
+			}
 			// 客户端按下技能时先在本地转上了冷却；被拒绝时下一帧重发完整的自身信息把它纠正回来
 			session.selfSent = nil
 		}

@@ -1,10 +1,11 @@
 // 把服务端事件（施法、伤害、死亡……）变成动画、特效和飘字。
 
-import type { GameEvent } from '../net/types';
+import type { GameEvent, SkillInfo } from '../net/types';
 import { buildHit, isMine, onCast, onDeath, playHit, sfxAt } from '../feel/director';
 import { ACTIONS, muzzleOffset } from '../render/knightActions';
-import { ATTACK_MS, LOOK_FIRE, MODEL_SCALE, RARITY_COLOR } from './config';
-import { faceToward, headY, posOf, state, type ClientEntity, type FloatOpts } from './state';
+import { ATTACK_IMPACT, ATTACK_MS, LOOK_FIRE, MODEL_SCALE, RARITY_COLOR } from './config';
+import { hypot } from './math';
+import { faceToward, headY, localTime, posOf, state, type ClientEntity, type FloatOpts } from './state';
 
 const ROLL_SLIDE = 0.75;   // 翻滚动作里身体在地上滑动的那一段（占动作时长的比例）
 
@@ -33,15 +34,30 @@ export function onEvent(ev: GameEvent, now: number): void {
         // 玩家的每个技能有自己的动作（见 render/knightActions.ts，游侠的动作名前面加 "ranger:"），怪物都是普通攻击动作
         const actionName = src.model === 'ranger' ? `ranger:${ev.fx}` : ev.fx;
         const action = src.kind === 'player' && ev.fx ? ACTIONS[actionName!] : undefined;
+        // 自己按键时已经先播了这个动作（本地预测，见 predictCast），服务端确认后接着播，不从头再来
+        const predicted = src.id === state.myId && takePrediction(ev.skill, now);
+        // 前摇：服务端到 hitAt 才结算命中，动作和特效都对准那一刻
+        const windupMs = ev.hitAt ? Math.max(0, localTime(ev.hitAt) - now) : 0;
+        if (src.id === state.myId && windupMs > 0) busyUntil = now + windupMs;
+        src.windupFrom = 0;
         // 装备特效追加的一箭（连射）和正常那一箭同时射出，不重新播一遍拉弓动作
-        if (!ev.proc) {
+        if (!ev.proc && !predicted) {
           src.attackAt = now;
           // 宠物的施放类技能（嚎叫、爆燃、愈合）用 fx 当动作名，模型里画仰头 / 胀大 / 举手
           const petCast = src.kind === 'pet' && (ev.fx === 'buff' || ev.fx === 'circle' || ev.fx === 'heal');
           src.action = action ? actionName! : petCast ? ev.fx! : '';
           src.attackMs = action ? action.ms : ATTACK_MS;
+          if (!action && windupMs > 0) {
+            // 普通攻击动作：武器举起来停住，砸下去打到人的那一刻正好是命中时刻
+            src.attackAt = now + windupMs - ATTACK_IMPACT * ATTACK_MS;
+            src.windupFrom = now;
+          }
         }
-        lead = action ? action.lead : 0;
+        lead = action ? action.lead : windupMs > 0 ? windupMs - 40 : 0;
+        if (predicted) lead = Math.max(0, lead - (now - src.attackAt));
+        if (windupMs > 0 && src.kind !== 'player') {
+          fx.telegraph(src.id, ev.dst || 0, ev.radius || 0, ev.weight === 'heavy', windupMs, now);
+        }
         const dst = ev.dst && ev.dst !== ev.src ? state.ents.get(ev.dst) : null;
         if (dst) { const dp = posOf(dst, now); faceToward(src, dp.x, dp.y, now); }
         else if (typeof ev.tx === 'number' && typeof ev.x === 'number' && Math.abs(ev.tx - ev.x) > 1) {
@@ -61,7 +77,7 @@ export function onEvent(ev: GameEvent, now: number): void {
       }
       // 特效等动作出手时才放（火球从推出去的手心飞出、冰霜新星在剑插地时炸开）
       const delay = fx.cast(ev, now, lead, origin);
-      onCast(ev, src, now, delay);
+      if (!src || src.id !== state.myId || !predictedSwing(ev.skill)) onCast(ev, src, now, delay);
       state.lands.set(ev.src, { at: now + delay, color: ev.color });
       // 玩家的技能，以及怪物的大招，头顶报技能名
       const big = ev.fx === 'circle' || ev.fx === 'buff';
@@ -186,6 +202,19 @@ export function onEvent(ev: GameEvent, now: number): void {
       }
       break;
     }
+    case 'interrupt': {
+      // 前摇被打出硬直：举着的武器放下，预警圈收掉
+      const e = state.ents.get(ev.id!);
+      if (e) {
+        e.windupFrom = 0;
+        e.attackAt = -1e9;
+      }
+      fx.cancel(ev.id!);
+      state.lands.delete(ev.id!);
+      addFloat(now, ev.id!, '打断', '#ffffff', 16, 800, { pop: true, rise: 44 });
+      sfxAt('interrupt', ev.id, now);
+      break;
+    }
     case 'lvl':
       fx.levelUp(ev.id, now);
       sfxAt('levelup', ev.id, now, !isMine(ev.id));
@@ -244,4 +273,59 @@ function blinkTo(e: ClientEntity, ev: GameEvent, now: number): void {
   e.x = e.px = e.rx = ev.tx!;
   e.y = e.py = e.ry = ev.ty ?? e.y;
   e.t0 = now;
+}
+
+// 自己的出招还在前摇里（服务端这时不接受新的出招）
+let busyUntil = 0;
+export function castBusy(now: number): boolean {
+  return now < busyUntil;
+}
+
+// —— 本地预测出手：按下技能键就先播动作和挥空声，不等服务端的 CAST 回来（省掉一个来回的延迟）。
+// 服务端确认时（同一个技能、PREDICT_MS 内）动作接着播；没确认（被拒绝）这一下就是挥了个空。
+const PREDICT_MS = 500;
+let prediction: { skill: string; at: number; swing: boolean } | null = null;
+
+// predictCast 在自己按下技能时调用：只预测单体和自身范围技能（位移、投掷要等服务端的落点）。
+export function predictCast(skill: SkillInfo, targetId: number, now: number): void {
+  const me = state.ents.get(state.myId);
+  if (!me || me.dead || castBusy(now) || (skill.kind !== 'target' && skill.kind !== 'aoe') || !skill.fx) return;
+  const actionName = me.model === 'ranger' ? `ranger:${skill.fx}` : skill.fx;
+  const action = ACTIONS[actionName];
+  if (!action) return;
+  const target = targetId ? state.ents.get(targetId) : undefined;
+  if (skill.kind === 'target') {
+    // 单体技能要有够得着的目标才预测，不然服务端会拒绝（"目标太远"），白挥一下
+    if (!target || target.dead || target.kind !== 'monster') return;
+    const mp = posOf(me, now);
+    const tp = posOf(target, now);
+    if (hypot(mp.x, mp.y, tp.x, tp.y) - (me.r || 14) - (target.r || 14) > (skill.range || 0) + 10) return;
+  }
+  if (target) { const tp = posOf(target, now); faceToward(me, tp.x, tp.y, now); }
+  me.attackAt = now;
+  me.action = actionName;
+  me.attackMs = action.ms;
+  const swing = skill.fx === 'melee';
+  if (swing) predictSwing(skill.id, me, now, action.lead);
+  prediction = { skill: skill.id, at: now, swing };
+}
+
+// takePrediction 在收到自己的 CAST 时调用：这个技能刚预测过就返回 true（并用掉这次预测）。
+function takePrediction(skill: string | undefined, now: number): boolean {
+  const hit = !!prediction && prediction.skill === skill && now - prediction.at < PREDICT_MS;
+  if (hit) lastConfirmed = prediction;
+  prediction = null;
+  return hit;
+}
+let lastConfirmed: { skill: string; at: number; swing: boolean } | null = null;
+
+// predictedSwing 说明这个技能的挥空声在预测时已经响过了。
+function predictedSwing(skill: string | undefined): boolean {
+  const confirmed = lastConfirmed;
+  lastConfirmed = null;
+  return !!confirmed && confirmed.skill === skill && confirmed.swing;
+}
+
+function predictSwing(skill: string, me: ClientEntity, now: number, lead: number): void {
+  onCast({ k: 'cast', src: me.id, skill, fx: 'melee' }, me, now, lead);
 }

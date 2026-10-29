@@ -170,6 +170,7 @@ func (sys *System) summon(owner *core.Entity, template *config.Pet) *core.Entity
 // revive 让死去的宠物在主人身边满血复活。
 func (sys *System) revive(owner, pet *core.Entity) {
 	pet.SetDead(false)
+	pet.Impact = core.Impact{}
 	pet.Cooldowns = map[string]float64{}
 	pet.Steering = core.Steering{}
 	pet.LastAttacker, pet.LastHitAt = 0, 0

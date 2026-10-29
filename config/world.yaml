@@ -11,6 +11,17 @@ sync_rate: 10        # 状态同步频率（每秒）
 session:
   keep: 30           # 断线后角色保留多少秒：期间原地站着、照样会被打会死，重连能接着玩
 
+# 命中的分量（skills.yaml 的 weight）：击退距离（像素，再除以目标的 mass）、硬直秒数、打掉的韧性
+hit:
+  weights:
+    light:  { knock: 10, stun: 0.15, poise: 10 }
+    medium: { knock: 26, stun: 0.25, poise: 25 }
+    heavy:  { knock: 50, stun: 0.45, poise: 45 }
+  knock_time: 0.18   # 击退位移多少秒走完
+  wall_stun: 0.2     # 被打到撞墙额外硬直
+  poise_reset: 2     # 多少秒没挨打韧性回满
+  reach: 24          # 前摇结束时目标比射程多跑出这么远仍算命中，再远就打空
+
 # 阵营敌对关系：key 会主动攻击 / 可以攻击 value 中的阵营
 hostile:
   player: [monster]
@@ -24,6 +35,8 @@ player:
   level: 1
   respawn: 3
   block: { reduce: 0.8, speed: 0.5 }   # 按住右键格挡（只有 can_block 的职业能格挡）：受到的伤害减少 80%，移动速度减半，不能放技能
+  poise: 30                            # 韧性和重量，含义同 monsters.yaml（狼咬三下才会把人咬得一踉跄）
+  mass: 1.2
   bag: 24                              # 背包格数（装备着的物品不占格子）
   starter: [leather_vest, life_charm]  # 每个新玩家背包里都有的物品（不装备），物品见 items.yaml
   # 职业：第一个是新玩家的默认职业；进游戏和死亡时可以换职业（和挑技能一起，见 Loadout）

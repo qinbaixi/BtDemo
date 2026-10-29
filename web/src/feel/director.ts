@@ -28,6 +28,9 @@ export interface HitContext {
   absorbed: boolean;   // 有一部分被护盾吸收了
   mine: boolean;       // 自己或自己的宠物打的
   hurtMe: boolean;     // 打在自己身上
+  knock: { x: number; y: number; ms: number } | null;   // 服务端的真实击退：落点和用时
+  stunMs: number;      // 服务端给的硬直
+  wall: boolean;       // 被打到撞墙
 }
 
 const BYSTANDER_GAIN = 0.35;   // 别人之间的命中：声音约 -9dB
@@ -58,7 +61,9 @@ export function buildHit(ev: GameEvent): HitContext | null {
   if (!target) return null;
   const srcId = ev.src || 0;
   const src = srcId ? state.ents.get(srcId) : undefined;
-  const feel = skillFeel(ev.skill, ev.proc, lastCastFx.get(srcId));
+  // 服务端给了档位就用服务端的（skills.yaml 的 weight）；复制一份，别改到 SKILL_FEEL 表里
+  const feel = { ...skillFeel(ev.skill, ev.proc, lastCastFx.get(srcId)) };
+  if (ev.weight && ev.weight in PROFILES) feel.tier = ev.weight as Tier;
   let weapon = feel.weapon;
   // 武器着火时，刀剑和钝器打出来是火焰声
   if (src && src.looks & LOOK_FIRE && (weapon === 'blade' || weapon === 'blunt') && !ev.proc) weapon = 'fire';
@@ -77,6 +82,11 @@ export function buildHit(ev: GameEvent): HitContext | null {
     absorbed: !!ev.absorbed,
     mine: isMine(srcId),
     hurtMe: target.id === state.myId,
+    knock: typeof ev.kx === 'number' && typeof ev.ky === 'number'
+      ? { x: ev.kx, y: ev.ky, ms: (ev.knockTime || 0.18) * 1000 }
+      : null,
+    stunMs: (ev.stun || 0) * 1000,
+    wall: !!ev.wall,
   };
 }
 
@@ -110,10 +120,21 @@ export function playHit(hit: HitContext, now: number): number {
     target.hitAt = now;
     target.knockX = dx;
     target.knockY = dy;
-    const amp = profile.knockPx * (crit ? CRIT.knockScale : 1);
+    // 有真实击退时身体只再晃一小下，主要的位移由击退曲线走
+    const amp = profile.knockPx * (crit ? CRIT.knockScale : 1) * (hit.knock ? 0.4 : 1);
     // 已经倒地（箭比死亡事件晚到）时保留被打飞的距离
     target.knockAmp = target.dead ? Math.max(target.knockAmp, amp) : amp;
     target.squashAmp = profile.squash;
+  }
+
+  if (hit.knock) knockTo(target, hit.knock, now);
+  if (hit.stunMs > 0) target.stunUntil = Math.max(target.stunUntil, now + hit.stunMs);
+  if (hit.wall) {
+    // 撞墙：一团土、一声闷响，自己参与的话镜头再震一下
+    const end = hit.knock ?? tp;
+    state.fx?.footDust(end.x, end.y, dx < 0 ? 1 : -1, now + (hit.knock?.ms ?? 0) * 0.6);
+    play('wall', { x: end.x, y: end.y, gain: hit.mine || hit.hurtMe ? 1 : BYSTANDER_GAIN, at: now + (hit.knock?.ms ?? 0) * 0.6 });
+    if ((hit.mine || hit.hurtMe) && state.fx) state.fx.shake = Math.max(state.fx.shake, 3);
   }
 
   // 时间：受击者停住；近战的攻击者也停（远程的箭飞到时攻击动作早就结束了）
@@ -142,6 +163,16 @@ export function playHit(hit: HitContext, now: number): number {
 
   hitSound(hit, tp.x, tp.y);
   return dx;
+}
+
+// knockTo 让 target 沿击退曲线（先快后慢）滑到服务端的落点；途中的位置同步在 sync.ts 里先不管。
+function knockTo(target: ClientEntity, knock: { x: number; y: number; ms: number }, now: number): void {
+  const from = posOf(target, now);
+  target.slide = { x0: from.x, y0: from.y, x1: knock.x, y1: knock.y, at: now, ms: knock.ms, knock: true };
+  target.x = target.px = knock.x;
+  target.y = target.py = knock.y;
+  target.t0 = now;
+  target.moveUntil = 0;   // 被推着走不迈腿
 }
 
 // kick 推镜头，同一时刻的多次命中只取最强的一次。

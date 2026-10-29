@@ -602,6 +602,64 @@ export class FX {
   }
 
   // footDust 是跑动时脚下扬起的一小团土（浅土黄，暗色地面上看得出来）。dir 是移动方向（-1 左，1 右）。
+  // telegraph 是怪物前摇的预警：武器上闪一下白光；重招在会打到的地方画一圈逐渐填满的红色预警
+  // （范围技能围着施法者，单体技能跟着目标），ms 后正好填满，也就是命中的那一刻。
+  telegraph(srcId: number, dstId: number, radius: number, heavy: boolean, ms: number, now: number) {
+    const src = this.pos(srcId, null);
+    if (src) {
+      for (let i = 0; i < 7; i++) {
+        const a = rand(0, TAU);
+        this.spawn({ anchor: srcId, ox: rand(-6, 6), oy: -(src.r || 14) * 1.7 + rand(-4, 4), vx: Math.cos(a) * 0.05, vy: Math.sin(a) * 0.05,
+          drag: 0.96, life: rand(220, 360), size: rand(1.6, 2.8), color: i % 2 ? '#ffffff' : '#ffd0a0', kind: 'spark', born: now });
+      }
+    }
+    if (!heavy || ms < 120) return;
+    this.effects.push({ kind: 'warn', src: srcId, dst: dstId, radius, born: now, life: ms + 80, fill: ms, rgb: rgbOf('#ff4a3a') });
+  }
+
+  // cancel 收掉 id 还没落下的出招：预警圈、等着出手时才放的刀光（前摇被打断时）。
+  cancel(id: number) {
+    this.effects = this.effects.filter((f) => !(f.kind === 'warn' && f.src === id));
+    this.scheduled = this.scheduled.filter((f) => f.src !== id);
+  }
+
+  // warnPos 是预警圈当前的中心和半径：范围技能跟着施法者，单体技能跟着目标。
+  warnPos(f) {
+    const at = f.dst ? this.pos(f.dst, null) : this.pos(f.src, null);
+    if (!at) return null;
+    return { x: at.x, y: at.y, r: f.dst ? (at.r || 14) * 1.9 : f.radius };
+  }
+
+  // warnGround 画预警圈（在 drawShapes 里画，见里面的说明）。
+  warnGround(ctx, f, now) {
+    const at = this.warnPos(f);
+    if (!at) return;
+    const k = clamp01((now - f.born) / f.fill);
+    const after = clamp01((now - f.born - f.fill) / 80);   // 命中后一闪就收
+    ctx.save();
+    // 画在特效层（角色上面），不然会被广场这类平铺在地上的物件盖住；用普通混合，红色在亮地面上才看得见
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.translate(at.x, at.y);
+    ctx.scale(1, 0.5);
+    ctx.globalAlpha = 1 - after;
+    // 外圈：深色描边垫底，亮的地面上也看得清
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(40,6,4,0.55)';
+    ctx.beginPath();
+    ctx.arc(0, 0, at.r, 0, TAU);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = rgba(whiten(f.rgb, 0.3 * k), 0.7 + 0.3 * k);
+    ctx.stroke();
+    // 里面从中心往外填满，填满的那一刻就是命中；快满时闪起来
+    const pulse = k > 0.7 ? 0.5 + 0.5 * Math.sin(now * 0.05) : 0;
+    ctx.fillStyle = rgba(f.rgb, 0.16 + 0.2 * k + 0.1 * pulse);
+    ctx.beginPath();
+    ctx.arc(0, 0, at.r * easeOutCubic(k), 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
   footDust(x, y, dir, now) {
     for (let i = 0; i < 4; i++) {
       this.spawn({ x: x - dir * rand(0, 8), y: y - rand(0, 3), vx: -dir * rand(0.015, 0.05), vy: -rand(0.008, 0.025),
@@ -930,6 +988,7 @@ export class FX {
         case 'axe': this.axe(ctx, f, t, now); break;
         case 'bolt': this.bolt(ctx, f, now - f.born); break;
         case 'rain': this.rainArrows(ctx, f, now - f.born); break;
+        case 'warn': this.warnGround(ctx, f, now); break;
       }
     }
     this.shieldAuras(ctx, now);
@@ -948,6 +1007,7 @@ export class FX {
       const t = (now - f.born) / f.life;
       if (t < 0 || t >= 1) continue;
       switch (f.kind) {
+        case 'warn': { const at = this.warnPos(f); if (at) add(at.x, at.y, at.r + 4, at.r * 0.5 + 4, at.r * 0.5 + 4); break; }
         case 'arrow': {
           const sp = this.pos(f.src, { x: f.sx, y: f.sy });
           const dp = this.pos(f.dst, { x: f.dx, y: f.dy });

@@ -34,6 +34,8 @@ type Player struct {
 	Level      int     `yaml:"level"`
 	Respawn    float64 `yaml:"respawn"`
 	Block      Block   `yaml:"block"`
+	Poise      float64 `yaml:"poise"` // 玩家的韧性和重量，含义同 monsters.yaml 的 poise / mass
+	Mass       float64 `yaml:"mass"`
 	// Bag 是背包格数（装备着的物品不占格子），默认 DefaultBagSize。
 	Bag int `yaml:"bag"`
 	// Starter 是每个新玩家背包里都有的物品（不分职业），职业相关的见 Class.Starter。
@@ -108,6 +110,8 @@ type World struct {
 	Pet PetRules `yaml:"pet"`
 	// Session 是连接断开后的处理。
 	Session SessionRules `yaml:"session"`
+	// Hit 是命中的分量档位、击退和韧性规则。
+	Hit HitRules `yaml:"hit"`
 }
 
 // SessionRules 是会话的断线规则。
@@ -177,6 +181,14 @@ type Skill struct {
 	Zone     *Zone   `yaml:"zone"`   // zone：在脚下放的回血区
 	FX       string  `yaml:"fx"`
 	Color    string  `yaml:"color"`
+	// Weight 是命中的分量：light | medium | heavy（默认 light），决定击退、硬直和打掉的韧性（见 world.yaml 的 hit）。
+	Weight string `yaml:"weight"`
+	// Windup 是前摇秒数：出招后过这么久才结算命中，期间可以被打断、可以被躲开。只有 target 和 aoe 技能能有前摇。
+	Windup float64 `yaml:"windup"`
+	// Knock、Stun、PoiseDmg 覆盖 weight 档位的击退距离、硬直秒数和打掉的韧性（0 = 用档位的）
+	Knock    float64 `yaml:"knock"`
+	Stun     float64 `yaml:"stun"`
+	PoiseDmg float64 `yaml:"poise_dmg"`
 }
 
 // Template 是 config/monsters.yaml 中的怪物或 NPC 模板。
@@ -195,6 +207,10 @@ type Template struct {
 	Skills  []string `yaml:"skills"`
 	Respawn float64  `yaml:"respawn"`
 	Exp     int      `yaml:"exp"`
+	// Poise 是韧性：挨打时被打掉，打空了才会被击退和硬直（0 = 每下都会）。见 world.yaml 的 hit。
+	Poise float64 `yaml:"poise"`
+	// Mass 是重量：击退距离除以它（默认 1）。
+	Mass float64 `yaml:"mass"`
 }
 
 // Spawn 在 (X, Y) 周围放置 Count 份模板副本。
@@ -441,6 +457,9 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		return err
 	}
 	if err := cfg.validatePets(knownTrees); err != nil {
+		return err
+	}
+	if err := cfg.validateHits(); err != nil {
 		return err
 	}
 	for id, template := range cfg.Templates {

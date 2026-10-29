@@ -163,6 +163,74 @@ function hit(crit: boolean, heavy = false): void {
   if (t.hp <= 0) kill(t);
 }
 
+// later 让 fn 在 ms 毫秒后跑（走主循环的 state.pending，录预览换掉时钟时也对得上）。
+function later(ms: number, fn: () => void): void {
+  state.pending.push({ at: performance.now() + ms, fn });
+}
+
+// knockAway 算 victim 被 from 打中后、推开 distance 像素的落点（服务端用 nav.Reach，这里是空地）。
+function knockAway(victim: ClientEntity, from: ClientEntity, distance: number): { kx: number; ky: number } {
+  const now = performance.now();
+  const vp = posOf(victim, now);
+  const fp = posOf(from, now);
+  const len = Math.hypot(vp.x - fp.x, vp.y - fp.y) || 1;
+  return { kx: vp.x + (vp.x - fp.x) / len * distance, ky: vp.y + (vp.y - fp.y) / len * distance };
+}
+
+// ogreSmash 是食人魔首领的重锤：举锤前摇 0.6 秒、地上红圈填满，砸中自己把人砸退并硬直（blocked：举盾挡住，只退一点）。
+function ogreSmash(blocked: boolean): void {
+  const ogre = state.ents.get(3)!;
+  const me = state.ents.get(ME)!;
+  const windup = 600;
+  // 先走到自己身边（够得着重锤的射程）
+  const mp = posOf(me, performance.now());
+  moveTo(ogre, mp.x + 74, mp.y - 6, performance.now());
+  ogre.facing = Math.PI;
+  emit({ k: 'cast', src: ogre.id, dst: ME, fx: 'melee', skill: 'smash', weight: 'heavy', color: '#ff9f43',
+    hitAt: (performance.now() + windup) / 1000 });
+  if (blocked) me.blocking = true;
+  later(windup, () => {
+    const knock = knockAway(me, ogre, blocked ? 50 / 1.2 * 0.3 : 50 / 1.2);
+    emit({ k: 'dmg', src: ogre.id, dst: ME, v: blocked ? 12 : 70, skill: 'smash', weight: 'heavy', blocked: blocked ? 48 : undefined,
+      ...knock, knockTime: 0.18, stun: blocked ? 0 : 0.45 });
+    if (!blocked) damage(me, 70);
+    later(600, () => { me.blocking = false; });
+  });
+}
+
+// heavySweep 是自己的旋风斩：重击，按每只怪的重量把它们推开，食人魔首领韧性高推不动。
+function heavySweep(): void {
+  const me = state.ents.get(ME)!;
+  const p = posOf(me, performance.now());
+  emit({ k: 'cast', src: ME, fx: 'circle', skill: 'whirlwind', name: '旋风斩', weight: 'heavy', color: '#e0e0e0', radius: 130, x: p.x, y: p.y });
+  later(80, () => {
+    for (const e of state.ents.values()) {
+      if (e.id === ME || e.dead || e.kind === 'pet') continue;
+      const mass = e.model === 'slime' || e.model === 'skeleton_archer' ? 0.8 : 1;
+      const armored = e.model === 'ogre_chief';
+      const knock = armored ? {} : { ...knockAway(e, me, 50 / mass), knockTime: 0.18, stun: 0.45 };
+      emit({ k: 'dmg', src: ME, dst: e.id, v: 45, skill: 'whirlwind', weight: 'heavy', ...knock });
+      damage(e, 45);
+      if (e.hp <= 0) kill(e);
+    }
+  });
+}
+
+// interruptWolf 是灰狼扑上来前摇 0.5 秒，自己抢先一刀把它砍出硬直，这一口就没咬下来。
+function interruptWolf(): void {
+  const wolf = state.ents.get(2)!;
+  emit({ k: 'cast', src: wolf.id, dst: ME, fx: 'melee', skill: 'heavy_bite', weight: 'heavy', color: '#ffef5c',
+    hitAt: (performance.now() + 500) / 1000 });
+  later(220, () => {
+    emit({ k: 'cast', src: ME, dst: wolf.id, fx: 'melee', skill: 'slash', weight: 'light', color: '#ffd166' });
+    later(130, () => {
+      emit({ k: 'dmg', src: ME, dst: wolf.id, v: 30, skill: 'slash', weight: 'light', ...knockAway(wolf, state.ents.get(ME)!, 10), knockTime: 0.18, stun: 0.15 });
+      damage(wolf, 30);
+      emit({ k: 'interrupt', id: wolf.id });
+    });
+  });
+}
+
 function kill(e: ClientEntity): void {
   e.dead = true;
   emit({ k: 'die', id: e.id });
@@ -188,6 +256,10 @@ const ACTIONS: [string, () => void][] = [
   }],
   ['被打', () => { const t = target(); const me = state.ents.get(ME)!; if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'bite', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 40, skill: 'bite', crit: Math.random() < 0.3 }); damage(me, 40); }],
   ['被重锤', () => { const me = state.ents.get(ME)!; emit({ k: 'cast', src: 3, dst: ME, fx: 'melee', skill: 'smash', color: '#ff9f43' }); emit({ k: 'dmg', src: 3, dst: ME, v: 70, skill: 'smash' }); damage(me, 70); }],
+  ['怪物重锤', () => ogreSmash(false)],
+  ['重锤被格挡', () => ogreSmash(true)],
+  ['重击击退', () => heavySweep()],
+  ['打断前摇', () => interruptWolf()],
   ['格挡', () => { const t = target(); if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'smash', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 8, skill: 'smash', blocked: 32 }); }],
   ['箭矢', () => { emit({ k: 'cast', src: 4, dst: ME, fx: 'projectile', skill: 'arrow', color: '#cfe8ff' }); emit({ k: 'dmg', src: 4, dst: ME, v: 22, skill: 'arrow' }); damage(state.ents.get(ME)!, 22); }],
   ['治疗', () => { const me = state.ents.get(ME)!; emit({ k: 'cast', src: ME, fx: 'heal', skill: 'heal', name: '治疗', color: '#7cff9b' }); emit({ k: 'heal', dst: ME, v: 120 }); me.hp = Math.min(me.maxHp, me.hp + 120); }],

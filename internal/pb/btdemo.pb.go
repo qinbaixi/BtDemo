@@ -151,40 +151,43 @@ func (EntityKind) EnumDescriptor() ([]byte, []int) {
 type EventKind int32
 
 const (
-	EventKind_CAST     EventKind = 1
-	EventKind_DAMAGE   EventKind = 2
-	EventKind_HEAL     EventKind = 3
-	EventKind_BUFF     EventKind = 4
-	EventKind_DIE      EventKind = 5
-	EventKind_RESPAWN  EventKind = 6
-	EventKind_SAY      EventKind = 7
-	EventKind_LEVEL_UP EventKind = 8
-	EventKind_LOOT     EventKind = 9
+	EventKind_CAST      EventKind = 1
+	EventKind_DAMAGE    EventKind = 2
+	EventKind_HEAL      EventKind = 3
+	EventKind_BUFF      EventKind = 4
+	EventKind_DIE       EventKind = 5
+	EventKind_RESPAWN   EventKind = 6
+	EventKind_SAY       EventKind = 7
+	EventKind_LEVEL_UP  EventKind = 8
+	EventKind_LOOT      EventKind = 9
+	EventKind_INTERRUPT EventKind = 10 // id: an entity whose windup was broken by a stagger (the pending hit never lands)
 )
 
 // Enum value maps for EventKind.
 var (
 	EventKind_name = map[int32]string{
-		1: "CAST",
-		2: "DAMAGE",
-		3: "HEAL",
-		4: "BUFF",
-		5: "DIE",
-		6: "RESPAWN",
-		7: "SAY",
-		8: "LEVEL_UP",
-		9: "LOOT",
+		1:  "CAST",
+		2:  "DAMAGE",
+		3:  "HEAL",
+		4:  "BUFF",
+		5:  "DIE",
+		6:  "RESPAWN",
+		7:  "SAY",
+		8:  "LEVEL_UP",
+		9:  "LOOT",
+		10: "INTERRUPT",
 	}
 	EventKind_value = map[string]int32{
-		"CAST":     1,
-		"DAMAGE":   2,
-		"HEAL":     3,
-		"BUFF":     4,
-		"DIE":      5,
-		"RESPAWN":  6,
-		"SAY":      7,
-		"LEVEL_UP": 8,
-		"LOOT":     9,
+		"CAST":      1,
+		"DAMAGE":    2,
+		"HEAL":      3,
+		"BUFF":      4,
+		"DIE":       5,
+		"RESPAWN":   6,
+		"SAY":       7,
+		"LEVEL_UP":  8,
+		"LOOT":      9,
+		"INTERRUPT": 10,
 	}
 )
 
@@ -3233,9 +3236,16 @@ type Event struct {
 	Immune        *bool                  `protobuf:"varint,19,opt,name=immune" json:"immune,omitempty"`      // DAMAGE: the target was invulnerable (value is 0)
 	Tx            *float32               `protobuf:"fixed32,20,opt,name=tx" json:"tx,omitempty"`             // CAST of a dash or line skill: where it ended (x, y is where it started)
 	Ty            *float32               `protobuf:"fixed32,21,opt,name=ty" json:"ty,omitempty"`
-	Zone          *int32                 `protobuf:"varint,22,opt,name=zone" json:"zone,omitempty"` // HEAL: from standing in this zone (Zone.id)
-	Item          *string                `protobuf:"bytes,23,opt,name=item" json:"item,omitempty"`  // LOOT: ItemInfo.id that dropped (src = the slain monster, dst = who got it)
-	Proc          *string                `protobuf:"bytes,24,opt,name=proc" json:"proc,omitempty"`  // DAMAGE / HEAL caused by an item effect: the effect kind (lifesteal, thorns, ignite, ...)
+	Zone          *int32                 `protobuf:"varint,22,opt,name=zone" json:"zone,omitempty"`    // HEAL: from standing in this zone (Zone.id)
+	Item          *string                `protobuf:"bytes,23,opt,name=item" json:"item,omitempty"`     // LOOT: ItemInfo.id that dropped (src = the slain monster, dst = who got it)
+	Proc          *string                `protobuf:"bytes,24,opt,name=proc" json:"proc,omitempty"`     // DAMAGE / HEAL caused by an item effect: the effect kind (lifesteal, thorns, ignite, ...)
+	Weight        *string                `protobuf:"bytes,25,opt,name=weight" json:"weight,omitempty"` // CAST / DAMAGE: light | medium | heavy (skills.yaml weight)
+	Kx            *float32               `protobuf:"fixed32,26,opt,name=kx" json:"kx,omitempty"`       // DAMAGE: the target is knocked back to (kx, ky) over knock_time seconds
+	Ky            *float32               `protobuf:"fixed32,27,opt,name=ky" json:"ky,omitempty"`
+	KnockTime     *float32               `protobuf:"fixed32,28,opt,name=knock_time,json=knockTime" json:"knock_time,omitempty"`
+	Stun          *float32               `protobuf:"fixed32,29,opt,name=stun" json:"stun,omitempty"`                // DAMAGE: the target is staggered (cannot move or act) for this many seconds
+	Wall          *bool                  `protobuf:"varint,30,opt,name=wall" json:"wall,omitempty"`                 // DAMAGE: the knockback slammed the target into an obstacle
+	HitAt         *float32               `protobuf:"fixed32,31,opt,name=hit_at,json=hitAt" json:"hit_at,omitempty"` // CAST with a windup: Frame.time when the hit lands
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3436,6 +3446,55 @@ func (x *Event) GetProc() string {
 		return *x.Proc
 	}
 	return ""
+}
+
+func (x *Event) GetWeight() string {
+	if x != nil && x.Weight != nil {
+		return *x.Weight
+	}
+	return ""
+}
+
+func (x *Event) GetKx() float32 {
+	if x != nil && x.Kx != nil {
+		return *x.Kx
+	}
+	return 0
+}
+
+func (x *Event) GetKy() float32 {
+	if x != nil && x.Ky != nil {
+		return *x.Ky
+	}
+	return 0
+}
+
+func (x *Event) GetKnockTime() float32 {
+	if x != nil && x.KnockTime != nil {
+		return *x.KnockTime
+	}
+	return 0
+}
+
+func (x *Event) GetStun() float32 {
+	if x != nil && x.Stun != nil {
+		return *x.Stun
+	}
+	return 0
+}
+
+func (x *Event) GetWall() bool {
+	if x != nil && x.Wall != nil {
+		return *x.Wall
+	}
+	return false
+}
+
+func (x *Event) GetHitAt() float32 {
+	if x != nil && x.HitAt != nil {
+		return *x.HitAt
+	}
+	return 0
 }
 
 type Attrs struct {
@@ -4823,7 +4882,7 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x06shield\x18\n" +
 	" \x01(\x02R\x06shield\x12\x1a\n" +
 	"\bblocking\x18\v \x01(\bR\bblocking\x12\x14\n" +
-	"\x05looks\x18\f \x01(\x05R\x05looks\"\xf0\x03\n" +
+	"\x05looks\x18\f \x01(\x05R\x05looks\"\x86\x05\n" +
 	"\x05Event\x12%\n" +
 	"\x04kind\x18\x01 \x02(\x0e2\x11.btdemo.EventKindR\x04kind\x12\x10\n" +
 	"\x03src\x18\x02 \x01(\x05R\x03src\x12\x10\n" +
@@ -4849,7 +4908,15 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x02ty\x18\x15 \x01(\x02R\x02ty\x12\x12\n" +
 	"\x04zone\x18\x16 \x01(\x05R\x04zone\x12\x12\n" +
 	"\x04item\x18\x17 \x01(\tR\x04item\x12\x12\n" +
-	"\x04proc\x18\x18 \x01(\tR\x04proc\"O\n" +
+	"\x04proc\x18\x18 \x01(\tR\x04proc\x12\x16\n" +
+	"\x06weight\x18\x19 \x01(\tR\x06weight\x12\x0e\n" +
+	"\x02kx\x18\x1a \x01(\x02R\x02kx\x12\x0e\n" +
+	"\x02ky\x18\x1b \x01(\x02R\x02ky\x12\x1d\n" +
+	"\n" +
+	"knock_time\x18\x1c \x01(\x02R\tknockTime\x12\x12\n" +
+	"\x04stun\x18\x1d \x01(\x02R\x04stun\x12\x12\n" +
+	"\x04wall\x18\x1e \x01(\bR\x04wall\x12\x15\n" +
+	"\x06hit_at\x18\x1f \x01(\x02R\x05hitAt\"O\n" +
 	"\x05Attrs\x12\x10\n" +
 	"\x03str\x18\x01 \x01(\x02R\x03str\x12\x10\n" +
 	"\x03agi\x18\x02 \x01(\x02R\x03agi\x12\x10\n" +
@@ -4962,7 +5029,7 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x06PLAYER\x10\x01\x12\v\n" +
 	"\aMONSTER\x10\x02\x12\a\n" +
 	"\x03NPC\x10\x03\x12\a\n" +
-	"\x03PET\x10\x04*l\n" +
+	"\x03PET\x10\x04*{\n" +
 	"\tEventKind\x12\b\n" +
 	"\x04CAST\x10\x01\x12\n" +
 	"\n" +
@@ -4973,7 +5040,9 @@ const file_btdemo_proto_rawDesc = "" +
 	"\aRESPAWN\x10\x06\x12\a\n" +
 	"\x03SAY\x10\a\x12\f\n" +
 	"\bLEVEL_UP\x10\b\x12\b\n" +
-	"\x04LOOT\x10\t*1\n" +
+	"\x04LOOT\x10\t\x12\r\n" +
+	"\tINTERRUPT\x10\n" +
+	"*1\n" +
 	"\bAiStatus\x12\v\n" +
 	"\aFAILURE\x10\x00\x12\v\n" +
 	"\aSUCCESS\x10\x01\x12\v\n" +

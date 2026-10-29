@@ -5,6 +5,8 @@ import type { EntityKind } from '../net/types';
 export const LERP_MS = 100;          // 两次 10Hz 同步之间的位置插值时长
 export const SNAP_DIST = 400;        // 跳得比这更远就直接瞬移，不做插值
 export const ATTACK_MS = 380;        // 攻击挥砍动画
+export const ATTACK_IMPACT = 0.45;   // 挥砍动画里打到人的那一刻（占动画时长的比例，见 models.ts 的 phases）
+export const ATTACK_HOLD = 0.3;      // 前摇时动作停住的那一帧：武器举到最高
 export const HIT_MS = 260;           // 受击动画
 export const DEATH_MS = 650;         // 倒地动画
 

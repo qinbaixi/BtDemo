@@ -2,6 +2,8 @@
 #   tree:   使用的行为树，对应 bt/trees/<tree>.json 导出的 Go 文件（internal/ai/trees/<tree>.go）
 #   skills: 技能槽，行为树里 CastSkill 的 Slot 从 1 开始对应这里的顺序
 #   faction: 阵营，敌对关系见 world.yaml 的 hostile
+#   poise:  韧性，挨打时按技能的分量被打掉，打空了才会被击退和硬直（0 = 每下都会）；2 秒没挨打回满
+#   mass:   重量，击退距离除以它（默认 1）
 templates:
   slime:
     name: 史莱姆
@@ -16,6 +18,8 @@ templates:
     skills: [bite, heavy_bite]
     respawn: 5
     exp: 25
+    poise: 0
+    mass: 0.8
   wolf:
     name: 灰狼
     kind: monster
@@ -29,6 +33,8 @@ templates:
     skills: [bite, heavy_bite]
     respawn: 6
     exp: 45
+    poise: 10
+    mass: 1
   skeleton_archer:
     name: 骷髅弓手
     kind: monster
@@ -42,6 +48,8 @@ templates:
     skills: [arrow]
     respawn: 7
     exp: 55
+    poise: 0
+    mass: 0.8
   ogre_chief:
     name: 食人魔首领
     kind: monster
@@ -55,6 +63,8 @@ templates:
     skills: [smash, boss_whirl, enrage]
     respawn: 20
     exp: 300
+    poise: 120
+    mass: 2.5
   guard:
     name: 村庄守卫
     kind: npc
@@ -68,6 +78,8 @@ templates:
     skills: [guard_hit, guard_heal]
     respawn: 10
     exp: 0
+    poise: 40
+    mass: 1.4
   villager:
     name: 村民
     kind: npc
@@ -81,3 +93,5 @@ templates:
     skills: []
     respawn: 8
     exp: 5
+    poise: 0
+    mass: 1

@@ -10,7 +10,7 @@
 //   overlay      另一块 2D 画布：头顶文字、调试线条、暗角（不参与泛光和调色，保持清晰）
 
 import { Application, Container, Graphics, RenderLayer, type TextureSource } from 'pixi.js';
-import { DEATH_MS, FEEL, HIT_MS, LOOK_FROST, LOOK_HOLY, MODEL_SCALE, RIM, ZONE_ASPECT } from '../game/config';
+import { ATTACK_HOLD, DEATH_MS, FEEL, HIT_MS, LOOK_FROST, LOOK_HOLY, MODEL_SCALE, RIM, ZONE_ASPECT } from '../game/config';
 import { clamp, hypot } from '../game/math';
 import { headY, posOf, state, type ClientEntity, type Point, type Quality, type Scenery } from '../game/state';
 import { rainCenter } from '../input';
@@ -240,6 +240,8 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
   drawOverlay(now, shake, zoom, mp, ents, debugOpen);
 }
 
+const STUN_HOLD = 0.3;   // 硬直时受击动画停在这一帧（占受击动画时长的比例）
+
 // 溶解边缘的火光：怪物是暗红的余烬，NPC 是幽蓝的魂火
 const BURN: Record<string, string> = { monster: '#ff5a1e', npc: '#5fd8ff', player: '#ffcf6a' };
 
@@ -271,7 +273,18 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
   e.shownFacing = e.facing;
   const turnT = (now - e.turnAt) / 140;
   const turn = turnT >= 0 && turnT < 1 ? Math.sin(turnT * Math.PI) : 0;
-  const atk = (now - e.attackAt) / e.attackMs;
+  // 前摇：动作停在武器举到最高的那一帧，身体微微发抖，等命中前一刻再砸下去（见 events.ts 的 windup）
+  let atk = (now - e.attackAt) / e.attackMs;
+  let tremble = 0;
+  const holdEnd = e.attackAt + ATTACK_HOLD * e.attackMs;
+  if (e.windupFrom > 0 && now >= e.windupFrom && now < holdEnd && !e.dead) {
+    atk = ATTACK_HOLD * Math.min(1, (now - e.windupFrom) / Math.max(60, (holdEnd - e.windupFrom) * 0.5));
+    tremble = Math.sin(now * 0.09) * Math.min(1.2, (now - e.windupFrom) / 300);
+  }
+  // 硬直：受击姿势停在被打得最狠的那一下，直到硬直结束
+  if (now < e.stunUntil && !e.dead && now - e.hitAt > STUN_HOLD * HIT_MS && now - e.hitAt < HIT_MS) {
+    e.hitAt = now - STUN_HOLD * HIT_MS;
+  }
   const hit = (now - e.hitAt) / HIT_MS;
   const hitting = hit >= 0 && hit < 1;
   const dead = e.dead ? clamp((now - (e.deadAt < 0 ? now - DEATH_MS : e.deadAt)) / DEATH_MS, 0, 1) : -1;
@@ -291,7 +304,7 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
   }
 
   return {
-    x: p.x,
+    x: p.x + tremble,
     y: p.y,
     r: (e.r || 14) * MODEL_SCALE,
     color: e.color,
