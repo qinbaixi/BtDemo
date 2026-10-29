@@ -6,6 +6,7 @@
 // 图片放在 web/public/art/ 下，构建时原样复制、嵌进服务端；路径都相对 art/ 目录。
 
 import { Assets, Rectangle, Texture } from 'pixi.js';
+import type { Flipbook } from './flipbook';
 
 // 角色动画：一张图一行一个动画，每格一样大。
 export interface CharacterArt {
@@ -28,11 +29,20 @@ export interface PropArt {
   fps?: number;
 }
 
+// 特效序列帧（命中火花等）：一张图横向排着几帧，每格一样大，帧中心就是命中点，命中方向朝右。
+export interface FxArt {
+  sheet: string;
+  frame: [number, number];             // 每格的宽、高（像素），应该和 render/flipbook.ts 的 FLIP_SIZE 一样（96x96）
+  frames: number;
+  blend?: 'add' | 'normal';            // 发光的火星用 add，碎屑、血用 normal（默认）
+}
+
 export interface Manifest {
   characters?: Record<string, CharacterArt>;
   props?: Record<string, PropArt>;
   ground?: string;                     // 整张地图的地表图（和地图一样大，ppu 1）
   lut?: string;                        // 调色 LUT（1024x32）
+  fx?: Record<string, FxArt>;          // 键名如 hit.metal、hit.flesh
 }
 
 // 加载好的角色：每个动画一组贴图。
@@ -51,6 +61,7 @@ export const art = {
   props: new Map<string, LoadedProp>(),
   ground: null as Texture | null,
   lut: null as Texture | null,
+  fx: new Map<string, Flipbook>(),     // 特效是画在 2D 画布上的，所以存成切好的小画布，不是 Pixi 贴图
 };
 
 const BASE = 'art/';
@@ -89,7 +100,37 @@ export async function loadArt(): Promise<void> {
   }
   if (m.ground) jobs.push(tex(m.ground).then((t) => { art.ground = t; }).catch((err) => console.error('地表图加载失败', err)));
   if (m.lut) jobs.push(tex(m.lut).then((t) => { art.lut = t; }).catch((err) => console.error('LUT 加载失败', err)));
+  for (const [name, def] of Object.entries(m.fx || {})) {
+    if (!def || typeof def.sheet !== 'string' || !pair(def.frame) || !Number.isInteger(def.frames) || def.frames < 1) {
+      console.error(`特效 ${name}：清单缺少 sheet、frame 或 frames，已跳过`);
+      continue;
+    }
+    jobs.push(loadImage(BASE + def.sheet).then((img) => {
+      art.fx.set(name, { frames: sliceImage(img, def), blend: def.blend === 'add' ? 'add' : 'normal' });
+    }).catch((err) => console.error(`特效 ${name} 加载失败`, err)));
+  }
   await Promise.all(jobs);
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(src));
+    img.src = src;
+  });
+}
+
+// sliceImage 把横排的序列帧切成一格一个小画布。
+function sliceImage(img: HTMLImageElement, def: FxArt): HTMLCanvasElement[] {
+  const [frameWidth, frameHeight] = def.frame;
+  return Array.from({ length: def.frames }, (_, i) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = frameWidth;
+    canvas.height = frameHeight;
+    canvas.getContext('2d')!.drawImage(img, i * frameWidth, 0, frameWidth, frameHeight, 0, 0, frameWidth, frameHeight);
+    return canvas;
+  });
 }
 
 function sliceSheet(t: Texture, def: CharacterArt): Partial<Record<AnimName, Texture[]>> {

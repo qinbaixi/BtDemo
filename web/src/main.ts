@@ -31,7 +31,14 @@ import { initPicker } from './ui/picker';
 import { initLines } from './ui/lines';
 
 declare global {
-  interface Window { btdemo: { state: typeof state; debug?: typeof debug; bake?: () => Promise<unknown> } }
+  interface Window {
+    btdemo: {
+      state: typeof state;
+      debug?: typeof debug;
+      bake?: () => Promise<unknown>;
+      sfxbake?: (overrides?: Record<string, string[]>) => Promise<unknown>;
+    };
+  }
 }
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -97,6 +104,17 @@ function runPending(now: number): void {
 }
 
 async function init(): Promise<void> {
+  const params = new URLSearchParams(location.search);
+  // ?sfxbake：音效烘焙（tools/sfxbake 用无头浏览器调用，见 audio/bake.ts），不建游戏画面
+  if (params.has('sfxbake')) {
+    window.btdemo = { state, sfxbake: async (overrides) => (await import('./audio/bake')).sfxBake(overrides) };
+    return;
+  }
+  // ?sfxlab：调音页，试听全部声音、对比烘焙版和实时版、调音量音高（见 sfxlab.ts），不建游戏画面
+  if (params.has('sfxlab')) {
+    (await import('./sfxlab')).startSfxLab();
+    return;
+  }
   initHud(castSlot);
   initPicker(conn.send);
   initBag(conn.send);

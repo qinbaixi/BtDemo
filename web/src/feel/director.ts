@@ -34,6 +34,7 @@ export interface HitContext {
 }
 
 const BYSTANDER_GAIN = 0.35;   // 别人之间的命中：声音约 -9dB
+const DRAG_MIN_PX = 20;        // 击退超过这么远才在地上蹭出拖痕
 
 // 每个实体最近一次放的技能 fx（伤害事件里没有 fx，猜档位时用）和最近一次被谁打
 const lastCastFx = new Map<number, string>();
@@ -161,8 +162,40 @@ export function playHit(hit: HitContext, now: number): number {
   }
   if ((hit.mine || hit.hurtMe) && profile.shake > 0 && state.fx) state.fx.shake = Math.max(state.fx.shake, profile.shake);
 
+  // 画面：命中点按材质喷一遍序列帧（金属火星、骨渣、血点……），地上留印记
+  if (hit.result === 'hit') state.fx?.hitBurst(target.id, hit.material, hit.tier, crit, dx, now);
+  groundMarks(hit, tp, now);
+
   hitSound(hit, tp.x, tp.y);
   return dx;
+}
+
+// groundMarks 在地上留印记（render/pixi/decals.ts）：重的钝器和爪击砸出裂纹，火烧焦，冰结霜，
+// 被击退时蹭出拖痕，撞墙的地方再裂一块。挡住的一击只留裂纹和拖痕（盾挡住了火和冰）。
+function groundMarks(hit: HitContext, at: { x: number; y: number }, now: number): void {
+  const fx = state.fx;
+  if (!fx || hit.result === 'immune' || hit.result === 'parry') return;
+  const landed = hit.result === 'hit' || hit.result === 'guard_break';
+  if (hit.tier === 'heavy' && (hit.weapon === 'blunt' || hit.weapon === 'claw')) {
+    fx.decal({ kind: 'crack', x: at.x, y: at.y, at: now });
+  }
+  if (landed && hit.weapon === 'fire') fx.decal({ kind: 'scorch', x: at.x, y: at.y, at: now, size: hit.tier === 'light' ? 44 : 72 });
+  if (landed && hit.weapon === 'frost') fx.decal({ kind: 'frost', x: at.x, y: at.y, at: now, size: hit.tier === 'light' ? 52 : 80 });
+  if (hit.knock) {
+    const length = hypot(at.x, at.y, hit.knock.x, hit.knock.y);
+    if (length > DRAG_MIN_PX) {
+      fx.decal({
+        kind: 'drag',
+        x: at.x,
+        y: at.y,
+        at: now,
+        angle: Math.atan2(hit.knock.y - at.y, hit.knock.x - at.x),
+        length,
+        growMs: hit.knock.ms,
+      });
+    }
+    if (hit.wall) fx.decal({ kind: 'crack', x: hit.knock.x, y: hit.knock.y, at: now + hit.knock.ms * 0.6, size: 60 });
+  }
 }
 
 // playParry 是完美格挡：举盾的人往前一顶，攻击者被弹开、白闪、硬直；

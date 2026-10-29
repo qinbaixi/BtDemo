@@ -9,6 +9,7 @@
 import { MODEL_SCALE, modelBox } from '../game/config';
 import { state } from '../game/state';
 import type { AnimName, CharacterArt, Manifest, PropArt } from './art';
+import { FLIP_MATERIALS, FLIP_SIZE, paintFlipbook } from './flipbook';
 import { drawModel } from './models';
 
 const PPU = 2;   // 模板按 2 倍分辨率导出（1 世界像素 = 2 图片像素）
@@ -33,7 +34,7 @@ export interface Baked { files: Record<string, string>; manifest: Manifest }   /
 
 export function bakeAll(): Baked {
   const files: Record<string, string> = {};
-  const manifest: Manifest = { characters: {}, props: {} };
+  const manifest: Manifest = { characters: {}, props: {}, fx: {} };
   for (const [name, c] of Object.entries(CHARACTERS)) {
     const { canvas, def } = bakeCharacter(name, c.r, c.color);
     files[def.sheet] = canvas.toDataURL('image/png');
@@ -46,6 +47,18 @@ export function bakeAll(): Baked {
     }
     manifest.ground = 'ground/ground.png';
     files[manifest.ground] = (state.scenery.ground as HTMLCanvasElement).toDataURL('image/png');
+  }
+  // 命中序列帧：每种材质一张横条
+  for (const material of FLIP_MATERIALS) {
+    const book = paintFlipbook(material);
+    const strip = document.createElement('canvas');
+    strip.width = FLIP_SIZE * book.frames.length;
+    strip.height = FLIP_SIZE;
+    const g = strip.getContext('2d')!;
+    book.frames.forEach((frame, i) => g.drawImage(frame, i * FLIP_SIZE, 0));
+    const sheet = `fx/hit.${material}.png`;
+    files[sheet] = strip.toDataURL('image/png');
+    manifest.fx![`hit.${material}`] = { sheet, frame: [FLIP_SIZE, FLIP_SIZE], frames: book.frames.length, blend: book.blend };
   }
   return { files, manifest };
 }

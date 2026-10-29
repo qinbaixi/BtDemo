@@ -5,8 +5,13 @@
 // Glows use cached radial-gradient sprites blended with 'lighter' instead of
 // shadowBlur, which keeps a busy fight cheap.
 
+import type { Material, Tier } from '../audio/recipes';
+import { FLIP_MS, FLIP_PPU, FLIP_SIZE, flipbook } from './flipbook';
+import type { DecalRequest } from './pixi/decals';
+
 const TAU = Math.PI * 2;
 const MAX_PARTICLES = 900;
+const BURST_SCALE: Record<Tier, number> = { light: 1, medium: 1.25, heavy: 1.6 };   // 命中序列帧按档位放大
 
 const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
 const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
@@ -161,6 +166,8 @@ export class FX {
   density: number;   // 粒子密度 0..1
   lookEnts: LookEnt[] = [];               // 这一帧带外观的实体（looks() 记下，drawTrails 画光晕）
   lookSpawnAt = new Map<string, number>(); // "实体 id:外观" -> 上次冒粒子的时间
+  decals: DecalRequest[] = [];            // 这一帧新排的地面印记，world.ts 取走交给 pixi/decals.ts
+  decalReset = false;                     // clear() 过：地上已有的印记也要清掉
 
   // resolve(id) returns the live {x, y, r} of an entity, or null.
   auras: () => Aura[];   // 每帧要画护盾泡泡的实体
@@ -180,6 +187,31 @@ export class FX {
     this.scheduledShake.length = 0;
     this.parts.length = 0;
     this.shake = 0;
+    this.decals.length = 0;
+    this.decalReset = true;
+  }
+
+  // decal 在地上留一个印记（裂纹、焦痕、霜、拖痕），见 pixi/decals.ts。
+  decal(request: DecalRequest) {
+    this.decals.push(request);
+  }
+
+  // hitBurst 在受击点播一遍材质的命中序列帧（render/flipbook.ts）：火星、骨渣、血点……
+  // dir 是受击方向的横向分量（朝哪边喷），tier 和暴击决定大小。
+  hitBurst(id: number, material: Material, tier: Tier, crit: boolean, dir: number, now: number) {
+    const p = this.pos(id, null);
+    if (!p) return;
+    const r = p.r || 14;
+    const scale = (BURST_SCALE[tier] ?? 1) + (crit ? 0.3 : 0);
+    const book = flipbook(material);
+    const flip = dir < 0;
+    // 跟着受击者走（被击退时火花不留在原地）；打在朝向攻击者的那一侧
+    this.spawn({
+      kind: 'flip', book, flip, anchor: id,
+      ox: -(flip ? -1 : 1) * r * 0.35, oy: -(p.h || r * 2.6) * 0.55,
+      vx: 0, vy: 0,
+      size: (FLIP_SIZE / FLIP_PPU) * scale, life: FLIP_MS * (0.85 + 0.15 * scale), born: now,
+    });
   }
 
   pos(id, fallback) {
@@ -1971,6 +2003,18 @@ export class FX {
       const k = age / p.life;
       const a = k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85;
       switch (p.kind) {
+        case 'flip': {
+          // 序列帧自己带淡出，不再乘 a
+          const frames = p.book.frames;
+          if (!frames.length) break;
+          const image = frames[Math.min(frames.length - 1, Math.floor(k * frames.length))];
+          ctx.save();
+          ctx.globalCompositeOperation = p.book.blend === 'add' ? 'lighter' : 'source-over';
+          ctx.globalAlpha = 1;
+          ctx.frame(image, x, y, p.size, p.size, p.flip);
+          ctx.restore();
+          break;
+        }
         case 'spark': {
           ctx.globalAlpha = a;
           ctx.streak(x, y, x - p.vx * 28, y - p.vy * 28, p.size, p.color);

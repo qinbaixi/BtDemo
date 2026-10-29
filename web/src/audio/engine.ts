@@ -4,11 +4,14 @@
 //                                                         ↘ 混响（金属、铃声的尾音）↗
 //
 // 浏览器要求用户点过页面才能出声，所以第一次按键或点击时才创建 AudioContext；在那之前 play() 什么都不做。
-// 声音先找烘焙好的素材（registerSample，资源管线做好后接上），没有就用 recipes.ts 的配方实时合成。
+// 声音先找烘焙好的素材（audio/audio.json 的图集，见 sprite.ts；地址带 ?sfx=live 时不读），
+// 没有就用 recipes.ts 的配方实时合成。每个声音的音量、音高微调在 mix.ts。
 
 import { state } from '../game/state';
 import { Kit, makeImpulse, makeNoiseBuffer } from './kit';
+import { MIX } from './mix';
 import { fallbacks, RECIPES } from './recipes';
+import { loadSprite } from './sprite';
 
 export type Bus = 'sfx' | 'ui';
 
@@ -20,7 +23,7 @@ export interface PlayOptions {
   bus?: Bus;
 }
 
-interface Voice { name: string; group: string; gain: GainNode; nodes: AudioNode[]; end: number }
+interface Voice { name: string; group: string; gain: GainNode; wet: GainNode | null; nodes: AudioNode[]; end: number }
 
 // 每类声音最多同时响几个（满了把最老的那个淡出），以及全部加起来的上限
 const GROUP_LIMIT: Record<string, number> = { hit: 6, swing: 4, block: 3, cast: 4, kill: 2 };
@@ -38,6 +41,8 @@ const audio = {
   voices: [] as Voice[],
   lastPlayed: new Map<string, number>(),
   samples: new Map<string, AudioBuffer[]>(),
+  useSamples: true,      // false：全部实时合成（?sfx=live，或调音页切到"实时"对比）
+  spriteLoaded: false,
   volume: 0.8,
   muted: false,
 };
@@ -86,6 +91,12 @@ function ensureContext(): AudioContext | null {
     audio.reverb = reverb;
     audio.noise = makeNoiseBuffer(ctx);
     applyVolume();
+    if (new URLSearchParams(location.search).get('sfx') === 'live') audio.useSamples = false;
+    else void loadSprite(ctx).then((sounds) => {
+      if (!sounds) return;
+      for (const [name, buffers] of sounds) audio.samples.set(name, buffers);
+      audio.spriteLoaded = true;
+    }).catch((err) => console.warn('音频图集读取失败，改用实时合成', err));
   }
   if (audio.ctx.state === 'suspended') audio.ctx.resume().catch(() => {});
   return audio.ctx;
@@ -111,8 +122,12 @@ export function play(name: string, options: PlayOptions = {}): boolean {
   }
   if (gain < 0.02) return false;
 
-  const recipeName = fallbacks(name).find((candidate) => audio.samples.has(candidate) || RECIPES[candidate]);
+  const chain = fallbacks(name);
+  const hasSample = (candidate: string) => audio.useSamples && audio.samples.has(candidate);
+  const recipeName = chain.find((candidate) => hasSample(candidate) || RECIPES[candidate]);
   if (!recipeName) return false;
+  const mix = mixOf(chain);
+  gain *= mix.gain ?? 1;
   audio.lastPlayed.set(name, options.at ?? nowMs);
 
   const group = name.split('.')[0];
@@ -120,7 +135,7 @@ export function play(name: string, options: PlayOptions = {}): boolean {
 
   const t = ctx.currentTime + Math.max(0, ((options.at ?? nowMs) - nowMs) / 1000) + 0.005;
   const voiceGain = ctx.createGain();
-  voiceGain.gain.value = gain;
+  voiceGain.gain.value = Math.min(gain, 4);
   const nodes: AudioNode[] = [voiceGain];
   let tail: AudioNode = voiceGain;
   if (muffle > 0.05) {
@@ -140,9 +155,10 @@ export function play(name: string, options: PlayOptions = {}): boolean {
   }
   tail.connect(audio.buses[options.bus ?? 'sfx']);
 
-  const pitch = 1 + (Math.random() - 0.5) * 0.1;   // 音高随机 ±5%
+  const pitch = (mix.pitch ?? 1) * (1 + (Math.random() - 0.5) * 0.1);   // 音高随机 ±5%
   let duration: number;
-  const samples = audio.samples.get(recipeName);
+  let voiceWet: GainNode | null = null;
+  const samples = hasSample(recipeName) ? audio.samples.get(recipeName) : undefined;
   if (samples && samples.length) {
     const source = ctx.createBufferSource();
     source.buffer = samples[Math.floor(Math.random() * samples.length)];
@@ -151,11 +167,18 @@ export function play(name: string, options: PlayOptions = {}): boolean {
     source.start(t);
     duration = source.buffer.duration / pitch;
   } else {
-    const kit = new Kit(ctx, voiceGain, audio.reverb, audio.noise!);
+    // 混响送出也按这个声音的音量走（烘焙版的混响尾巴在素材里，同样被 voiceGain 缩放，两边才一致）
+    if (audio.reverb) {
+      voiceWet = ctx.createGain();
+      voiceWet.gain.value = voiceGain.gain.value;
+      voiceWet.connect(audio.reverb);
+      nodes.push(voiceWet);
+    }
+    const kit = new Kit(ctx, voiceGain, voiceWet, audio.noise!);
     duration = RECIPES[recipeName](kit, t, pitch);
   }
   const end = t + duration + 0.1;
-  const voice: Voice = { name, group, gain: voiceGain, nodes, end };
+  const voice: Voice = { name, group, gain: voiceGain, wet: voiceWet, nodes, end };
   audio.voices.push(voice);
   // 播完断开整条链（音量、低通、声像），节点交给垃圾回收
   window.setTimeout(() => {
@@ -163,6 +186,15 @@ export function play(name: string, options: PlayOptions = {}): boolean {
     audio.voices = audio.voices.filter((v) => v !== voice);
   }, (end - ctx.currentTime) * 1000 + 50);
   return true;
+}
+
+// mixOf 是声音的混音微调：按回退顺序取第一个在 MIX 里真的调过（有 gain 或 pitch）的名字。
+function mixOf(chain: string[]): { gain?: number; pitch?: number } {
+  for (const candidate of chain) {
+    const entry = MIX[candidate];
+    if (entry && (entry.gain !== undefined || entry.pitch !== undefined)) return entry;
+  }
+  return {};
 }
 
 // makeRoom 在这类声音或总数到上限时，把最老的一个淡出让位。
@@ -174,6 +206,10 @@ function makeRoom(group: string, now: number): void {
   if (!victim) return;
   victim.gain.gain.cancelScheduledValues(now);
   victim.gain.gain.setTargetAtTime(0, now, 0.01);
+  if (victim.wet) {
+    victim.wet.gain.cancelScheduledValues(now);
+    victim.wet.gain.setTargetAtTime(0, now, 0.01);
+  }
   victim.end = now;
   audio.voices = audio.voices.filter((voice) => voice !== victim);
 }
@@ -197,9 +233,29 @@ function place(x: number, y: number): { pan: number; gain: number; muffle: numbe
   };
 }
 
-// registerSample 让 name 用录好的（或烘焙好的）音频，多个变体随机挑一个。资源管线接上后由加载器调用。
+// registerSample 让 name 用录好的（或烘焙好的）音频，多个变体随机挑一个。
 export function registerSample(name: string, buffers: AudioBuffer[]): void {
   audio.samples.set(name, buffers);
+}
+
+// setSampleMode 切换用烘焙素材还是全部实时合成（调音页对比用）。
+export function setSampleMode(on: boolean): void {
+  audio.useSamples = on;
+}
+
+// sampleInfo 报告图集加载了没有、有多少个声音有素材，以及某个声音现在用的是素材还是配方。
+export function sampleInfo(name?: string): { loaded: boolean; count: number; source?: 'sample' | 'recipe' | 'none' } {
+  const info: { loaded: boolean; count: number; source?: 'sample' | 'recipe' | 'none' } = { loaded: audio.spriteLoaded, count: audio.samples.size };
+  if (name !== undefined) {
+    const found = fallbacks(name).find((candidate) => (audio.useSamples && audio.samples.has(candidate)) || RECIPES[candidate]);
+    info.source = !found ? 'none' : audio.useSamples && audio.samples.has(found) ? 'sample' : 'recipe';
+  }
+  return info;
+}
+
+// sampleBuffers 是 name 烘焙好的变体（调音页画波形用），没有返回空数组。
+export function sampleBuffers(name: string): AudioBuffer[] {
+  return audio.samples.get(name) ?? [];
 }
 
 export function audioContext(): AudioContext | null {

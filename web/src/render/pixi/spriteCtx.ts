@@ -73,6 +73,16 @@ export class SpriteCtx {
     sprite.height = h;
   }
 
+  // frame 以 (cx, cy) 为中心画一张 w×h 的图，flip 为真时左右翻转（命中序列帧按受击方向翻）。
+  frame(image: HTMLCanvasElement | HTMLImageElement, cx: number, cy: number, w: number, h: number, flip = false): void {
+    if (this.globalAlpha <= 0.004 || w <= 0 || h <= 0) return;
+    const sprite = this.next(textureOf(image), 0xffffff);
+    sprite.anchor.set(0.5, 0.5);
+    sprite.rotation = 0;
+    sprite.position.set(cx, cy);
+    sprite.scale.set(((flip ? -1 : 1) * w) / sprite.texture.width, h / sprite.texture.height);
+  }
+
   // fillRect 用 fillStyle 的颜色画实心矩形（只支持 #rrggbb 颜色）。
   fillRect(x: number, y: number, w: number, h: number): void {
     if (this.globalAlpha <= 0.004) return;
@@ -115,6 +125,8 @@ export class SpriteCtx {
       this.pool.push(sprite);
     }
     this.used++;
+    // 上一帧翻转过的精灵：width 赋值会保留 scale 的符号，先转回正的
+    if (sprite.scale.x < 0) sprite.scale.x = -sprite.scale.x;
     sprite.visible = true;
     sprite.texture = texture;
     sprite.tint = tint;

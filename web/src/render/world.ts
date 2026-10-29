@@ -24,6 +24,7 @@ import { CanvasSprite } from './pixi/canvasSprite';
 import { PostFilter, type Distort } from './pixi/postFilter';
 import { SceneView, type Mover } from './pixi/sceneView';
 import { SpriteCtx } from './pixi/spriteCtx';
+import { DecalLayer } from './pixi/decals';
 import { RibbonPool } from './pixi/trail';
 import { PortalLayer, portalLights } from './portals';
 import { pruneZones, ZoneLayer, zoneLights } from './zones';
@@ -45,6 +46,7 @@ let marks: Graphics;           // 地面标记
 let targetRing: Container;     // 目标脚下的旋转圈
 let targetRingArcs: Graphics;
 let underFx: CanvasSprite;     // 地面特效（暂时用 Canvas 2D 画）
+let decals: DecalLayer;        // 地面印记：裂纹、焦痕、霜、拖痕
 let depth: Container;          // 角色和物件，按 zIndex（脚底 y）排序
 let xrayLayer: RenderLayer;    // 角色剪影：被高物件挡住时画在所有物件上面
 let lighting: Lighting;
@@ -93,7 +95,9 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
   const zoneContainer = new Container();
   zoneLayer = new ZoneLayer(zoneContainer);
   portalLayer = new PortalLayer(zoneContainer);
-  world.addChild(groundLayer, zoneContainer, marks, targetRing, underFx, depth);
+  const decalContainer = new Container();
+  decals = new DecalLayer(decalContainer);
+  world.addChild(groundLayer, zoneContainer, decalContainer, marks, targetRing, underFx, depth);
 
   const darkness = new Container();
   glowWorld = new Container();
@@ -433,6 +437,14 @@ function dashArc(g: Graphics, x: number, y: number, r: number, on: number, off: 
 
 // drawUnderFx 把地面特效（旋风斩地裂、治疗法阵、光环……）画到一块只覆盖特效范围的小画布上。
 function drawUnderFx(now: number): void {
+  const fx = state.fx;
+  if (fx.decalReset) {
+    decals.clear();
+    fx.decalReset = false;
+  }
+  for (const request of fx.decals) decals.add(request);
+  fx.decals.length = 0;
+  decals.update(now);
   let box = state.fx.underBounds(now);
   // 只画镜头里的部分：特效分散在地图两头时画布也不会变大
   if (box) {

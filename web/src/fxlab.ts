@@ -258,6 +258,19 @@ function heavySweep(): void {
   });
 }
 
+// groundMarksDemo 一次打出四种地面印记：重锤砸狼（裂纹）、火球烧食人魔（焦痕）、冰霜打骷髅（霜）、
+// 重击把史莱姆推出去（拖痕）。
+function groundMarksDemo(): void {
+  const me = state.ents.get(ME)!;
+  emit({ k: 'cast', src: ME, dst: 2, fx: 'melee', skill: 'smash', weight: 'heavy', color: '#ffd166' });
+  later(120, () => emit({ k: 'dmg', src: ME, dst: 2, v: 30, skill: 'smash', weight: 'heavy' }));
+  emit({ k: 'cast', src: ME, dst: 3, fx: 'projectile', skill: 'fireball', name: '火球术', color: '#ff7b39' });
+  later(300, () => emit({ k: 'dmg', src: ME, dst: 3, v: 30, skill: 'fireball' }));
+  later(200, () => emit({ k: 'dmg', src: ME, dst: 4, v: 30, skill: 'frost_nova' }));
+  const slime = state.ents.get(5)!;
+  later(260, () => emit({ k: 'dmg', src: ME, dst: 5, v: 20, skill: 'whirlwind', weight: 'heavy', ...knockAway(slime, me, 60), knockTime: 0.2, stun: 0.3 }));
+}
+
 // interruptWolf 是灰狼扑上来前摇 0.5 秒，自己抢先一刀把它砍出硬直，这一口就没咬下来。
 function interruptWolf(): void {
   const wolf = state.ents.get(2)!;
@@ -305,6 +318,7 @@ const ACTIONS: [string, () => void][] = [
   ['背后挨锤', () => guardDemo('back')],
   ['重击击退', () => heavySweep()],
   ['打断前摇', () => interruptWolf()],
+  ['地面印记', () => groundMarksDemo()],
   ['格挡', () => { const t = target(); if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'smash', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 8, skill: 'smash', blocked: 32 }); }],
   ['箭矢', () => { emit({ k: 'cast', src: 4, dst: ME, fx: 'projectile', skill: 'arrow', color: '#cfe8ff' }); emit({ k: 'dmg', src: 4, dst: ME, v: 22, skill: 'arrow' }); damage(state.ents.get(ME)!, 22); }],
   ['治疗', () => { const me = state.ents.get(ME)!; emit({ k: 'cast', src: ME, fx: 'heal', skill: 'heal', name: '治疗', color: '#7cff9b' }); emit({ k: 'heal', dst: ME, v: 120 }); me.hp = Math.min(me.maxHp, me.hp + 120); }],

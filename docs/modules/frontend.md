@@ -37,6 +37,8 @@ web/
   public/.gitkeep       构建时复制到 dist，保证没构建前端也能编译服务端
   src/
     main.ts             入口：把各模块接起来，每帧主循环
+    fxlab.ts            特效实验页（?fxlab）：假角色、按钮播命中/技能/格挡/地面印记，调档位和后期参数
+    sfxlab.ts           调音页（?sfxlab）：试听每个声音、烘焙版/实时版 A/B、调音量音高、导出 mix.ts
     input.ts            键盘鼠标：移动、选目标、放技能（J K L U I O）、G/Q/` 开关
     net/
       types.ts          前端用的消息类型（Welcome、增量 State / Self、事件……）
@@ -50,19 +52,31 @@ web/
       sync.ts           处理 Frame 里的 welcome / enter / leave / state / event / self / zones / ai / toast 等消息；welcome 后下载地图建场景
       map.ts            下载并解析所在场景的地图（/maps/*.tmj）（Tiled 地图，和服务端读同一份）
       events.ts         事件 → 动画、特效、飘字
+    feel/
+      profiles.ts       打击感档位表（light/medium/heavy、格挡、完美格挡、破防……）和技能 → 档位/武器
+      director.ts       一次命中分发到顿帧、击退、镜头、音效、命中序列帧、地面印记
+    audio/
+      kit.ts            合成积木（噪声、振荡器、包络、滤波）
+      recipes.ts        每个声音的配方（武器.材质.档位 命名，找不到时逐级回退）
+      engine.ts         音频总线：先用烘焙好的音频图集，没有或 ?sfx=live 时实时合成
+      sprite.ts         读 audio/audio.json + sfx.webm / sfx.m4a，切成每个声音的变体
+      bake.ts           ?sfxbake 时离线渲染全部配方，给 tools/sfxbake/bake.mjs 调用
+      mix.ts            每个声音的音量 / 音高微调（sfxlab 导出后粘贴进来）
     render/
       world.ts          Pixi 舞台和一帧的绘制：镜头、地面标记、角色、光照
       overlay.ts        叠加的 2D 画布：名字血条、气泡、飘字、调试线条、暗角（不开后期处理时还有技能特效、环境粒子）
       lighting.ts       GPU 光照：暗色层（擦除混合挖出光斑）+ 彩色光（加法混合）
       grade.ts          调色：默认调色函数烘焙成 LUT 贴图，也能加载美术给的 LUT 图片
       art.ts            美术资源：读 art/manifest.json，有图的角色/物件/地表/LUT 用图，没有的继续程序画
-      bake.ts           把程序画的模型和物件按美术规范导出成模板（地址带 ?bake 时可用）
+      bake.ts           把程序画的模型、物件、命中序列帧按美术规范导出成模板（地址带 ?bake 时可用）
+      flipbook.ts       命中序列帧：每种材质一组（金属火星、骨渣、血点、兽毛、黏液、木屑），清单里有图就用图
       pixi/
         actorView.ts    一个角色：阴影、自己脚下的印记、身体精灵 + 墨线着色器、染色、闪现残影
         inkFilter.ts    墨线着色器：描边、轮廓光、受击白闪
         sceneView.ts    地表切块贴图、物件精灵、动态物件（火焰）
         canvasSprite.ts 用 Canvas 2D 画内容的精灵（程序化模型、火焰、地面特效用它接进 Pixi）
         postFilter.ts   后期处理：泛光（亮部提取 + Kawase 模糊）+ LUT 调色，一个滤镜做完
+        decals.ts       地面印记：重击裂纹、火焰焦痕、冰霜、击退拖痕（最多 40 个，6 秒后淡出）
       models.ts         角色模型和动作（程序化绘制，美术到位后替换）
       knightActions.ts  玩家（骑士、游侠）每个技能的专属动作：关键帧、手脚 IK、出手时刻
       fx.ts             技能和战斗特效、粒子、屏幕震动（Canvas 2D）
@@ -85,7 +99,7 @@ web/
 ```text
 #game（WebGL，Pixi）
   scene          整个画面；高画质时加后期处理滤镜（泛光 + 调色）
-    world        跟随镜头：地表 → 地面标记（AOI、边界、射程、目标圈）→ 地面特效 → 角色和物件（按脚底 y 排序）
+    world        跟随镜头：地表 → 区域光圈 → 地面印记 → 地面标记（AOI、边界、射程、目标圈）→ 地面特效 → 角色和物件（按脚底 y 排序）
     darkness     光照暗色层（屏幕空间，半分辨率渲染纹理）
     glow         光源彩色叠加（跟随镜头）
     fx           技能特效 → 环境粒子（Canvas 2D 画到整屏画布再交给 Pixi，这样能发光）
@@ -265,6 +279,21 @@ npm run build         # 生成协议代码 + 类型检查 + 输出 web/dist
 ```
 
 发布或只跑服务端时：先 `npm run build`，再 `go build`，前端就嵌在二进制里了。`start.bat` 会自动做这两步。没构建前端就编译服务端时，首页会提示先构建。
+
+## 音效管线
+
+声音全部来自 `audio/recipes.ts` 的配方（程序合成）。为了省掉运行时合成的开销、也方便换真实素材，配方会**烘焙**成一个音频图集：
+
+```sh
+cd web
+npm i --no-save playwright && npx playwright install chromium   # 第一次
+npm run sfx:bake      # 输出 web/public/audio/sfx.webm、sfx.m4a、audio.json（需要 ffmpeg，没有就只出 sfx.wav）
+```
+
+- 改了配方要重新烘焙，否则游戏里听到的还是旧的（`?sfx=live` 强制实时合成，可以先听效果）。
+- 换真实素材：把 wav 放进 `assets-src/audio/<声音名>/`（多个文件就是多个变体），在 `assets-src/audio/CREDITS.md` 记下来源和授权，再烘焙一次。声音名见 sfxlab 页面。
+- 调音：打开 `?sfxlab`，拖音量和音高，点“导出”，把结果粘贴进 `audio/mix.ts`。
+- 加载失败（文件缺失、浏览器不支持）时自动回到实时合成，不会没声音。
 
 ## 改协议
 
