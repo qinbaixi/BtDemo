@@ -1,10 +1,9 @@
 // 把服务端事件（施法、伤害、死亡……）变成动画、特效和飘字。
 
 import type { GameEvent } from '../net/types';
-import { cameraKick, cameraPunch } from '../render/camera';
+import { buildHit, isMine, onCast, onDeath, playHit, sfxAt } from '../feel/director';
 import { ACTIONS, muzzleOffset } from '../render/knightActions';
-import { ATTACK_MS, FEEL, LOOK_FIRE, MODEL_SCALE, RARITY_COLOR } from './config';
-import { hypot } from './math';
+import { ATTACK_MS, LOOK_FIRE, MODEL_SCALE, RARITY_COLOR } from './config';
 import { faceToward, headY, posOf, state, type ClientEntity, type FloatOpts } from './state';
 
 const ROLL_SLIDE = 0.75;   // 翻滚动作里身体在地上滑动的那一段（占动作时长的比例）
@@ -17,6 +16,7 @@ export function onEvent(ev: GameEvent, now: number): void {
       // 宠物出现（召唤 / 复活）和瞬移回主人身边：只放特效，不是技能
       if (ev.fx === 'pet_summon') {
         fx.petSummon(ev.src, ev.x ?? 0, ev.y ?? 0, ev.color || '#ffe08a', now);
+        onCast(ev, src, now, 0);
         break;
       }
       if (ev.fx === 'pet_teleport') {
@@ -24,6 +24,7 @@ export function onEvent(ev: GameEvent, now: number): void {
         fx.petSummon(ev.src, ev.x ?? 0, ev.y ?? 0, src?.color || '#ffe08a', now, true);
         if (src && typeof ev.tx === 'number') blinkTo(src, ev, now);
         fx.petSummon(ev.src, ev.tx ?? 0, ev.ty ?? 0, src?.color || '#ffe08a', now + 120, true);
+        onCast(ev, src, now, 0);
         break;
       }
       let lead = 0;
@@ -60,6 +61,7 @@ export function onEvent(ev: GameEvent, now: number): void {
       }
       // 特效等动作出手时才放（火球从推出去的手心飞出、冰霜新星在剑插地时炸开）
       const delay = fx.cast(ev, now, lead, origin);
+      onCast(ev, src, now, delay);
       state.lands.set(ev.src, { at: now + delay, color: ev.color });
       // 玩家的技能，以及怪物的大招，头顶报技能名
       const big = ev.fx === 'circle' || ev.fx === 'buff';
@@ -80,9 +82,10 @@ export function onEvent(ev: GameEvent, now: number): void {
         const e = state.ents.get(ev.dst);
         const v = ev.v || 0;
         let side = Math.random() < 0.5 ? -1 : 1;
-        if (e) {
-          e.hitAt = t;
-          const push = feelHit(e, ev.src, !!ev.crit, !!ev.blocked, v, t);
+        // 顿帧、受击位移、镜头、命中声都在 feel/director.ts 里按档位处理
+        const context = buildHit(ev);
+        if (context) {
+          const push = playHit(context, t);
           if (Math.abs(push) > 0.2) side = Math.sign(push);
         }
         // 伤害数字往被推开的方向抛出去（竖着打时随机左右）
@@ -126,6 +129,7 @@ export function onEvent(ev: GameEvent, now: number): void {
         // 站在回血区里：小一号的数字，身上冒两个小十字
         addFloat(now, ev.dst, `+${ev.v}`, '#7cff9b', 13, 800, { rise: 30 });
         fx.zoneHeal(ev.dst, now);
+        sfxAt('heal.tick', ev.dst, now, true);
         break;
       }
       // 自己放的治疗：等动作出手、绿光亮起来再飘数字；吸血、格挡回血等装备特效等那一下打中
@@ -135,6 +139,7 @@ export function onEvent(ev: GameEvent, now: number): void {
         ? () => {
           const t = performance.now();
           fx.procHeal(ev.dst, ev.proc!, t);
+          sfxAt('heal.tick', ev.dst, t, true);
           addFloat(t, ev.dst, `${proc.label} +${ev.v}`, proc.color, 14, 900, { rise: 30 });
         }
         : () => addFloat(performance.now(), ev.dst, `+${ev.v}`, '#7cff9b', 18, 1000);
@@ -149,13 +154,14 @@ export function onEvent(ev: GameEvent, now: number): void {
       state.bubbles.delete(ev.id);
       const e = state.ents.get(ev.id);
       if (e && e.deadAt < 0) e.deadAt = now;
-      // 倒地时被打飞一小段（方向沿用最后一次受击）
-      if (e) e.knockAmp = FEEL.knockPx * 3;
+      // 倒地时被打飞一小段（方向沿用最后一次受击），自己打死的再停一下、响收尾音
+      if (e) onDeath(e, now);
       fx.death(ev.id, e ? e.color : '#ffffff', now);
       break;
     }
     case 'respawn':
       fx.respawn(ev.id, now);
+      sfxAt('respawn', ev.id, now);
       addFloat(now, ev.id, '复活', '#7cff9b', 16, 1000);
       break;
     case 'say':
@@ -172,13 +178,17 @@ export function onEvent(ev: GameEvent, now: number): void {
         const mine = ev.dst === state.myId;
         state.pending.push({
           at: now + flight,
-          fn: () => addFloat(performance.now(), ev.dst, `获得 ${item.name}`, color, mine ? 17 : 13, 1500, { pop: mine, rise: 54 }),
+          fn: () => {
+            addFloat(performance.now(), ev.dst, `获得 ${item.name}`, color, mine ? 17 : 13, 1500, { pop: mine, rise: 54 });
+            if (mine) sfxAt(`loot.${item.rarity || 'common'}`, ev.dst, performance.now());
+          },
         });
       }
       break;
     }
     case 'lvl':
       fx.levelUp(ev.id, now);
+      sfxAt('levelup', ev.id, now, !isMine(ev.id));
       addFloat(now, ev.id, `升级! Lv ${ev.lv}`, '#ffd54a', 26, 1600, { pop: true, rise: 60 });
       break;
   }
@@ -194,48 +204,6 @@ const PROC_HEAL: Record<string, { label: string; color: string }> = {
   lifesteal: { label: '吸血', color: '#ff7a8a' },
   block_heal: { label: '格挡', color: '#7cff9b' },
 };
-
-// feelHit 处理一次命中的打击感：双方顿帧、受击方向、镜头冲击、连击数。
-// 返回受击方向的横向分量（伤害数字往这边飘）。
-function feelHit(target: ClientEntity, srcId: number, crit: boolean, blocked: boolean, damage: number, now: number): number {
-  const src = srcId ? state.ents.get(srcId) : undefined;
-  const tp = posOf(target, now);
-  let dx = 0;
-  let dy = 0;
-  if (src && src !== target) {
-    const sp = posOf(src, now);
-    const len = Math.hypot(tp.x - sp.x, tp.y - sp.y);
-    if (len > 0.5) { dx = (tp.x - sp.x) / len; dy = (tp.y - sp.y) / len; }
-  }
-  if (dx === 0 && dy === 0) dx = Math.cos(target.facing) < 0 ? 1 : -1;   // 不知道谁打的：往身后推
-  target.knockX = dx;
-  target.knockY = dy;
-  const amp = blocked ? FEEL.knockPx * 0.5 : FEEL.knockPx * (crit ? 1.7 : 1);
-  // 已经倒地（箭比死亡事件晚到）时保留被打飞的距离
-  target.knockAmp = target.dead ? Math.max(target.knockAmp, amp) : amp;
-
-  // 顿帧：受击者停住；近战的攻击者也停（远程的箭飞到时攻击动作早就结束了）
-  const stop = blocked ? FEEL.hitStopBlockMs : crit ? FEEL.hitStopCritMs : FEEL.hitStopMs;
-  target.freezeUntil = Math.max(target.freezeUntil, now + stop);
-  const srcPos = src ? posOf(src, now) : null;
-  if (src && srcPos && src !== target && hypot(srcPos.x, srcPos.y, tp.x, tp.y) < 140) src.freezeUntil = Math.max(src.freezeUntil, now + stop);
-
-  // 镜头：只在自己打人或被打时动，旁边 NPC 互殴不晃屏幕
-  if (srcId === state.myId && target.id !== state.myId) {
-    cameraKick(dx, dy, crit ? 7 : 2.5);
-    if (crit) cameraPunch(FEEL.zoomPunch);
-    // 一次范围技能同时打中好几个只算一击（同一时刻的命中合并）
-    const combo = state.combo;
-    if (damage > 0 && now - combo.at > 1) {
-      combo.n = now - combo.at < 2000 ? combo.n + 1 : 1;
-      combo.at = now;
-    }
-  } else if (target.id === state.myId) {
-    cameraKick(dx, dy, blocked ? 3 : crit ? 8 : 4.5);
-    if (damage > 0) state.hurtAt = now;
-  }
-  return dx;
-}
 
 // addFloat 在实体头顶加一行飘字（实体消失后停在最后的位置）。
 export function addFloat(

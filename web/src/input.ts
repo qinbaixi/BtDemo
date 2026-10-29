@@ -1,5 +1,6 @@
 // 键盘和鼠标输入：移动、选目标、放技能、切换显示。
 
+import { play, toggleMute } from './audio/engine';
 import { MOVE_DIR, SKILL_KEYS } from './game/config';
 import { clamp, hypot } from './game/math';
 import {
@@ -58,7 +59,7 @@ export function resendMove(): void {
 export function castSlot(slot: number): void {
   const skill = state.skillBySlot[slot];
   if (!skill || state.pickerOpen || state.bagOpen) return;   // 挑技能时不放技能（放了就不能再换了），开着装备面板时也不放
-  if (blocking) { showToast('格挡中不能出招'); return; }   // 服务端也会拒绝，这里省一次来回
+  if (blocking) { showToast('格挡中不能出招'); play('ui.deny', { bus: 'ui' }); return; }   // 服务端也会拒绝，这里省一次来回
   const aim = skill.kind === 'dash' || skill.kind === 'line' || skill.kind === 'rain' ? aimFor(skill.kind) : { dx: 0, dy: 0 };
   deps.send({ t: 'cast', slot, target: state.target || 0, ...aim });
 }
@@ -157,6 +158,7 @@ function setBlock(on: boolean): void {
   blocking = on;
   state.blockHeld = on;
   deps.send({ t: 'block', on });
+  if (on) play('block.raise', { gain: 0.8 });
 }
 
 function stopMouse(): void {
@@ -224,6 +226,12 @@ function onKeyDown(e: KeyboardEvent): void {
   }
   if (e.code === 'KeyE') {
     if (!state.pickerOpen) toggleBag();   // 选技能面板开着时先选完技能
+    return;
+  }
+  if (e.code === 'KeyM') {
+    const muted = toggleMute();
+    if (!muted) play('ui.toggle', { bus: 'ui' });
+    showToast(muted ? '音效已关闭（按 M 打开）' : '音效已打开');
     return;
   }
   if (e.code === 'KeyG') {

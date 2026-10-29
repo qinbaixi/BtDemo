@@ -4,6 +4,8 @@
 //   game/     本地状态、服务端消息处理、事件
 //   render/   画世界：Pixi（WebGL）画地表、物件、角色、光照，叠加的 2D 画布画特效和文字
 //   ui/       HUD 和调试面板（DOM）
+//   feel/     打击感：命中分档、顿帧、镜头、命中声的调度
+//   audio/    音效：引擎（总线、声像、并发限制）和程序化合成配方
 //   input.ts  键盘鼠标
 
 import './styles/style.css';
@@ -12,6 +14,7 @@ import './styles/debug-proto.css';
 
 import { faceToward, fxAuras, fxResolve, posOf, QUALITY_NAMES, setQuality, state } from './game/state';
 import { handleFrame } from './game/sync';
+import { initAudio } from './audio/engine';
 import { castSlot, initInput, resendMove } from './input';
 import { createConnection } from './net/connection';
 import { createProtocol } from './net/protocol';
@@ -108,6 +111,7 @@ async function init(): Promise<void> {
   }
   window.addEventListener('resize', resize);
   initInput({ canvas, send: conn.send, debug });
+  initAudio();   // 第一次按键或点击时才真正打开声音（浏览器的自动播放限制）
   requestAnimationFrame(frame);
   // ?fxlab：特效实验页，不连服务器，用假角色播放各种打击和技能效果（见 fxlab.ts）
   if (new URLSearchParams(location.search).has('fxlab')) {

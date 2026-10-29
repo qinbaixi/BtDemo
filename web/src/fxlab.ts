@@ -1,7 +1,11 @@
 // 特效实验页（地址后面加 ?fxlab）：不连服务器，摆几个假角色，按按钮播放命中、暴击、格挡、
-// 击杀、技能等效果，拖滑条实时调打击感参数（config.ts 的 FEEL）和后期处理。
+// 击杀、技能等效果，拖滑条实时调打击感参数（feel/profiles.ts 的档位表、config.ts 的 FEEL）和后期处理，
+// 试听所有音效（audio/recipes.ts）。
 // 改特效时用它看效果、出预览，不用每次进游戏找怪打。
 
+import { getVolume, play, setVolume } from './audio/engine';
+import { MATERIALS, RECIPES, TIERS, WEAPONS } from './audio/recipes';
+import { PROFILES, type Profile, type ProfileName } from './feel/profiles';
 import { FEEL, LOOK_FIRE, LOOK_FROST, LOOK_HASTE, LOOK_HOLY, ZONE_ASPECT } from './game/config';
 import { onEvent } from './game/events';
 import { makeEntity, posOf, state, type ClientEntity, type ClientZone } from './game/state';
@@ -153,8 +157,8 @@ function hit(crit: boolean, heavy = false): void {
   const t = target();
   if (!t) return;
   const v = Math.round((crit ? 90 : 30) * (0.85 + Math.random() * 0.3));
-  emit({ k: 'cast', src: ME, dst: t.id, fx: 'melee', skill: heavy ? 'heavy_strike' : 'slash', color: '#ffd166' });
-  emit({ k: 'dmg', src: ME, dst: t.id, v, crit });
+  emit({ k: 'cast', src: ME, dst: t.id, fx: 'melee', skill: heavy ? 'smash' : 'slash', color: '#ffd166' });
+  emit({ k: 'dmg', src: ME, dst: t.id, v, skill: heavy ? 'smash' : 'slash', crit });
   damage(t, v);
   if (t.hp <= 0) kill(t);
 }
@@ -176,15 +180,16 @@ const ACTIONS: [string, () => void][] = [
   ['普攻', () => hit(false)],
   ['暴击', () => hit(true)],
   ['重击', () => hit(true, true)],
-  ['击杀', () => { const t = target(); if (t) { emit({ k: 'cast', src: ME, dst: t.id, fx: 'melee', skill: 'heavy', color: '#ffd166' }); emit({ k: 'dmg', src: ME, dst: t.id, v: t.hp, crit: true }); damage(t, t.hp); kill(t); } }],
+  ['击杀', () => { const t = target(); if (t) { emit({ k: 'cast', src: ME, dst: t.id, fx: 'melee', skill: 'smash', color: '#ffd166' }); emit({ k: 'dmg', src: ME, dst: t.id, v: t.hp, skill: 'smash', crit: true }); damage(t, t.hp); kill(t); } }],
   ['旋风斩', () => {
     const me = posOf(state.ents.get(ME)!, performance.now());
     emit({ k: 'cast', src: ME, fx: 'circle', skill: 'whirlwind', name: '旋风斩', color: '#ff9a3c', radius: 130, x: me.x, y: me.y });
     for (const e of state.ents.values()) if (e.id !== ME && !e.dead) { const v = 45; emit({ k: 'dmg', src: ME, dst: e.id, v, crit: Math.random() < 0.3 }); damage(e, v); if (e.hp <= 0) kill(e); }
   }],
-  ['被打', () => { const t = target(); const me = state.ents.get(ME)!; if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'bite', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 40, crit: Math.random() < 0.3 }); damage(me, 40); }],
-  ['格挡', () => { const t = target(); if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'smash', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 8, blocked: 32 }); }],
-  ['箭矢', () => { emit({ k: 'cast', src: 4, dst: ME, fx: 'projectile', skill: 'arrow_shot', color: '#cfe8ff' }); emit({ k: 'dmg', src: 4, dst: ME, v: 22 }); damage(state.ents.get(ME)!, 22); }],
+  ['被打', () => { const t = target(); const me = state.ents.get(ME)!; if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'bite', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 40, skill: 'bite', crit: Math.random() < 0.3 }); damage(me, 40); }],
+  ['被重锤', () => { const me = state.ents.get(ME)!; emit({ k: 'cast', src: 3, dst: ME, fx: 'melee', skill: 'smash', color: '#ff9f43' }); emit({ k: 'dmg', src: 3, dst: ME, v: 70, skill: 'smash' }); damage(me, 70); }],
+  ['格挡', () => { const t = target(); if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'smash', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 8, skill: 'smash', blocked: 32 }); }],
+  ['箭矢', () => { emit({ k: 'cast', src: 4, dst: ME, fx: 'projectile', skill: 'arrow', color: '#cfe8ff' }); emit({ k: 'dmg', src: 4, dst: ME, v: 22, skill: 'arrow' }); damage(state.ents.get(ME)!, 22); }],
   ['治疗', () => { const me = state.ents.get(ME)!; emit({ k: 'cast', src: ME, fx: 'heal', skill: 'heal', name: '治疗', color: '#7cff9b' }); emit({ k: 'heal', dst: ME, v: 120 }); me.hp = Math.min(me.maxHp, me.hp + 120); }],
   ['护盾', () => emit({ k: 'cast', src: ME, fx: 'shield', skill: 'shield', name: '圣盾', color: '#7fd8ff' })],
   ['火球术', () => {
@@ -456,14 +461,9 @@ ACTIONS.push(
 
 // 滑条：[标签, FEEL 字段, 最小, 最大, 步长]
 const SLIDERS: [string, keyof typeof FEEL, number, number, number][] = [
-  ['顿帧 ms', 'hitStopMs', 0, 200, 5],
-  ['暴击顿帧 ms', 'hitStopCritMs', 0, 300, 5],
   ['镜头跟随 ms', 'camFollowMs', 0, 400, 10],
   ['镜头前瞻 px', 'camLead', 0, 160, 5],
   ['震屏倍数', 'shake', 0, 3, 0.1],
-  ['暴击缩放', 'zoomPunch', 0, 0.1, 0.005],
-  ['击退 px', 'knockPx', 0, 20, 1],
-  ['受击形变', 'squash', 0, 0.5, 0.02],
   ['溶解延迟 ms', 'dissolveDelayMs', 0, 4000, 100],
   ['溶解时长 ms', 'dissolveMs', 200, 3000, 100],
   ['扭曲倍数', 'distort', 0, 5, 0.1],
@@ -499,6 +499,8 @@ function buildPanel(): void {
   }
   panel.appendChild(slider('泛光强度', 0, 2, 0.05, 0.8, (v) => setPostOptions({ bloom: v })));
   panel.appendChild(slider('泛光阈值', 0.3, 1, 0.02, 0.68, (v) => setPostOptions({ threshold: v })));
+  panel.appendChild(profileEditor());
+  panel.appendChild(soundPanel());
   document.body.appendChild(panel);
 
   const style = document.createElement('style');
@@ -513,7 +515,11 @@ function buildPanel(): void {
 #fxlab button.toggle.on { background: #5a3d12; border-color: #e8b65a; }
 #fxlab label { display: grid; grid-template-columns: 82px 1fr 40px; align-items: center; gap: 4px; }
 #fxlab input[type=range] { width: 100%; }
-#fxlab .v { text-align: right; color: #c9b88f; font-variant-numeric: tabular-nums; }`;
+#fxlab .v { text-align: right; color: #c9b88f; font-variant-numeric: tabular-nums; }
+#fxlab { max-height: calc(100vh - 80px); overflow-y: auto; }
+#fxlab .fxlab-sub { color: #e8b65a; margin: 8px 0 4px; }
+#fxlab select { background: #1d1424; color: #f3e9d2; border: 1px solid #5a4630; font: inherit; }
+#fxlab textarea { width: 100%; height: 90px; background: #1d1424; color: #f3e9d2; border: 1px solid #5a4630; font: 11px monospace; }`;
   document.head.appendChild(style);
 }
 
@@ -533,4 +539,79 @@ function slider(label: string, min: number, max: number, step: number, value: nu
   input.oninput = () => { const v = Number(input.value); set(v); out.textContent = String(v); };
   row.append(name, input, out);
   return row;
+}
+
+// 档位滑条：[标签, Profile 字段, 最小, 最大, 步长]
+const PROFILE_SLIDERS: [string, keyof Profile, number, number, number][] = [
+  ['顿帧 ms', 'hitStopMs', 0, 250, 5],
+  ['击退 px', 'knockPx', 0, 40, 1],
+  ['受击形变', 'squash', 0, 0.6, 0.02],
+  ['打中镜头', 'kickOut', 0, 15, 0.5],
+  ['挨打镜头', 'kickIn', 0, 15, 0.5],
+  ['震动 px', 'shake', 0, 10, 0.5],
+];
+const PROFILE_LABELS: [ProfileName, string][] = [['light', '轻'], ['medium', '中'], ['heavy', '重'], ['block', '格挡'], ['immune', '免疫']];
+
+// profileEditor 是档位表编辑器：选一档，拖滑条改这一档的参数，导出整张表的 JSON 粘回 feel/profiles.ts。
+function profileEditor(): HTMLElement {
+  const box = document.createElement('div');
+  box.innerHTML = '<div class="fxlab-sub">命中档位（普攻=轻，飞斧=中，重击/被重锤=重）</div>';
+  const tabs = document.createElement('div');
+  tabs.className = 'fxlab-buttons';
+  const rows = document.createElement('div');
+  const show = (name: ProfileName) => {
+    for (const b of tabs.children) b.classList.toggle('on', (b as HTMLElement).dataset.name === name);
+    rows.replaceChildren(...PROFILE_SLIDERS.map(([label, key, min, max, step]) =>
+      slider(label, min, max, step, PROFILES[name][key], (v) => { PROFILES[name][key] = v; })));
+  };
+  for (const [name, label] of PROFILE_LABELS) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.className = 'toggle';
+    b.dataset.name = name;
+    b.onclick = () => show(name);
+    tabs.appendChild(b);
+  }
+  const output = document.createElement('textarea');
+  output.hidden = true;
+  const exportButton = document.createElement('button');
+  exportButton.textContent = '导出档位表';
+  exportButton.onclick = () => {
+    output.hidden = false;
+    output.value = JSON.stringify(PROFILES, null, 1);
+    output.select();
+  };
+  box.append(tabs, rows, exportButton, output);
+  show('light');
+  return box;
+}
+
+// soundPanel 是音效试听：音量、按名字播放任意配方、命中声的武器 × 材质 × 档位组合。
+function soundPanel(): HTMLElement {
+  const box = document.createElement('div');
+  box.innerHTML = '<div class="fxlab-sub">音效（M 静音）</div>';
+  box.appendChild(slider('音量', 0, 1, 0.05, getVolume(), setVolume));
+  const options = (list: readonly string[]) => list.map((v) => `<option>${v}</option>`).join('');
+  const matrix = document.createElement('div');
+  matrix.className = 'fxlab-buttons';
+  matrix.innerHTML = `<select id="sfx-weapon">${options(WEAPONS)}</select><select id="sfx-material">${options(MATERIALS)}</select>`
+    + `<select id="sfx-tier">${options(TIERS)}</select>`;
+  const playHit = document.createElement('button');
+  playHit.textContent = '命中';
+  playHit.onclick = () => {
+    const value = (id: string) => (matrix.querySelector(`#${id}`) as HTMLSelectElement).value;
+    play(`hit.${value('sfx-weapon')}.${value('sfx-material')}.${value('sfx-tier')}`);
+  };
+  matrix.appendChild(playHit);
+  box.appendChild(matrix);
+  const others = document.createElement('div');
+  others.className = 'fxlab-buttons';
+  for (const name of Object.keys(RECIPES).filter((n) => !n.startsWith('hit.') || n === 'hit.crit')) {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.onclick = () => play(name);
+    others.appendChild(b);
+  }
+  box.appendChild(others);
+  return box;
 }

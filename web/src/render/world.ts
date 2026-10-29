@@ -281,7 +281,7 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
   if (dead >= 0) knock = e.knockAmp * (1 - (1 - dead) * (1 - dead));
   else if (hitting) knock = e.knockAmp * (hit < 0.18 ? 1 - Math.pow(1 - hit / 0.18, 2) : 1 - smooth((hit - 0.18) / 0.82));
   // 形变：一下压扁再弹两下回原样
-  const squash = hitting && dead < 0 ? FEEL.squash * Math.exp(-hit * 5) * Math.cos(hit * Math.PI * 3) : 0;
+  const squash = hitting && dead < 0 ? e.squashAmp * Math.exp(-hit * 5) * Math.cos(hit * Math.PI * 3) : 0;
 
   // 溶解：怪物和 NPC 倒地一会儿后烧掉（玩家的尸体留着等复活）
   let dissolve = -1;

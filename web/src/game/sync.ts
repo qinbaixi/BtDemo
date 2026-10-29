@@ -1,5 +1,6 @@
 // 处理服务端的帧和消息：welcome / enter / leave / state / event / self / zones / ai / toast / skills / inventory / petStatus，更新本地状态。
 
+import { forgetEntity, sfxAt } from '../feel/director';
 import type { Debug } from '../ui/debug';
 import { buildSkillBar, renderPetHud, renderSelf, setConn, showToast } from '../ui/hud';
 import { refreshBag, renderBagStats } from '../ui/bag';
@@ -68,6 +69,7 @@ function handleMessage(m: ServerMessage, now: number, deps: SyncDeps): void {
     case 'leave':
       for (const id of m.ids || []) {
         state.ents.delete(id);
+        forgetEntity(id);
         state.bubbles.delete(id);
         state.lands.delete(id);
         if (id === state.target) {
@@ -287,7 +289,10 @@ function onState(s: EntityState, now: number): void {
   if (s.tg !== undefined) e.tg = s.tg;
   if (s.shield !== undefined) {
     if (s.shield > e.shield) e.shieldMax = s.shield;          // 新加了一层护盾
-    else if (s.shield <= 0 && e.shield > 0 && !e.dead) state.fx?.shieldBreak(e.id, now);
+    else if (s.shield <= 0 && e.shield > 0 && !e.dead) {
+      state.fx?.shieldBreak(e.id, now);
+      sfxAt('shield.break', e.id, now);
+    }
     e.shield = s.shield;
   }
   if (s.blocking !== undefined) e.blocking = s.blocking && !e.dead;

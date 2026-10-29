@@ -59,6 +59,7 @@ export interface ClientEntity {
   knockX: number;     // 最近一次被打的方向（单位向量，从攻击者指向自己）
   knockY: number;
   knockAmp: number;   // 这次受击被推开的距离（像素），暴击更远
+  squashAmp: number;  // 这次受击压扁的幅度（按命中档位，见 feel/profiles.ts）
   shownFacing: number; // 上一帧画出来的朝向，用来发现转身
   turnAt: number;     // 最近一次转身的时间（转身时身体收窄一下）
   fresh: boolean;     // 还没收到过同步：一进视野就是死的，直接显示倒地
@@ -262,6 +263,7 @@ export function makeEntity(d: Partial<Omit<EntityInfo, 'state'>> & Partial<Entit
     knockX: 0,
     knockY: 0,
     knockAmp: 0,
+    squashAmp: 0.2,
     shownFacing: NaN,   // 还没画过：第一帧不算转身
     turnAt: -1e9,
     fresh: true,
