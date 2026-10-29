@@ -162,16 +162,31 @@ function stunned(now: number): boolean {
 
 // forgetBlock 在换成不能格挡的职业、或者被破防时丢掉本地的格挡状态（服务端那边已经取消了，不用再发）；
 // 被破防后要再挡得重新按右键。
-export function forgetBlock(): void {
+export function forgetBlock(broken = false): void {
   blocking = false;
   state.blockHeld = false;
+  if (broken) guardBroken = true;
+}
+
+// 被破防后架势回到一半以前举不起盾（和服务端 combat.GuardRecovered 一样）
+const GUARD_RECOVERED = 0.5;
+let guardBroken = false;
+
+// canRaise 说明现在举不举得起盾：死了、硬直、被击退途中、破防后架势还没回来时不行（服务端也不收，
+// 这里先拦住，免得本地以为举着盾、一直不能出招）。
+function canRaise(now: number): boolean {
+  const me = state.ents.get(state.myId);
+  if (!me || me.dead || stunned(now)) return false;
+  if (me.slide?.knock && now < me.slide.at + me.slide.ms) return false;
+  if (guardBroken && me.guard < GUARD_RECOVERED) return false;
+  guardBroken = false;
+  return true;
 }
 
 function setBlock(on: boolean): void {
   if (on && !state.canBlock) return;   // 这个职业没有盾，右键不格挡
   if (blocking === on) return;
-  const now = performance.now();
-  if (on && stunned(now)) return;      // 硬直中举不起盾（服务端也不收）
+  if (on && !canRaise(performance.now())) return;
   blocking = on;
   state.blockHeld = on;
   const me = state.ents.get(state.myId);

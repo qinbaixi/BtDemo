@@ -126,7 +126,7 @@ export function onEvent(ev: GameEvent, now: number): void {
           fx.guardBreak(ev.dst, t);
           addFloat(t, ev.dst, '破防', '#ff7a45', 20, 1100, { pop: true, rise: 54 });
           if (e) e.blocking = false;
-          if (ev.dst === state.myId) forgetBlock();
+          if (ev.dst === state.myId) forgetBlock(true);
         } else if (ev.blocked) {
           // 格挡：盾上迸出火花，伤害数字小一号
           fx.block(ev.dst, t);

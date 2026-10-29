@@ -68,8 +68,15 @@ func (cfg *Config) validateHits() error {
 		rules.Weights = map[string]HitWeight{}
 	}
 	for name, weight := range defaultHitWeights {
-		if _, ok := rules.Weights[name]; !ok {
+		configured, ok := rules.Weights[name]
+		if !ok {
 			rules.Weights[name] = weight
+			continue
+		}
+		// 只写了击退、硬直、韧性的老配置：架势消耗用默认值，不然这一档挡住不扣架势
+		if configured.Guard == 0 {
+			configured.Guard = weight.Guard
+			rules.Weights[name] = configured
 		}
 	}
 	if rules.KnockTime <= 0 {

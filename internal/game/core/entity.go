@@ -138,6 +138,8 @@ type Guard struct {
 	GuardSpent float64
 	// GuardHitAt 是最近一次挡住东西的时间，过一会儿架势才开始回复
 	GuardHitAt float64
+	// GuardBroken 为 true 表示被破防了、架势还没回到能再举盾的程度
+	GuardBroken bool
 }
 
 // Windup 是一次还没结算的出招：到 HitAt 才判定命中。

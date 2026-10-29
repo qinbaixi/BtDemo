@@ -111,9 +111,42 @@ func TestGuardBreaks(t *testing.T) {
 	if player.Knock == nil || player.Knock.To.X >= 1500 || !player.Stunned(world.State.Now()) {
 		t.Fatalf("broken guard: knock %v, stunned %v", player.Knock, player.Stunned(world.State.Now()))
 	}
-	// 硬直中举不起盾
+	// 硬直中举不起盾；硬直过了、架势回到一半以前也举不起来（不然再挨一下又被破）
 	if world.Combat.RaiseBlock(player, true, 1) || player.Blocking {
 		t.Fatal("raised the shield while staggered")
+	}
+	stepFor(world, world.State.Cfg.World.Player.Block.BreakStun+0.1)
+	if world.Combat.RaiseBlock(player, true, 1) {
+		t.Fatalf("raised the shield right after a guard break (spent %.2f)", player.GuardSpent)
+	}
+	stepFor(world, 3)
+	if !world.Combat.RaiseBlock(player, true, 1) {
+		t.Fatalf("cannot raise the shield after the guard recovered (spent %.2f)", player.GuardSpent)
+	}
+}
+
+func TestParryWindowStopsOneHit(t *testing.T) {
+	world, player, ogre := guardSetup(t)
+	second := world.Spawn.Template(world.State.Cfg.Templates["ogre_chief"], 1555, 420)
+	second.AI = nil
+	smash := world.State.Cfg.Skills["smash"]
+	for _, attacker := range []*core.Entity{ogre, second} {
+		if err := world.Combat.Cast(attacker, smash, player.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	world.Combat.RaiseBlock(player, true, 1)
+	// 两锤同一瞬间砸下来：只有第一下被完美格挡，窗口用掉了
+	ogre.Windup.HitAt = world.State.Now()
+	second.Windup.HitAt = world.State.Now()
+	world.State.Events.Clear()
+	world.Combat.Tick()
+	results := map[pb.HitResult]int{}
+	for _, damage := range eventsOf(world, pb.EventKind_DAMAGE) {
+		results[damage.GetResult()]++
+	}
+	if results[pb.HitResult_PARRY] != 1 || results[pb.HitResult_BLOCK] != 1 {
+		t.Fatalf("results %v", results)
 	}
 }
 
@@ -145,6 +178,12 @@ func TestParryWindowNeedsTheShieldDownFirst(t *testing.T) {
 	world.Combat.RaiseBlock(player, true, 1)
 	if player.ParryUntil > world.State.Now() {
 		t.Fatal("re-raising at once opened a new parry window")
+	}
+	world.Combat.RaiseBlock(player, false, 0)
+	stepFor(world, world.State.Cfg.World.Player.Block.ParryRearm+0.05)
+	world.Combat.RaiseBlock(player, true, 1)
+	if player.ParryUntil <= world.State.Now() {
+		t.Fatal("no parry window after the shield was down long enough")
 	}
 }
 

@@ -83,7 +83,7 @@ func (player *Player) Class(id string) *Class {
 }
 
 // Block 是玩家按住右键格挡时的效果：只挡正面，挡一下扣架势，架势扣空就破防；
-// 刚举盾的一小段时间里挡住近战是完美格挡。默认值见 block.go 的 validateBlock。
+// 刚举盾的一小段时间里挡住近战是完美格挡。不写或写 0 的参数用默认值（见 block.go 的 defaultBlock）。
 type Block struct {
 	Reduce float64 `yaml:"reduce"` // 格挡时受到的伤害减少的比例，0.8 = 减少 80%
 	Speed  float64 `yaml:"speed"`  // 格挡时的移动速度倍率

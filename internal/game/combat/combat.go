@@ -448,7 +448,7 @@ func (sys *System) addBuff(entity *core.Entity, cfg *config.Buff) *core.Event {
 
 // applyDamage 结算技能 skill 的一次命中：src 对 dst 造成 dmg 点伤害（见 damage），
 // 然后触发双方装备的特效（见 effects.go 的 afterHit）。
-// 技能带 Debuff 时，没被免掉、也没被打死的目标会挂上它。施法者已经死了时什么都不做。
+// 技能带 Debuff 时，没被免掉、没被完美格挡、也没被打死的目标会挂上它。施法者已经死了时什么都不做。
 func (sys *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, skill *config.Skill) {
 	// 施法者可能在同一次范围技能里被前面目标的反伤打死了，死了就不再打后面的目标
 	if !src.Alive() {
@@ -460,7 +460,7 @@ func (sys *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, sk
 	}
 	sys.applyImpact(src, dst, skill, result.outcome, result.event)
 	sys.afterHit(src, dst, skill, result)
-	if dst.Alive() && skill.Debuff != nil {
+	if dst.Alive() && skill.Debuff != nil && result.outcome != pb.HitResult_PARRY {
 		sys.addBuff(dst, skill.Debuff)
 	}
 }
@@ -574,6 +574,8 @@ func (sys *System) Kill(entity, killer *core.Entity) {
 	entity.SetHP(0)
 	entity.Windup = nil // 前摇中被打死：这一下不会再落下（击退照常走完，尸体被打飞）
 	entity.StunUntil = 0
+	entity.SetBlocking(false) // 倒下时盾也掉了，复活后要重新按右键
+	entity.ParryUntil = 0
 	entity.SetTarget(0)
 	entity.Buffs = nil
 	entity.MarkDirty(core.DirtyShield | core.DirtyLooks)

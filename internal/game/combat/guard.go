@@ -3,6 +3,8 @@ package combat
 import (
 	"math"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
@@ -45,6 +47,7 @@ func (sys *System) shieldCovers(dst, src *core.Entity) bool {
 func (sys *System) guard(dst *core.Entity, skill *config.Skill, proc string) pb.HitResult {
 	now := sys.state.Now()
 	if skill != nil && proc == "" && !skill.Ranged() && now < dst.ParryUntil {
+		dst.ParryUntil = 0 // 一次举盾只弹得开一下：同时砸过来的第二下按普通格挡算
 		return pb.HitResult_PARRY
 	}
 	weight := config.WeightLight
@@ -74,7 +77,7 @@ func (sys *System) recoil(attacker, blocker *core.Entity, event *core.Event) {
 }
 
 // breakGuard 是架势被打空：盾被打开放下，人被从 attacker 那边推开、硬直（撞墙再多硬直一下）。
-// 硬直期间不能再举盾（见 session 的 Block 处理），架势过 block.guard_delay 秒开始回。
+// 架势回到一半以前举不起盾（见 RaiseBlock），不然刚站起来再挨一下又被破，一直被定住。
 func (sys *System) breakGuard(entity, attacker *core.Entity, event *core.Event) {
 	block := &sys.state.Cfg.World.Player.Block
 	entity.SetBlocking(false)
@@ -83,7 +86,9 @@ func (sys *System) breakGuard(entity, attacker *core.Entity, event *core.Event) 
 	entity.PoiseTaken = 0
 	_, mass := sys.poise(entity)
 	stun := block.BreakStun
+	entity.GuardBroken = true
 	if sys.push(entity, attacker, block.BreakKnock/math.Max(0.1, mass), event) {
+		event.Wall = proto.Bool(true)
 		stun += sys.state.Cfg.World.Hit.WallStun
 	}
 	sys.stagger(entity, stun, event)
@@ -103,11 +108,17 @@ func (sys *System) regenGuard(entity *core.Entity) {
 		rate = block.GuardRegenHeld
 	}
 	entity.SetGuardSpent(entity.GuardSpent - rate/math.Max(1, block.Guard)*sys.state.Clock.Dt)
+	if entity.GuardBroken && entity.GuardSpent <= GuardRecovered {
+		entity.GuardBroken = false
+	}
 }
+
+// GuardRecovered：破防后架势扣掉的比例回到这么多以下才能再举盾（客户端 input.ts 用同样的规则）
+const GuardRecovered = 0.5
 
 // RaiseBlock 处理举盾或放下盾（session 收到 Block 消息时调用，职业能不能格挡由调用方检查）：
 // 举盾时收掉前摇中的那一招，盾朝 face 那一侧（-1 左，1 右）；放下够久再举起会打开完美格挡窗口。
-// 硬直和被击退途中举不起盾，返回 false。
+// 死了、硬直、被击退途中、破防后架势还没回到一半时举不起盾，返回 false。
 func (sys *System) RaiseBlock(entity *core.Entity, on bool, face float64) bool {
 	now := sys.state.Now()
 	block := &sys.state.Cfg.World.Player.Block
@@ -119,7 +130,7 @@ func (sys *System) RaiseBlock(entity *core.Entity, on bool, face float64) bool {
 		entity.SetBlocking(false)
 		return true
 	}
-	if entity.Stunned(now) || entity.Knock != nil {
+	if entity.Dead || entity.Stunned(now) || entity.Knock != nil || entity.GuardBroken {
 		return false
 	}
 	if face != 0 {

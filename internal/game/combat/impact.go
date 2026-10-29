@@ -142,13 +142,15 @@ func (sys *System) applyImpact(
 	}
 	// 格挡住时被推到墙上不算撞墙
 	if sys.push(dst, src, distance, event) && !blocked {
+		event.Wall = proto.Bool(true)
 		stun += rules.WallStun
 	}
 	sys.stagger(dst, stun, event)
 }
 
 // push 把 entity 从 from 那边推开 distance 像素（被墙和物件挡住就停在跟前），写进 event 的击退落点；
-// 报告是不是撞墙了（没推满就停下）。distance 不到 1 像素时什么都不做。
+// 报告是不是撞到了墙（没推满就停下）。算不算撞墙（Event.wall、额外硬直）由调用方决定。
+// distance 不到 1 像素时什么都不做。
 func (sys *System) push(entity, from *core.Entity, distance float64, event *core.Event) bool {
 	if distance < 1 {
 		return false
@@ -164,11 +166,7 @@ func (sys *System) push(entity, from *core.Entity, distance float64, event *core
 	entity.Steering = core.Steering{} // 被推开了，原来的路线作废
 	event.Kx, event.Ky = core.F32(core.Round1(end.X)), core.F32(core.Round1(end.Y))
 	event.KnockTime = core.F32(rules.KnockTime)
-	if end.Dist(start) < distance-1 {
-		event.Wall = proto.Bool(true)
-		return true
-	}
-	return false
+	return end.Dist(start) < distance-1
 }
 
 // stagger 让 entity 硬直 stun 秒（写进 event）并打断它的前摇；尸体和 stun 为 0 时什么都不做。

@@ -22,7 +22,9 @@ func (sys *System) afterHit(src, dst *core.Entity, skill *config.Skill, result d
 			sys.heal(src, result.taken*effect.Pct, config.EffectLifesteal)
 		}
 	}
-	if dst.Alive() {
+	// 被完美格挡弹开的一下什么都没打着：攻击者的点燃、冰冻、多重射击都不触发
+	parried := result.outcome == pb.HitResult_PARRY
+	if dst.Alive() && !parried {
 		for _, effect := range src.Effects(config.EffectIgnite) {
 			if dst.Alive() && sys.state.Lucky(effect.Chance) {
 				sys.ignite(src, dst, skill, effect)
@@ -35,7 +37,7 @@ func (sys *System) afterHit(src, dst *core.Entity, skill *config.Skill, result d
 			}
 		}
 	}
-	if len(src.Skills) > 0 && src.Skills[0] == skill {
+	if len(src.Skills) > 0 && src.Skills[0] == skill && !parried {
 		for _, effect := range src.Effects(config.EffectMultishot) {
 			if src.Alive() && sys.state.Lucky(effect.Chance) {
 				sys.multishot(src, dst, skill)
