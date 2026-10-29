@@ -145,7 +145,7 @@ func TestRainCenteredOnTarget(t *testing.T) {
 	}
 	// 目标太远：退回到沿瞄准方向落点
 	world.State.Events.Clear()
-	player.Cooldowns = map[string]float64{}
+	player.Cooldowns = map[string]config.Millis{}
 	far := addTestEntity(world, 5, "monster", 600, 500, monsterBase)
 	if err := world.Combat.CastAimed(player, rainSkill(), far.ID, 0, 1); err != nil {
 		t.Fatalf("rain with far target: %v", err)
@@ -172,14 +172,14 @@ func TestRainOnAimPointAndNoAim(t *testing.T) {
 	// 落点夹在地图内（地图宽 1000）
 	player.X = 900
 	world.Grid.Moved(player)
-	player.Cooldowns = map[string]float64{}
+	player.Cooldowns = map[string]config.Millis{}
 	if err := world.Combat.CastAimed(player, rainSkill(), 0, 1, 0); err != nil {
 		t.Fatalf("rain at edge: %v", err)
 	}
 	if event := lastCast(world); event.GetX() != 1000 {
 		t.Fatalf("rain landed at x = %v, want clamped to 1000", event.GetX())
 	}
-	player.Cooldowns = map[string]float64{}
+	player.Cooldowns = map[string]config.Millis{}
 	if err := world.Combat.CastAimed(player, rainSkill(), 0, 0, 0); err != combat.ErrNoAim {
 		t.Fatalf("rain without target or aim: %v, want ErrNoAim", err)
 	}
@@ -200,7 +200,7 @@ func rangerWorld() *World {
 	knight := cfg.World.Player.DefaultClass()
 	knight.Color = "#4da3ff"
 	knight.Attrs = config.Attrs{Str: 10, Agi: 8, Int: 8, Vit: 12}
-	knight.Growth = config.Attrs{Str: 2, Agi: 1.5, Int: 1.5, Vit: 2}
+	knight.Growth = config.Attrs{Str: 20000, Agi: 15000, Int: 15000, Vit: 20000}
 	knight.Skills = []string{"slash", "fireball", "heal"}
 	knight.SkillPool = []string{"fireball", "heal"}
 	cfg.World.Player.Classes = append(cfg.World.Player.Classes, &config.Class{
@@ -210,13 +210,13 @@ func rangerWorld() *World {
 		Color:     "#8fd17a",
 		CanBlock:  false,
 		Attrs:     config.Attrs{Str: 6, Agi: 14, Int: 8, Vit: 9},
-		Growth:    config.Attrs{Str: 1, Agi: 2.4, Int: 1.2, Vit: 1.6},
+		Growth:    config.Attrs{Str: 10000, Agi: 24000, Int: 12000, Vit: 16000},
 		Speed:     180,
 		Radius:    15,
 		Skills:    []string{"shot", "pierce_shot", "arrow_rain"},
 		SkillPool: []string{"pierce_shot", "arrow_rain", "roll"},
 	})
-	cfg.World.Player.Block = config.Block{Reduce: 0.8, Speed: 0.5}
+	cfg.World.Player.Block = config.Block{Reduce: 8000, Speed: 5000}
 	return world
 }
 
@@ -290,7 +290,7 @@ func TestLoadoutSwitchesClass(t *testing.T) {
 		t.Fatalf("class not applied: %+v %+v", player.Identity, player.Transform)
 	}
 	// 等级保留，属性按游侠的成长重算：初始 + 2 级成长
-	if player.Level != 3 || math.Abs(player.Base.Agi-(14+2*2.4)) > 1e-9 || math.Abs(player.Base.Str-8) > 1e-9 {
+	if player.Level != 3 || player.Base.Agi != 14+4 || player.Base.Str != 8 { // 2 级成长 4.8 点向下取整
 		t.Fatalf("level %d, base %+v", player.Level, player.Base)
 	}
 	if got := skillIDs(player.Skills); len(got) != 3 || got[0] != "shot" ||

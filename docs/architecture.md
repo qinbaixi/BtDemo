@@ -47,7 +47,7 @@ manager.Attach(link, token)                // 连接、断开：Manager 找到�
 `config/world.yaml` 的 `tick_rate: 20` 表示每秒 20 帧，`sync_rate: 10` 表示每秒给客户端同步 10 次（每 2 帧一次）。`World.Step()`：
 
 ```go
-w.State.Clock.Advance()        // 时间前进 Dt = 1/20 秒
+w.State.Clock.Advance()        // 时间前进一帧：Dt = 50 毫秒（1000 / tick_rate；时间都是整数毫秒）
 w.Spawn.Tick()                 // 1. 复活时间到了的实体
 w.Combat.Tick()                // 2. 去掉过期的 Buff，重算属性；装备的持续回血
 w.Zone.Tick()                  // 3. 回血区：去掉到时间的，给站在里面的友方回血

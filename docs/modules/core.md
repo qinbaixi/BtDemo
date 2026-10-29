@@ -11,17 +11,19 @@
 ```go
 type State struct {
     Cfg    *config.Config   // 所有配置
-    Rand   *rand.Rand       // 唯一的随机数源（带种子，测试可复现）
+    Rand   *rand.Rand       // 战斗和刷怪的随机数源（带种子，测试可复现）
+    Luck   *rand.Rand       // 装备特效和掉落的随机数源，和 Rand 分开
     Clock  Clock            // 游戏时间
     Ents   Entities         // 实体表
     Events Events           // 本次同步前发生的事件
+    Zones  Zones            // 回血区
 }
 ```
 
 每个系统的 `New` 都接收同一个 `*core.State`。
 
-- **Clock**：`Now` 是游戏开始后的秒数，`Dt` 是每帧秒数（1/tick_rate），`Tick` 是帧号。所有冷却、Buff、复活时间都用 `Now` 计算，不用系统时钟，所以测试里可以手动推进时间。
-- **Rand**：所有随机（暴击、伤害浮动、刷怪散布、随机选择器）都走这一个随机源。同样的种子、同样的输入，跑出同样的结果。
+- **Clock**：`Now` 是游戏开始后的毫秒数（`config.Millis`），`Dt` 是每帧毫秒数（`1000 / tick_rate`，配置保证能整除），`Tick` 是帧号。所有冷却、Buff、复活时间都用 `Now` 计算，不用系统时钟，所以测试里可以手动推进时间。
+- **Rand**：战斗和刷怪的随机（暴击、伤害浮动、刷怪散布、随机选择器）都走这一个随机源；装备特效和掉落的概率走 `Luck`，两者分开，加了装备不会打乱战斗的随机序列。同样的种子、同样的输入，跑出同样的结果。
 - **Entities**：`map[id]*Entity` 加一个排好序的 id 切片。`Each` 按 id 顺序遍历（Go 的 map 遍历顺序是随机的，直接遍历会让结果不可复现），并先复制 id 列表，所以回调里增删实体是安全的。
 - **Events**：`Emit(entity, event)` 把事件和发生位置（实体当前坐标）一起入队；`session.Flush` 只把发生在玩家九宫格内的事件发给他，然后 `Clear`。
 
@@ -53,8 +55,10 @@ type Entity struct {
 | `core.EdgeDist(a, b)` | 边缘距离（圆心距离减两个半径）。技能射程、追击停止距离都用它，所以体型大的怪不会“贴脸才打得到” |
 | `entity.HomeDist()` | 离出生点多远（脱战回家用） |
 | `entity.HPRatio()` | 血量百分比 |
-| `core.I32 / F32` | 生成 proto2 的可选字段指针 |
-| `core.Round1` | 保留一位小数，减少下发的数据量 |
+| `core.I32 / I64` | 生成 proto2 的可选字段指针（int32 / int64） |
+| `core.FloorI32` | 坐标、距离这类服务器内部用浮点算的值，下发时向下取整成整数像素（协议里没有浮点数） |
+| `core.Roll(rand, chance)` / `State.Lucky` | 按万分比掷一次概率：`rand.Intn(10000) < chance` |
+| `State.Now()` / `Clock.DtSeconds()` | 当前游戏时间（毫秒）；每帧的秒数，给按速度（像素 / 秒）算位移用 |
 
 `MaxRadius = 64` 是实体半径的上限。按圆心做范围查询时多查这么一圈，再用边缘距离精确判断，就不会漏掉体型大的目标。
 

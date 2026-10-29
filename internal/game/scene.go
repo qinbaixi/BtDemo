@@ -112,9 +112,13 @@ func newScene(
 ) (*Scene, error) {
 	cfg := state.Cfg
 	scene := &Scene{Template: template, Line: line, State: state, manager: manager}
-	scene.Grid = aoi.NewGrid(cfg.World.Map.Width, cfg.World.Map.Height, cfg.World.AOI.Cell)
+	scene.Grid = aoi.NewGrid(
+		float64(cfg.World.Map.Width),
+		float64(cfg.World.Map.Height),
+		float64(cfg.World.AOI.Cell),
+	)
 	scene.Attr = attr.New(scene.State)
-	scene.Nav = nav.New(cfg.World.Map.Width, cfg.World.Map.Height, obstacles)
+	scene.Nav = nav.New(float64(cfg.World.Map.Width), float64(cfg.World.Map.Height), obstacles)
 	scene.Move = move.New(scene.State, scene.Grid, scene.Nav)
 	scene.Items = item.New(scene.State)
 	scene.Combat = combat.New(
@@ -177,7 +181,7 @@ func (scene *Scene) takeCommands(stop bool) []func() {
 // Run 推进世界运行，直到 ctx 结束。每个 tick 依次：执行命令、处理玩家输入、运行各系统。
 // 结束时先跑完已经接受的命令，再断开所有会话，让客户端收到关闭帧。
 func (scene *Scene) Run(ctx context.Context) {
-	ticker := time.NewTicker(time.Duration(float64(time.Second) * scene.State.Clock.Dt))
+	ticker := time.NewTicker(time.Duration(scene.State.Clock.Dt) * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		select {

@@ -119,7 +119,7 @@ func (checker *syncChecker) step() {
 			checker.reported++
 			shown := problems[:min(len(problems), 3)]
 			checker.t.Errorf(
-				"t=%.1fs 玩家 %d 与服务端不同步（共 %d 处）:\n%s",
+				"t=%dms 玩家 %d 与服务端不同步（共 %d 处）:\n%s",
 				checker.world.State.Now(), index, len(problems), joinLines(shown),
 			)
 		}
@@ -148,14 +148,14 @@ func moveInput(random *rand.Rand) *pb.ClientMsg {
 	if random.Intn(5) == 0 {
 		dx, dy = 0, 0
 	}
-	return &pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Float32(dx), Dy: proto.Float32(dy)}}}
+	return &pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Int32(int32(dx * 10000)), Dy: proto.Int32(int32(dy * 10000))}}}
 }
 
 func castInput(slot int32, random *rand.Rand) *pb.ClientMsg {
 	cast := &pb.Cast{
 		Slot: proto.Int32(slot),
-		Dx:   proto.Float32(random.Float32()*2 - 1),
-		Dy:   proto.Float32(random.Float32()*2 - 1),
+		Dx:   proto.Int32(int32((random.Float32()*2 - 1) * 10000)),
+		Dy:   proto.Int32(int32((random.Float32()*2 - 1) * 10000)),
 	}
 	return &pb.ClientMsg{Msg: &pb.ClientMsg_Cast{Cast: cast}}
 }

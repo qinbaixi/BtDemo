@@ -12,6 +12,7 @@
 package session
 
 import (
+	"errors"
 	"log"
 	"math"
 	"slices"
@@ -44,7 +45,7 @@ type Session struct {
 
 	token      string          // 重连时认出这个角色用，在 Welcome 里发给客户端
 	link       *Link           // 当前连接的发送队列；断线期间为 nil
-	detachedAt float64         // 断线的时刻（游戏时间），link 为 nil 时有效
+	detachedAt config.Millis   // 断线的时刻（游戏时间），link 为 nil 时有效
 	pending    []*pb.ServerMsg // 这一帧待发的消息，同步帧结束时合成一个 Frame
 	resync     bool            // 客户端跟不上了：下次 Flush 前先发一份全量
 	lag        lagMeter
@@ -135,9 +136,9 @@ func (sys *System) welcome(session *Session) *pb.Welcome {
 	cfg := sys.state.Cfg.World
 	welcome := &pb.Welcome{
 		Id:        core.I32(session.Player.ID),
-		MapW:      core.F32(cfg.Map.Width),
-		MapH:      core.F32(cfg.Map.Height),
-		AoiCell:   core.F32(sys.grid.Cell),
+		MapW:      core.I32(cfg.Map.Width),
+		MapH:      core.I32(cfg.Map.Height),
+		AoiCell:   core.FloorI32(sys.grid.Cell),
 		Obstacles: sys.obstacles,
 		Items:     sys.itemInfos,
 		Pets:      sys.petInfos,
@@ -325,7 +326,7 @@ func (sys *System) apply(session *Session, msg *pb.ClientMsg) {
 	case *pb.ClientMsg_Block:
 		// 不能格挡的职业（游侠）忽略格挡消息；松开总是允许的
 		if on := body.Block.GetOn(); !on || sys.canBlock(entity) {
-			entity.SetBlocking(on)
+			sys.combat.RaiseBlock(entity, on, int(body.Block.GetFace()))
 		}
 	case *pb.ClientMsg_Target:
 		entity.SetTarget(int(body.Target.GetId()))
@@ -353,10 +354,10 @@ func (sys *System) apply(session *Session, msg *pb.ClientMsg) {
 		targetEnt := sys.state.Ents.Get(target)
 		unusable := !targetEnt.Alive() ||
 			!sys.state.Hostile(entity, targetEnt) ||
-			core.EdgeDist(entity, targetEnt) > skill.Range
+			core.EdgeDist(entity, targetEnt) > float64(skill.Range)
 		if skill.Kind == "target" && unusable {
 			// 未选择可用目标：选取范围内最近的怪物。
-			targetEnt = sys.combat.NearestMonster(entity, skill.Range+entity.Radius+40)
+			targetEnt = sys.combat.NearestMonster(entity, float64(skill.Range+40)+entity.Radius)
 			if targetEnt != nil {
 				target = targetEnt.ID
 				entity.SetTarget(targetEnt.ID)
@@ -364,7 +365,10 @@ func (sys *System) apply(session *Session, msg *pb.ClientMsg) {
 		}
 		aimX, aimY := float64(body.Cast.GetDx()), float64(body.Cast.GetDy())
 		if err := sys.combat.CastAimed(entity, skill, target, aimX, aimY); err != nil {
-			sys.toast(session, err.Error())
+			// 硬直中、前摇中连按是正常操作，不弹提示（客户端自己会响一声）
+			if !errors.Is(err, combat.ErrStunned) && !errors.Is(err, combat.ErrBusy) {
+				sys.toast(session, err.Error())
+			}
 			// 客户端按下技能时先在本地转上了冷却；被拒绝时下一帧重发完整的自身信息把它纠正回来
 			session.selfSent = nil
 		}

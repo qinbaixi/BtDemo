@@ -1,6 +1,7 @@
 // 客户端的全部本地状态，以及实体相关的小工具函数。
 // 服务端是权威：这里只保存最近一次同步的结果，加上插值和动画需要的数据。
 
+import { clockLag, gameNow } from './clock';
 import type { Aura, FX } from '../render/fx';
 import type { createScenery } from '../render/scenery';
 import type {
@@ -35,9 +36,14 @@ export interface ClientEntity {
   shield: number;     // 护盾还能吸收的伤害
   shieldMax: number;  // 这层护盾刚加上时的量，用来算剩余比例
   blocking: boolean;  // 正在格挡
+  guard: number;      // 格挡架势剩余比例 0..1（只有玩家有，1 = 满）
+  guardAt: number;    // 架势最近一次变化的时间（架势条满了以后过一会儿淡出）
+  parryAt: number;    // 最近一次完美格挡的时间（盾往前一顶的动作）
+  breakAt: number;    // 最近一次被破防的时间（盾被打开的动作）
   looks: number;      // 身上 Buff 的外观（LOOK_* 位）
   blinkFrom: { x: number; y: number; at: number } | null;   // 最近一次闪现的起点（画残影）
-  slide: { x0: number; y0: number; x1: number; y1: number; at: number; ms: number } | null;   // 翻滚：从起点滑到终点
+  // 翻滚和被击退：从起点滑到终点（knock 为 true 是击退，途中服务端发来的位置先不管，终点就是服务端的落点）
+  slide: { x0: number; y0: number; x1: number; y1: number; at: number; ms: number; knock?: boolean } | null;
   model: string;
   skin: string;       // 玩家外观 id（空 = 职业默认外观）
   gear: string;       // 当前武器的外观（ItemInfo.look，空 = 职业默认武器）
@@ -52,6 +58,8 @@ export interface ClientEntity {
   attackAt: number;
   action: string;      // 正在做的动作（玩家技能的 fx 名），空串是普通攻击
   attackMs: number;    // 这个动作的时长
+  windupFrom: number;  // 怪物前摇开始的时间（0 = 没在前摇）：动作停在举起的那一帧，等命中前一刻再砸下去
+  stunUntil: number;   // 硬直到什么时候（受击姿势停住）
   hitAt: number;
   deadAt: number;
   // 打击感
@@ -59,6 +67,7 @@ export interface ClientEntity {
   knockX: number;     // 最近一次被打的方向（单位向量，从攻击者指向自己）
   knockY: number;
   knockAmp: number;   // 这次受击被推开的距离（像素），暴击更远
+  squashAmp: number;  // 这次受击压扁的幅度（按命中档位，见 feel/profiles.ts）
   shownFacing: number; // 上一帧画出来的朝向，用来发现转身
   turnAt: number;     // 最近一次转身的时间（转身时身体收窄一下）
   fresh: boolean;     // 还没收到过同步：一进视野就是死的，直接显示倒地
@@ -100,13 +109,13 @@ export interface State {
   scene: SceneInfo | null;        // 所在的场景和线（welcome 里带的），传送门也在里面
   myPet: string;                  // 自己选的宠物 id（空 = 不带），以服务端 PetStatus 为准
   petEntity: number;              // 自己宠物的实体 id（没在视野或没召唤为 0）
-  petRespawnAt: number;           // 宠物复活的时间（performance.now()），0 = 没在复活中
-  petCooldownUntil: number;       // 换宠物冷却结束的时间（performance.now()），0 = 没有冷却
+  petRespawnAt: number;           // 宠物复活的时间（演出时钟 gameNow()），0 = 没在复活中
+  petCooldownUntil: number;       // 换宠物冷却结束的时间（演出时钟 gameNow()），0 = 没有冷却
   ents: Map<number, ClientEntity>;
   self: SelfInfo | null;          // 服务端增量合并后的完整自己信息
-  cds: Record<string, number>;    // 技能 id -> 冷却结束的本地时间（performance.now() 毫秒）
+  cds: Record<string, number>;    // 技能 id -> 冷却结束的本地时间（演出时钟 gameNow() 毫秒）
   clockSynced: boolean;           // 已经收到过服务端的帧（clockOffset 有效）
-  clockOffset: number;            // performance.now() - 服务端时间 × 1000：每收到一帧更新，把服务端时间点换成本地时间
+  clockOffset: number;            // performance.now() - 服务端时间 × 1000（真实时间）：每收到一帧更新，把服务端时间点换成本地时间
   target: number;
   hoverSlot: number;
   showAOI: boolean;
@@ -140,9 +149,9 @@ export interface State {
 
 // ClientZone 是客户端记着的一块回血区：服务端的 ZoneInfo 加上本地时间。
 export interface ClientZone extends ZoneInfo {
-  born: number;     // 出现的时间（performance.now()）：技能放的从施法动作按地的那一刻开始铺开
+  born: number;     // 出现的时间（演出时钟 gameNow()）：技能放的从施法动作按地的那一刻开始铺开
   pulseFrom: number; // 回血节奏的起点：服务端放下区域的时间（收到列表的时刻），画回血脉冲用
-  endsAt: number;   // 消失的时间（performance.now()），0 表示常驻
+  endsAt: number;   // 消失的时间（演出时钟 gameNow()），0 表示常驻
   goneAt: number;   // 服务端已经去掉、正在淡出时是去掉的时间，否则为 0
   seed: number;
 }
@@ -240,6 +249,10 @@ export function makeEntity(d: Partial<Omit<EntityInfo, 'state'>> & Partial<Entit
     shield: 0,
     shieldMax: 0,
     blocking: false,
+    guard: 1,
+    guardAt: -1e9,
+    parryAt: -1e9,
+    breakAt: -1e9,
     looks: 0,
     blinkFrom: null,
     slide: null,
@@ -256,12 +269,15 @@ export function makeEntity(d: Partial<Omit<EntityInfo, 'state'>> & Partial<Entit
     attackAt: -1e9,
     action: '',
     attackMs: ATTACK_MS,
+    windupFrom: 0,
+    stunUntil: 0,
     hitAt: -1e9,
     deadAt: -1,
     freezeUntil: 0,
     knockX: 0,
     knockY: 0,
     knockAmp: 0,
+    squashAmp: 0.2,
     shownFacing: NaN,   // 还没画过：第一帧不算转身
     turnAt: -1e9,
     fresh: true,
@@ -309,14 +325,14 @@ export function faceToward(e: ClientEntity, x: number, y: number, now: number): 
 export function fxResolve(id: number): { x: number; y: number; r: number; facing: number; h: number } | null {
   const e = state.ents.get(id);
   if (!e) return null;
-  const p = posOf(e, performance.now());
+  const p = posOf(e, gameNow());
   return { x: p.x, y: p.y, r: e.r || 14, facing: e.facing, h: p.y - headY(e, p) };
 }
 
 // fxAuras 列出身上带护盾、要画护盾泡泡的实体。
 export function fxAuras(): Aura[] {
   const out: Aura[] = [];
-  const now = performance.now();
+  const now = gameNow();
   for (const e of state.ents.values()) {
     if (e.dead || e.shield <= 0) continue;
     const p = posOf(e, now);
@@ -329,9 +345,9 @@ export function cdRemaining(skillId: string, now: number): number {
   return Math.max(0, ((state.cds[skillId] || 0) - now) / 1000);
 }
 
-// localTime 把服务端时间（秒，Frame.time 同一个时钟）换成本地 performance.now() 毫秒；0 保持 0（没有这个时间点）。
+// localTime 把服务端时间（秒，Frame.time 同一个时钟）换成本地 gameNow() 毫秒；0 保持 0（没有这个时间点）。
 export function localTime(serverTime: number): number {
-  return serverTime ? serverTime * 1000 + state.clockOffset : 0;
+  return serverTime ? serverTime * 1000 + state.clockOffset - clockLag() : 0;
 }
 
 // setQuality 切换画质档位，同时维护 hq（不是低档）。

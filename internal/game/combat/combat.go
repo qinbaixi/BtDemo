@@ -27,6 +27,8 @@ var (
 	ErrBlocking = errors.New("格挡中不能出招")
 	ErrNoAim    = errors.New("没有方向")
 	ErrNoRoom   = errors.New("前面过不去")
+	ErrStunned  = errors.New("硬直中")
+	ErrBusy     = errors.New("正在出招")
 )
 
 // 投掷物的碰撞半径：飞行时被障碍物挡住、判定命中都按这个粗细
@@ -58,12 +60,14 @@ func New(
 	}
 }
 
-// Tick 清除已过期的 Buff，并结算装备的持续回血（regen）。
+// Tick 结算前摇到点的出招，清除已过期的 Buff，并结算装备的持续回血（regen）。
 func (sys *System) Tick() {
+	sys.resolveWindups()
 	sys.state.Ents.Each(func(entity *core.Entity) {
 		if !entity.Dead {
 			sys.UpdateBuffs(entity)
 			sys.regen(entity)
+			sys.regenGuard(entity)
 		}
 	})
 }
@@ -126,33 +130,53 @@ func (sys *System) nearest(
 	return best
 }
 
-// CalcDamage 返回 src 使用技能 skill 对 dst 造成的伤害，以及是否暴击。
+// CalcDamage 返回 src 使用技能 skill 对 dst 造成的伤害（整数），以及是否暴击。
 // 物理技能以 Atk 对抗 Def，法术技能以 MAtk 对抗 MDef。
-func (sys *System) CalcDamage(src, dst *core.Entity, skill *config.Skill) (float64, bool) {
+// 伤害 = (攻击 × ratio / 10000 + base) × 100 / (防御 + 100) × 暴击倍率 × 浮动(95%..105%)，
+// 中间结果可以有小数，算完向下取整，最少 1 点。
+func (sys *System) CalcDamage(src, dst *core.Entity, skill *config.Skill) (int, bool) {
 	atk, def := src.Attr.Atk, dst.Attr.Def
 	if skill.Damage == "magic" {
 		atk, def = src.Attr.MAtk, dst.Attr.MDef
 	}
-	raw := atk*skill.Ratio + skill.Base
-	dmg := raw * (1 - def/(def+100))
+	raw := fraction(atk, skill.Ratio) + float64(skill.Base)
+	dmg := raw * mitigation(def)
 	// 武器附魔：物理技能额外打一份法术伤害（按目标的法抗减免）
 	if skill.Damage == "physical" {
 		for _, buff := range src.Buffs {
 			if bonus := buff.Cfg.BonusMagic; bonus > 0 {
-				dmg += src.Attr.MAtk * bonus * (1 - dst.Attr.MDef/(dst.Attr.MDef+100))
+				dmg += fraction(src.Attr.MAtk, bonus) * mitigation(dst.Attr.MDef)
 			}
 		}
 	}
-	crit := sys.state.Rand.Float64() < src.Attr.Crit
+	crit := core.Roll(sys.state.Rand, src.Attr.Crit)
 	// 伏击（ambush 特效）：位移后限定时间内的下一次伤害必定暴击，打中（没被免疫）才算用掉，见 damage
 	if src.AmbushUntil > sys.state.Now() {
 		crit = true
 	}
 	if crit {
-		dmg *= src.Attr.CritDmg
+		dmg = dmg * float64(src.Attr.CritDmg) / config.OneHundredPercent
 	}
-	dmg *= 0.95 + sys.state.Rand.Float64()*0.1
-	return math.Max(1, math.Round(dmg)), crit
+	// 随机浮动：9500..10500 万分比
+	spread := damageSpreadLow + sys.state.Rand.Intn(damageSpreadHigh-damageSpreadLow+1)
+	dmg = dmg * float64(spread) / config.OneHundredPercent
+	return max(1, int(math.Floor(dmg))), crit
+}
+
+// 伤害随机浮动的范围（万分比）：95% 到 105%。
+const (
+	damageSpreadLow  = 9500
+	damageSpreadHigh = 10500
+)
+
+// fraction 返回 value × points / 10000（不取整，给公式中间用）。
+func fraction(value int, points config.BasisPoints) float64 {
+	return float64(value) * float64(points) / config.OneHundredPercent
+}
+
+// mitigation 是防御 def 留下的伤害比例：100 / (def + 100)。
+func mitigation(def int) float64 {
+	return 100 / float64(def+100)
 }
 
 // Cast 让 entity 使用技能 skill。targetID 用于 kind 为 "target" 的技能。技能无法施放时，
@@ -176,6 +200,12 @@ func (sys *System) CastAimed(
 	if entity.Blocking {
 		return ErrBlocking
 	}
+	if entity.Stunned(now) || entity.Knock != nil {
+		return ErrStunned
+	}
+	if entity.Windup != nil {
+		return ErrBusy
+	}
 	if now < entity.Cooldowns[skill.ID] {
 		return ErrCooldown
 	}
@@ -185,34 +215,25 @@ func (sys *System) CastAimed(
 		if !target.Alive() || target == entity || !sys.state.Hostile(entity, target) {
 			return ErrNoTarget
 		}
-		if core.EdgeDist(entity, target) > skill.Range {
+		if core.EdgeDist(entity, target) > float64(skill.Range) {
 			return ErrTooFar
 		}
-		sys.state.Events.Emit(entity, castEvent(entity, target, skill))
-		dmg, crit := sys.CalcDamage(entity, target, skill)
-		sys.applyDamage(entity, target, dmg, crit, skill)
+		event := castEvent(entity, target, skill)
+		sys.state.Events.Emit(entity, event)
+		if skill.Windup > 0 {
+			sys.startWindup(entity, skill, target.ID, event) // 到点再结算，见 impact.go
+		} else {
+			sys.strike(entity, skill, target.ID, false)
+		}
 	case "aoe":
 		event := castEvent(entity, nil, skill)
-		event.Radius = core.F32(skill.Radius)
-		event.X, event.Y = core.F32(entity.X), core.F32(entity.Y)
+		event.Radius = core.I32(skill.Radius)
+		event.X, event.Y = core.FloorI32(entity.X), core.FloorI32(entity.Y)
 		sys.state.Events.Emit(entity, event)
-		// 先收集目标，使伤害（及其导致的击杀）不会在遍历过程中改变网格。
-		var targets []*core.Entity
-		// 先按中心距离筛选候选目标；下面的边缘距离判断是精确的。
-		sys.grid.InRange(
-			entity.X,
-			entity.Y,
-			skill.Radius+entity.Radius+core.MaxRadius,
-			func(other *core.Entity) {
-				if other.Alive() && sys.state.Hostile(entity, other) &&
-					core.EdgeDist(entity, other) <= skill.Radius {
-					targets = append(targets, other)
-				}
-			},
-		)
-		for _, other := range targets {
-			dmg, crit := sys.CalcDamage(entity, other, skill)
-			sys.applyDamage(entity, other, dmg, crit, skill)
+		if skill.Windup > 0 {
+			sys.startWindup(entity, skill, 0, event)
+		} else {
+			sys.strike(entity, skill, 0, false)
 		}
 	case "ally":
 		// 友方技能：对行为树指定的友方目标（宠物的主人）回血，目标要在 range 内
@@ -220,24 +241,24 @@ func (sys *System) CastAimed(
 		if !ally.Alive() || sys.state.Hostile(entity, ally) {
 			return ErrNoTarget
 		}
-		if core.EdgeDist(entity, ally) > skill.Range {
+		if core.EdgeDist(entity, ally) > float64(skill.Range) {
 			return ErrTooFar
 		}
 		sys.state.Events.Emit(entity, castEvent(entity, ally, skill))
-		sys.heal(ally, ally.Attr.MaxHP*skill.Heal, "")
+		sys.heal(ally, config.ScaleBasisPoints(ally.Attr.MaxHP, skill.Heal), "")
 	case "dash":
 		dir, ok := unit(aimX, aimY)
 		if !ok {
 			return ErrNoAim
 		}
 		from := nav.Vec{X: entity.X, Y: entity.Y}
-		end := sys.nav.Reach(from, dir, skill.Distance, entity.Radius)
+		end := sys.nav.Reach(from, dir, float64(skill.Distance), entity.Radius)
 		if end.Dist(from) < 1 {
 			return ErrNoRoom
 		}
 		event := castEvent(entity, nil, skill)
-		event.X, event.Y = core.F32(core.Round1(from.X)), core.F32(core.Round1(from.Y))
-		event.Tx, event.Ty = core.F32(core.Round1(end.X)), core.F32(core.Round1(end.Y))
+		event.X, event.Y = core.FloorI32(from.X), core.FloorI32(from.Y)
+		event.Tx, event.Ty = core.FloorI32(end.X), core.FloorI32(end.Y)
 		entity.SetPos(end.X, end.Y)
 		sys.grid.Moved(entity)
 		sys.state.Events.Emit(entity, event)
@@ -249,7 +270,7 @@ func (sys *System) CastAimed(
 		}
 		from := nav.Vec{X: entity.X, Y: entity.Y}
 		// 从身体边缘出手；被障碍物挡住的地方就是最远距离
-		end := sys.nav.Reach(from, dir, skill.Range+entity.Radius, projectileRadius)
+		end := sys.nav.Reach(from, dir, float64(skill.Range)+entity.Radius, projectileRadius)
 		hits := sys.hostilesOnLine(entity, from, dir, end.Dist(from))
 		var first *core.Entity
 		if len(hits) > 0 {
@@ -261,8 +282,8 @@ func (sys *System) CastAimed(
 			hits = hits[:1]
 		}
 		event := castEvent(entity, first, skill)
-		event.X, event.Y = core.F32(core.Round1(from.X)), core.F32(core.Round1(from.Y))
-		event.Tx, event.Ty = core.F32(core.Round1(end.X)), core.F32(core.Round1(end.Y))
+		event.X, event.Y = core.FloorI32(from.X), core.FloorI32(from.Y)
+		event.Tx, event.Ty = core.FloorI32(end.X), core.FloorI32(end.Y)
 		sys.state.Events.Emit(entity, event)
 		for _, hit := range hits {
 			dmg, crit := sys.CalcDamage(entity, hit.entity, skill)
@@ -275,14 +296,14 @@ func (sys *System) CastAimed(
 	case "self":
 		sys.state.Events.Emit(entity, castEvent(entity, entity, skill))
 		if skill.Heal > 0 {
-			amount := math.Round(entity.Attr.MaxHP * skill.Heal)
-			entity.SetHP(math.Min(entity.Attr.MaxHP, entity.HP+amount))
+			amount := config.ScaleBasisPoints(entity.Attr.MaxHP, skill.Heal)
+			entity.SetHP(min(entity.Attr.MaxHP, entity.HP+amount))
 			sys.state.Events.Emit(
 				entity,
 				&core.Event{
 					Kind:  pb.EventKind_HEAL.Enum(),
 					Dst:   core.I32(entity.ID),
-					Value: core.F32(amount),
+					Value: core.I32(amount),
 				},
 			)
 		}
@@ -292,8 +313,8 @@ func (sys *System) CastAimed(
 	case "zone":
 		// 在脚下放回血区，同一个人再放一次时旧的消失
 		event := castEvent(entity, nil, skill)
-		event.Radius = core.F32(skill.Zone.Radius)
-		event.X, event.Y = core.F32(core.Round1(entity.X)), core.F32(core.Round1(entity.Y))
+		event.Radius = core.I32(skill.Zone.Radius)
+		event.X, event.Y = core.FloorI32(entity.X), core.FloorI32(entity.Y)
 		sys.state.Events.Emit(entity, event)
 		sys.state.Zones.Replace(&core.Zone{
 			Cfg:       skill.Zone,
@@ -307,8 +328,8 @@ func (sys *System) CastAimed(
 	default:
 		return ErrBadSkill
 	}
-	// 冷却缩减（装备的 cdr）让冷却变短
-	entity.Cooldowns[skill.ID] = now + skill.Cooldown*(1-entity.Attr.CDR)
+	// 冷却缩减（装备的 cdr，万分比）让冷却变短，向下取整到毫秒
+	entity.Cooldowns[skill.ID] = now + skill.Cooldown*int64(config.OneHundredPercent-entity.Attr.CDR)/config.OneHundredPercent
 	entity.CanPick = false // 放过技能就不能再换技能了，等下次死亡
 	return nil
 }
@@ -385,7 +406,7 @@ func (sys *System) castRain(
 	centerX, centerY := 0.0, 0.0
 	target := sys.state.Ents.Get(targetID)
 	if target.Alive() && target != entity && sys.state.Hostile(entity, target) &&
-		core.EdgeDist(entity, target) <= skill.Range {
+		core.EdgeDist(entity, target) <= float64(skill.Range) {
 		centerX, centerY = target.X, target.Y
 	} else {
 		target = nil
@@ -394,22 +415,23 @@ func (sys *System) castRain(
 			return ErrNoAim
 		}
 		world := sys.state.Cfg.World.Map
-		centerX = math.Max(0, math.Min(world.Width, entity.X+dir.X*skill.Distance))
-		centerY = math.Max(0, math.Min(world.Height, entity.Y+dir.Y*skill.Distance))
+		distance := float64(skill.Distance)
+		centerX = math.Max(0, math.Min(float64(world.Width), entity.X+dir.X*distance))
+		centerY = math.Max(0, math.Min(float64(world.Height), entity.Y+dir.Y*distance))
 	}
 	event := castEvent(entity, target, skill)
-	event.Radius = core.F32(skill.Radius)
-	event.X, event.Y = core.F32(core.Round1(centerX)), core.F32(core.Round1(centerY))
+	event.Radius = core.I32(skill.Radius)
+	event.X, event.Y = core.FloorI32(centerX), core.FloorI32(centerY)
 	sys.state.Events.Emit(entity, event)
 	// 先收集目标，使伤害（及其导致的击杀）不会在遍历过程中改变网格。
 	var victims []*core.Entity
 	sys.grid.InRange(
 		centerX,
 		centerY,
-		skill.Radius+core.MaxRadius,
+		float64(skill.Radius+core.MaxRadius),
 		func(other *core.Entity) {
 			if other.Alive() && sys.state.Hostile(entity, other) &&
-				math.Max(0, math.Hypot(other.X-centerX, other.Y-centerY)-other.Radius) <= skill.Radius {
+				math.Max(0, math.Hypot(other.X-centerX, other.Y-centerY)-other.Radius) <= float64(skill.Radius) {
 				victims = append(victims, other)
 			}
 		},
@@ -430,7 +452,7 @@ func (sys *System) addBuff(entity *core.Entity, cfg *config.Buff) *core.Event {
 		&core.Buff{
 			Cfg:    cfg,
 			Until:  sys.state.Now() + cfg.Duration,
-			Absorb: math.Round(entity.Attr.MaxHP * cfg.ShieldPct),
+			Absorb: config.ScaleBasisPoints(entity.Attr.MaxHP, cfg.ShieldPct),
 		},
 	)
 	entity.MarkDirty(core.DirtyShield | core.DirtyLooks)
@@ -439,7 +461,7 @@ func (sys *System) addBuff(entity *core.Entity, cfg *config.Buff) *core.Event {
 		Kind: pb.EventKind_BUFF.Enum(),
 		Dst:  core.I32(entity.ID),
 		Name: &cfg.Name,
-		Dur:  core.F32(cfg.Duration),
+		Dur:  core.I32(int(cfg.Duration)),
 	}
 	sys.state.Events.Emit(entity, event)
 	return event
@@ -447,8 +469,8 @@ func (sys *System) addBuff(entity *core.Entity, cfg *config.Buff) *core.Event {
 
 // applyDamage 结算技能 skill 的一次命中：src 对 dst 造成 dmg 点伤害（见 damage），
 // 然后触发双方装备的特效（见 effects.go 的 afterHit）。
-// 技能带 Debuff 时，没被免掉、也没被打死的目标会挂上它。施法者已经死了时什么都不做。
-func (sys *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, skill *config.Skill) {
+// 技能带 Debuff 时，没被免掉、没被完美格挡、也没被打死的目标会挂上它。施法者已经死了时什么都不做。
+func (sys *System) applyDamage(src, dst *core.Entity, dmg int, crit bool, skill *config.Skill) {
 	// 施法者可能在同一次范围技能里被前面目标的反伤打死了，死了就不再打后面的目标
 	if !src.Alive() {
 		return
@@ -457,25 +479,29 @@ func (sys *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, sk
 	if result.immune {
 		return
 	}
+	sys.applyImpact(src, dst, skill, result.outcome, result.event)
 	sys.afterHit(src, dst, skill, result)
-	if dst.Alive() && skill.Debuff != nil {
+	if dst.Alive() && skill.Debuff != nil && result.outcome != pb.HitResult_PARRY {
 		sys.addBuff(dst, skill.Debuff)
 	}
 }
 
 // damageResult 是一次伤害结算的结果。
 type damageResult struct {
-	immune  bool    // 目标无敌，整次伤害被免掉
-	blocked float64 // 被格挡掉的伤害
-	taken   float64 // 实际扣掉的生命
+	immune  bool         // 目标无敌，整次伤害被免掉
+	outcome pb.HitResult // 怎么挨的这一下：正常命中、格挡、完美格挡、破防
+	blocked int          // 被格挡掉的伤害
+	taken   int          // 实际扣掉的生命
+	event   *core.Event  // 发出的 DAMAGE 事件（还在队列里，applyImpact 往上补击退和硬直）
 }
 
 // damage 从 dst 中扣除 dmg，记录攻击者，发 DAMAGE 事件（skillID、proc 不空时写进事件），
-// 并在 HP 归零时击杀 dst。无敌时整个免掉；否则先按格挡减伤，再由护盾吸收，剩下的才扣生命。
+// 并在 HP 归零时击杀 dst。无敌时整个免掉；否则先按格挡减伤（只挡正面，完美格挡全挡，见 guard.go），
+// 再由护盾吸收，剩下的才扣生命。
 // 它不触发任何装备特效，特效自己造成的伤害（proc 不空）也走这里，所以特效不会连锁触发。
 func (sys *System) damage(
 	src, dst *core.Entity,
-	dmg float64,
+	dmg int,
 	crit bool,
 	skillID string,
 	proc string,
@@ -494,26 +520,35 @@ func (sys *System) damage(
 		event.Proc = proto.String(proc)
 	}
 	if dst.Invulnerable() {
-		event.Value = core.F32(0)
+		event.Value = core.I32(0)
 		event.Immune = proto.Bool(true)
+		event.Result = pb.HitResult_IMMUNE.Enum()
 		sys.state.Events.Emit(dst, event)
 		return damageResult{immune: true}
 	}
 	if crit && src.AmbushUntil > 0 {
 		src.AmbushUntil = 0 // 伏击的必暴用掉了
 	}
-	result := damageResult{}
-	if dst.Blocking {
-		result.blocked = math.Round(dmg * sys.state.Cfg.World.Player.Block.Reduce)
+	result := damageResult{event: event, outcome: pb.HitResult_HIT}
+	if dst.Blocking && sys.shieldCovers(dst, src) {
+		result.outcome = sys.guard(dst, sys.state.Cfg.Skills[skillID], proc)
+		if result.outcome == pb.HitResult_PARRY {
+			result.blocked = dmg // 完美格挡：一点都不掉
+		} else {
+			// 先算挨到的伤害再向下取整，挡掉的是剩下的部分
+			reduce := sys.state.Cfg.World.Player.Block.Reduce
+			result.blocked = dmg - config.ScaleBasisPoints(dmg, config.OneHundredPercent-reduce)
+		}
 		dmg -= result.blocked
-		event.Blocked = core.F32(result.blocked)
+		event.Blocked = core.I32(result.blocked)
+		event.Result = result.outcome.Enum()
 	}
 	if absorbed := sys.absorb(dst, dmg); absorbed > 0 {
 		dmg -= absorbed
-		event.Absorbed = core.F32(absorbed)
+		event.Absorbed = core.I32(absorbed)
 	}
 	result.taken = dmg
-	event.Value = core.F32(dmg)
+	event.Value = core.I32(dmg)
 	dst.SetHP(dst.HP - dmg)
 	dst.LastAttacker = src.ID
 	dst.LastHitAt = sys.state.Now()
@@ -525,13 +560,13 @@ func (sys *System) damage(
 }
 
 // absorb 用 entity 身上的护盾吸收至多 dmg 点伤害，返回吸收了多少；吸收完的护盾 Buff 被移除。
-func (sys *System) absorb(entity *core.Entity, dmg float64) float64 {
-	total := 0.0
+func (sys *System) absorb(entity *core.Entity, dmg int) int {
+	total := 0
 	for _, buff := range entity.Buffs {
 		if dmg <= 0 {
 			break
 		}
-		take := math.Min(buff.Absorb, dmg)
+		take := min(buff.Absorb, dmg)
 		buff.Absorb -= take
 		dmg -= take
 		total += take
@@ -560,6 +595,10 @@ func (sys *System) Kill(entity, killer *core.Entity) {
 	}
 	entity.SetDead(true)
 	entity.SetHP(0)
+	entity.Windup = nil // 前摇中被打死：这一下不会再落下（击退照常走完，尸体被打飞）
+	entity.StunUntil = 0
+	entity.SetBlocking(false) // 倒下时盾也掉了，复活后要重新按右键
+	entity.ParryUntil = 0
 	entity.SetTarget(0)
 	entity.Buffs = nil
 	entity.MarkDirty(core.DirtyShield | core.DirtyLooks)
@@ -596,6 +635,9 @@ func castEvent(entity, dst *core.Entity, skill *config.Skill) *core.Event {
 		Name:  proto.String(skill.Name),
 		Fx:    proto.String(skill.FX),
 		Color: proto.String(skill.Color),
+	}
+	if skill.Damage != "" {
+		event.Weight = proto.String(skill.Weight)
 	}
 	if dst != nil {
 		event.Dst = core.I32(dst.ID)

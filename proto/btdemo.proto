@@ -3,6 +3,12 @@
 //
 // Regenerate the Go code with `go generate ./internal/pb` after editing.
 // The browser loads this same file at runtime with protobuf.js.
+//
+// No floating point anywhere (all values are rounded down on the server):
+//   times and durations are integer milliseconds (*_at, until, time: game clock ms),
+//   ratios / chances / multipliers are basis points (10000 = 100%),
+//   positions, distances and radii are whole pixels, speed is pixels per second,
+//   directions sent by the client are unit vectors scaled by 10000.
 syntax = "proto2";
 
 package btdemo;
@@ -45,7 +51,7 @@ message SwitchLine {
 // Hello is the first frame of a connection. token empty (or unknown, or
 // expired) = start a new character, answered with Welcome. A known token
 // takes the character back (it stays in the world for world.yaml
-// session.keep seconds after a disconnect): the server answers with
+// session.keep ms after a disconnect): the server answers with
 // Welcome{resumed} and then sends everything again, as for a new player.
 message Hello {
   optional string token = 1;     // Welcome.token of the character to take back
@@ -87,12 +93,13 @@ message Loadout {
 // player takes 80% less damage, moves at half speed and cannot use skills.
 message Block {
   required bool on = 1;
+  optional sint32 face = 2;  // raising: the side the shield faces, -1 left / 1 right (used when no target is selected)
 }
 
-// Move sets the held movement direction; the server normalizes it. 0,0 stops.
+// Move sets the held movement direction (unit vector x 10000); the server normalizes it. 0,0 stops.
 message Move {
-  required float dx = 1;
-  required float dy = 2;
+  required sint32 dx = 1;
+  required sint32 dy = 2;
 }
 
 // SetTarget selects an entity; 0 clears the selection.
@@ -102,12 +109,12 @@ message SetTarget {
 
 // Cast uses the skill in a 1-based slot on target (0 = the selected target).
 // dx, dy aim dash and line skills (the blink direction, where the axe flies);
-// the server normalizes them.
+// the server normalizes them (send unit vectors x 10000).
 message Cast {
   required int32 slot = 1;
   optional int32 target = 2;
-  optional float dx = 3;
-  optional float dy = 4;
+  optional sint32 dx = 3;
+  optional sint32 dy = 4;
 }
 
 // Watch asks for the behavior tree trace of one monster or NPC (the debug
@@ -123,7 +130,7 @@ message Watch {
 // Frame, in order; replies to the player's own actions (Toast, SkillBar, ...)
 // and Welcome are sent right away in a Frame of their own.
 message Frame {
-  required float time = 1;      // server time (seconds) when the frame was sent; *_at fields use this clock
+  required int64 time = 1;      // server time (ms) when the frame was sent; *_at fields use this clock
   repeated ServerMsg msgs = 2;
 }
 
@@ -171,8 +178,8 @@ message Travel {
 message PetStatus {
   optional string pet = 1;        // PetInfo.id of the current pet; empty = no pet
   optional int32 entity = 2;      // the pet's entity id (0 = none)
-  optional float respawn_in = 3;  // seconds until it respawns (0 = alive)
-  optional float cooldown = 4;    // seconds left before the pet can be swapped again
+  optional int32 respawn_in = 3;  // ms until it respawns (0 = alive)
+  optional int32 cooldown = 4;    // ms left before the pet can be swapped again
 }
 
 // PetInfo is one kind of pet from config/pets.yaml (sent once in Welcome, in panel order).
@@ -199,7 +206,7 @@ message ItemInfo {
 
 message ItemStat {
   required string stat = 1;   // str | agi | int | vit | max_hp | atk | matk | def | mdef | crit | crit_dmg | speed | cdr
-  required float value = 2;   // crit, crit_dmg, cdr are fractions (0.05 = 5%)
+  required int32 value = 2;   // crit, crit_dmg, cdr are basis points (500 = 5%)
 }
 
 // ItemSlotted is one item the player owns: in the bag, or equipped in a slot.
@@ -226,13 +233,13 @@ message SkillInfo {
   required string id = 2;
   required string name = 3;
   required string kind = 4;  // target | aoe | self | ally | dash | line (pierce: hits everyone on the line) | zone | rain
-  optional float range = 5;
-  optional float radius = 6;
-  optional float cooldown = 7;
+  optional int32 range = 5;
+  optional int32 radius = 6;
+  optional int32 cooldown = 7;   // ms
   optional string color = 8;
   optional string fx = 9;    // melee | projectile | circle | heal | buff | shield | blink | axe | frost | ...
   optional string desc = 10; // one-line description for the skill picker
-  optional float distance = 11; // dash: how far; rain: how far ahead the centre lands when there is no target
+  optional int32 distance = 11; // dash: how far; rain: how far ahead the centre lands when there is no target
 }
 
 // ClassInfo is one player class (knight, ranger, ...) offered in the picker.
@@ -260,9 +267,9 @@ message SkinInfo {
 // Welcome is the first message after connecting: a new character was created.
 message Welcome {
   required int32 id = 1;
-  required float map_w = 2;
-  required float map_h = 3;
-  required float aoi_cell = 4;
+  required int32 map_w = 2;
+  required int32 map_h = 3;
+  required int32 aoi_cell = 4;
   repeated SkillInfo skills = 5;
   reserved 6;                         // was props; the client now reads the scene from /map.tmj
   repeated Obstacle obstacles = 7;    // collision shapes of the map props, for the debug overlay
@@ -291,9 +298,9 @@ message SceneInfo {
 
 // PortalInfo is a gate to another scene: stand in it for a moment to travel.
 message PortalInfo {
-  required float x = 1;
-  required float y = 2;
-  required float r = 3;
+  required int32 x = 1;
+  required int32 y = 2;
+  required int32 r = 3;
   required string to = 4;             // SceneInfo.id of the scene it leads to
   required string to_name = 5;        // and its name
 }
@@ -307,11 +314,11 @@ enum ObstacleShape {
 // Obstacle is a collision shape in map coordinates.
 message Obstacle {
   required ObstacleShape shape = 1;
-  required float ax = 2;
-  required float ay = 3;
-  optional float bx = 4;
-  optional float by = 5;
-  optional float r = 6;
+  required int32 ax = 2;
+  required int32 ay = 3;
+  optional int32 bx = 4;
+  optional int32 by = 5;
+  optional int32 r = 6;
 }
 
 enum EntityKind {
@@ -329,7 +336,7 @@ message EntityInfo {
   required EntityKind kind = 2;
   required string name = 3;
   optional string color = 4;
-  optional float r = 5;
+  optional int32 r = 5;
   reserved 6 to 10;            // were lv, x, y, hp, max_hp: now in state
   required EntityState state = 15;  // every field set
   optional string model = 11;  // which look the client draws, e.g. knight, slime
@@ -352,17 +359,18 @@ message Leave {
 // client keeps the rest.
 message EntityState {
   required int32 id = 1;
-  optional float x = 2;
-  optional float y = 3;
-  optional float hp = 4;
-  optional float max_hp = 5;
+  optional int32 x = 2;
+  optional int32 y = 3;
+  optional int32 hp = 4;
+  optional int32 max_hp = 5;
   optional int32 lv = 6;
   optional string act = 7;   // behavior tree task currently running
   optional int32 tg = 8;     // current target id
   optional bool dead = 9;
-  optional float shield = 10;  // damage the active shield can still absorb
+  optional int32 shield = 10;  // damage the active shield can still absorb
   optional bool blocking = 11; // guard raised
   optional int32 looks = 12;   // buff looks, bit set: 1 haste, 2 holy (invulnerable), 4 fire (enchanted weapon), 8 frost (slowed)
+  optional int32 guard = 13;   // players: guard meter left for blocking, 0..10000
 }
 
 enum EventKind {
@@ -375,6 +383,7 @@ enum EventKind {
   SAY = 7;
   LEVEL_UP = 8;
   LOOT = 9;
+  INTERRUPT = 10;  // id: an entity whose windup was broken by a stagger (the pending hit never lands)
 }
 
 // Event is a one-off thing that happened inside the AOI. Which fields are set
@@ -388,50 +397,67 @@ message Event {
   optional string name = 6;   // CAST: skill name, BUFF: buff name
   optional string fx = 7;     // CAST
   optional string color = 8;  // CAST
-  optional float radius = 9;  // CAST of an aoe skill
-  optional float x = 10;      // CAST of an aoe skill
-  optional float y = 11;
-  optional float value = 12;  // DAMAGE, HEAL
+  optional int32 radius = 9;  // CAST of an aoe skill
+  optional int32 x = 10;      // CAST of an aoe skill
+  optional int32 y = 11;
+  optional int32 value = 12;  // DAMAGE, HEAL
   optional bool crit = 13;    // DAMAGE
   optional string text = 14;  // SAY
   optional int32 lv = 15;     // LEVEL_UP
-  optional float dur = 16;    // BUFF
-  optional float absorbed = 17; // DAMAGE: taken by a shield (not included in value)
-  optional float blocked = 18;  // DAMAGE: stopped by blocking (not included in value)
+  optional int32 dur = 16;    // BUFF: ms
+  optional int32 absorbed = 17; // DAMAGE: taken by a shield (not included in value)
+  optional int32 blocked = 18;  // DAMAGE: stopped by blocking (not included in value)
   optional bool immune = 19;    // DAMAGE: the target was invulnerable (value is 0)
-  optional float tx = 20;       // CAST of a dash or line skill: where it ended (x, y is where it started)
-  optional float ty = 21;
+  optional int32 tx = 20;       // CAST of a dash or line skill: where it ended (x, y is where it started)
+  optional int32 ty = 21;
   optional int32 zone = 22;     // HEAL: from standing in this zone (Zone.id)
   optional string item = 23;    // LOOT: ItemInfo.id that dropped (src = the slain monster, dst = who got it)
   optional string proc = 24;    // DAMAGE / HEAL caused by an item effect: the effect kind (lifesteal, thorns, ignite, ...)
+  optional string weight = 25;  // CAST / DAMAGE: light | medium | heavy (skills.yaml weight)
+  optional int32 kx = 26;       // DAMAGE: the target is knocked back to (kx, ky) over knock_time ms
+  optional int32 ky = 27;
+  optional int32 knock_time = 28;
+  optional int32 stun = 29;     // DAMAGE: the target is staggered (cannot move or act) for this many ms
+  optional bool wall = 30;      // DAMAGE: the knockback slammed the target into an obstacle
+  optional int64 hit_at = 31;   // CAST with a windup: Frame.time when the hit lands
+  optional HitResult result = 32; // DAMAGE: how the hit was received (absent = HIT)
+}
+
+// HitResult is how a hit was received.
+enum HitResult {
+  HIT = 0;
+  BLOCK = 1;        // stopped by a raised shield (blocked = how much)
+  PARRY = 2;        // perfect block: no damage; kx/ky/knock_time/stun apply to the attacker (src), not dst
+  GUARD_BREAK = 3;  // blocked, but the guard meter ran out: the shield drops, dst is knocked back and staggered
+  IMMUNE = 4;       // the target was invulnerable
 }
 
 message Attrs {
-  optional float str = 1;
-  optional float agi = 2;
-  optional float int = 3;
-  optional float vit = 4;
+  optional int32 str = 1;
+  optional int32 agi = 2;
+  optional int32 int = 3;
+  optional int32 vit = 4;
 }
 
 message Derived {
-  optional float max_hp = 1;
-  optional float atk = 2;
-  optional float matk = 3;
-  optional float def = 4;
-  optional float mdef = 5;
-  optional float crit = 6;
-  optional float crit_dmg = 7;
-  optional float speed = 8;
+  optional int32 max_hp = 1;
+  optional int32 atk = 2;
+  optional int32 matk = 3;
+  optional int32 def = 4;
+  optional int32 mdef = 5;
+  optional int32 crit = 6;      // basis points (500 = 5%)
+  optional int32 crit_dmg = 7;  // basis points (15000 = x1.5)
+  optional int32 speed = 8;     // pixels per second
 }
 
 message SkillCooldown {
   required string skill = 1;
-  required float ready_at = 2;   // Frame.time when the skill can be used again
+  required int64 ready_at = 2;   // Frame.time when the skill can be used again
 }
 
 message BuffInfo {
   required string name = 1;
-  required float until = 2;      // Frame.time when the buff ends
+  required int64 until = 2;      // Frame.time when the buff ends
 }
 
 // SelfInfo is the player's own character sheet, sent only to that player and
@@ -442,13 +468,13 @@ message SelfInfo {
   optional int32 lv = 1;
   optional int32 exp = 2;
   optional int32 next = 3;
-  optional float hp = 4;
+  optional int32 hp = 4;
   optional Attrs base = 5;
   optional Derived attr = 6;
   repeated SkillCooldown cds = 7;   // skills still cooling down
   repeated BuffInfo buffs = 8;
   optional bool dead = 9;
-  optional float respawn_at = 10;   // Frame.time of the respawn (while dead)
+  optional int64 respawn_at = 10;   // Frame.time of the respawn (while dead)
   optional bool cds_set = 11;
   optional bool buffs_set = 12;
 }
@@ -462,17 +488,17 @@ message ZoneList {
 // a circle a skill put down.
 message Zone {
   required int32 id = 1;
-  required float x = 2;
-  required float y = 3;
-  required float radius = 4;
+  required int32 x = 2;
+  required int32 y = 3;
+  required int32 radius = 4;
   optional string name = 5;
   optional string color = 6;
   optional string look = 7;      // spring | rune
   optional int32 owner = 8;      // entity that cast it; 0 = part of the map
-  optional float until = 9;      // Frame.time when it disappears; 0 = permanent
-  optional float dur = 10;       // total seconds it lasts, for the countdown ring
-  optional float interval = 11;  // seconds between heals
-  optional float heal = 12;      // fraction of max HP per heal
+  optional int64 until = 9;      // Frame.time when it disappears; 0 = permanent
+  optional int32 dur = 10;       // total ms it lasts, for the countdown ring
+  optional int32 interval = 11;  // ms between heals
+  optional int32 heal = 12;      // basis points of max HP per heal
 }
 
 // AiNode is one behavior tree node visited during a tick, in visiting order.
@@ -513,7 +539,7 @@ message AiTreeNode {
   repeated int32 services = 7;
   optional bool inverse = 8;     // decorator: inverse_check_condition
   optional bool periodic = 9;    // decorator: re-checked while the node runs
-  optional float interval = 10;  // service: seconds between ticks
+  optional int32 interval = 10;  // service: ms between ticks
   optional string label = 11;    // the name given in the editor, if any
 }
 
@@ -524,7 +550,7 @@ enum AiStatus {
 }
 
 message AiTick {
-  required float time = 1;
+  required int64 time = 1;   // ms
   repeated AiNode nodes = 2;
 }
 
@@ -539,7 +565,7 @@ message AiTrace {
   required string tree = 2;
   repeated AiTick ticks = 3;
   repeated KeyValue blackboard = 4;  // blackboard plus a few agent fields
-  repeated float path = 5;           // x, y pairs: the route the entity is walking, from its position
+  repeated int32 path = 5;           // x, y pairs: the route the entity is walking, from its position
   optional AiTreeDef def = 6;        // the tree's structure, when the session has not had it yet
 }
 

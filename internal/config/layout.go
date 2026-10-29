@@ -19,7 +19,7 @@ const MapFile = "map.tmj"
 // Layout 是从 map.tmj 读出的、服务端关心的部分：场景物件的摆放，以及每种物件的碰撞形状。
 // 地表区域（zones）和道路（roads）只有前端用，服务端不解析。
 type Layout struct {
-	Width, Height float64          // 地图像素尺寸（格子数 × 格子边长），必须和 world.yaml 一致
+	Width, Height int              // 地图像素尺寸（格子数 × 格子边长），必须和 world.yaml 一致
 	Shapes        map[string]Shape // 物件种类 -> 碰撞形状
 	Props         []Prop
 	Portals       []Portal
@@ -51,12 +51,12 @@ type Prop struct {
 type Portal struct {
 	Name   string
 	To     string // 目标场景 id（scenes.yaml）
-	X, Y   float64
-	Radius float64
+	X, Y   int    // 像素；Tiled 里的小数坐标读入时向下取整
+	Radius int
 }
 
 // DefaultPortalRadius 是传送门不写 r 属性时的半径。
-const DefaultPortalRadius = 36.0
+const DefaultPortalRadius = 36
 
 // tmjMap 是 Tiled JSON 地图格式里我们用到的字段。
 type tmjMap struct {
@@ -135,8 +135,8 @@ func parseLayout(data []byte) (Layout, error) {
 		return Layout{}, errors.New("map width, height, tilewidth and tileheight must be positive")
 	}
 	layout := Layout{
-		Width:  float64(mapData.Width * mapData.TileWidth),
-		Height: float64(mapData.Height * mapData.TileHeight),
+		Width:  mapData.Width * mapData.TileWidth,
+		Height: mapData.Height * mapData.TileHeight,
 		Shapes: map[string]Shape{},
 	}
 	for _, raw := range mapData.Properties {
@@ -207,8 +207,13 @@ func findLayer(layers []tmjLayer, name string) *tmjLayer {
 }
 
 // parsePortal 解析一个传送门：点对象，属性 to 是目标场景，r 是半径（默认 DefaultPortalRadius）。
+// 坐标和半径向下取整成整数像素。
 func parsePortal(obj tmjObject) (Portal, error) {
-	portal := Portal{Name: obj.Name, X: obj.X, Y: obj.Y, Radius: DefaultPortalRadius}
+	portal := Portal{Name: obj.Name, Radius: DefaultPortalRadius}
+	if math.IsNaN(obj.X) || math.IsNaN(obj.Y) || math.IsInf(obj.X, 0) || math.IsInf(obj.Y, 0) {
+		return portal, errors.New("portal needs a finite position")
+	}
+	portal.X, portal.Y = int(math.Floor(obj.X)), int(math.Floor(obj.Y))
 	if !obj.Point {
 		return portal, errors.New("portal must be a point")
 	}
@@ -218,7 +223,12 @@ func parsePortal(obj tmjObject) (Portal, error) {
 		case "to":
 			err = json.Unmarshal(raw.Value, &portal.To)
 		case "r":
-			err = json.Unmarshal(raw.Value, &portal.Radius)
+			var radius float64
+			err = json.Unmarshal(raw.Value, &radius)
+			if math.IsNaN(radius) || math.IsInf(radius, 0) {
+				radius = 0
+			}
+			portal.Radius = int(math.Floor(radius))
 		}
 		if err != nil {
 			return portal, fmt.Errorf("property %s: %w", raw.Name, err)
@@ -227,9 +237,8 @@ func parsePortal(obj tmjObject) (Portal, error) {
 	if portal.To == "" {
 		return portal, errors.New("portal needs a to property (the scene it leads to)")
 	}
-	if !(portal.Radius > 0) || math.IsInf(portal.Radius, 0) ||
-		math.IsNaN(portal.X) || math.IsNaN(portal.Y) {
-		return portal, errors.New("portal needs a positive radius and a finite position")
+	if portal.Radius <= 0 {
+		return portal, errors.New("portal needs a positive radius")
 	}
 	if portal.Name == "" {
 		portal.Name = "to_" + portal.To

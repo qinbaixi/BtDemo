@@ -1,7 +1,12 @@
 // 特效实验页（地址后面加 ?fxlab）：不连服务器，摆几个假角色，按按钮播放命中、暴击、格挡、
-// 击杀、技能等效果，拖滑条实时调打击感参数（config.ts 的 FEEL）和后期处理。
+// 击杀、技能等效果，拖滑条实时调打击感参数（feel/profiles.ts 的档位表、config.ts 的 FEEL）和后期处理，
+// 试听所有音效（audio/recipes.ts）。
 // 改特效时用它看效果、出预览，不用每次进游戏找怪打。
 
+import { getVolume, play, setVolume } from './audio/engine';
+import { MATERIALS, RECIPES, TIERS, WEAPONS } from './audio/recipes';
+import { CLEAR, PROFILES, type Profile, type ProfileName } from './feel/profiles';
+import { gameNow, setTimeScale, slowMotion, stepFrame, timeScale } from './game/clock';
 import { FEEL, LOOK_FIRE, LOOK_FROST, LOOK_HASTE, LOOK_HOLY, ZONE_ASPECT } from './game/config';
 import { onEvent } from './game/events';
 import { makeEntity, posOf, state, type ClientEntity, type ClientZone } from './game/state';
@@ -31,7 +36,7 @@ const lookUntil = new Map<number, Map<number, number>>();
 function addLook(id: number, look: number, seconds: number): void {
   let looks = lookUntil.get(id);
   if (!looks) lookUntil.set(id, (looks = new Map()));
-  looks.set(look, performance.now() + seconds * 1000);
+  looks.set(look, gameNow() + seconds * 1000);
 }
 
 export async function startFxLab(): Promise<void> {
@@ -49,7 +54,7 @@ export async function startFxLab(): Promise<void> {
   const at = map?.zones[zone]?.[0] ?? map?.zones.graveyard?.[0];
   center = at ? { x: at.x - 60, y: at.y + 40 } : { x: state.map.w / 2, y: state.map.h / 2 };
 
-  const now = performance.now();
+  const now = gameNow();
   state.myId = ME;
   // ?fxlab&ranger 一开始就是游侠
   const ranger = new URLSearchParams(location.search).has('ranger');
@@ -71,7 +76,7 @@ export async function startFxLab(): Promise<void> {
   let last = 0;
   const loop = () => {
     requestAnimationFrame(loop);
-    const t = performance.now();
+    const t = gameNow();
     if (t - last >= 100) { last = t; tick(); }
   };
   requestAnimationFrame(loop);
@@ -80,7 +85,7 @@ export async function startFxLab(): Promise<void> {
 // tick 模拟服务端 10Hz 同步：绕圈走、自动连打、尸体复活。
 let tickN = 0;
 function tick(): void {
-  const now = performance.now();
+  const now = gameNow();
   tickN++;
   const me = state.ents.get(ME)!;
   if (walking) {
@@ -103,7 +108,7 @@ let nextZoneId = 1;
 
 function addZone(zone: Omit<ClientZone, 'id' | 'goneAt' | 'seed' | 'pulseFrom'>): void {
   // 同一个人只能有一个法阵：旧的淡出
-  for (const old of state.zones) if (zone.owner && old.owner === zone.owner && !old.goneAt) old.goneAt = performance.now();
+  for (const old of state.zones) if (zone.owner && old.owner === zone.owner && !old.goneAt) old.goneAt = gameNow();
   state.zones.push({ ...zone, id: nextZoneId++, goneAt: 0, pulseFrom: zone.born, seed: Math.random() * 100 });
 }
 
@@ -141,7 +146,7 @@ function target(): ClientEntity | undefined {
 }
 
 function emit(ev: GameEvent): void {
-  onEvent(ev, performance.now());
+  onEvent(ev, gameNow());
 }
 
 function damage(e: ClientEntity, v: number): void {
@@ -153,10 +158,133 @@ function hit(crit: boolean, heavy = false): void {
   const t = target();
   if (!t) return;
   const v = Math.round((crit ? 90 : 30) * (0.85 + Math.random() * 0.3));
-  emit({ k: 'cast', src: ME, dst: t.id, fx: 'melee', skill: heavy ? 'heavy_strike' : 'slash', color: '#ffd166' });
-  emit({ k: 'dmg', src: ME, dst: t.id, v, crit });
+  emit({ k: 'cast', src: ME, dst: t.id, fx: 'melee', skill: heavy ? 'smash' : 'slash', color: '#ffd166' });
+  emit({ k: 'dmg', src: ME, dst: t.id, v, skill: heavy ? 'smash' : 'slash', crit });
   damage(t, v);
   if (t.hp <= 0) kill(t);
+}
+
+// later 让 fn 在 ms 毫秒后跑（走主循环的 state.pending，录预览换掉时钟时也对得上）。
+function later(ms: number, fn: () => void): void {
+  state.pending.push({ at: gameNow() + ms, fn });
+}
+
+// knockAway 算 victim 被 from 打中后、推开 distance 像素的落点（服务端用 nav.Reach，这里是空地）。
+function knockAway(victim: ClientEntity, from: ClientEntity, distance: number): { kx: number; ky: number } {
+  const now = gameNow();
+  const vp = posOf(victim, now);
+  const fp = posOf(from, now);
+  const len = Math.hypot(vp.x - fp.x, vp.y - fp.y) || 1;
+  return { kx: vp.x + (vp.x - fp.x) / len * distance, ky: vp.y + (vp.y - fp.y) / len * distance };
+}
+
+// ogreSmash 是食人魔首领的重锤：举锤前摇 0.6 秒、地上红圈填满，砸中自己把人砸退并硬直（blocked：举盾挡住，只退一点）。
+function ogreSmash(blocked: boolean): void {
+  const ogre = state.ents.get(3)!;
+  const me = state.ents.get(ME)!;
+  const windup = 600;
+  // 先走到自己身边（够得着重锤的射程）
+  const mp = posOf(me, gameNow());
+  moveTo(ogre, mp.x + 74, mp.y - 6, gameNow());
+  ogre.facing = Math.PI;
+  emit({ k: 'cast', src: ogre.id, dst: ME, fx: 'melee', skill: 'smash', weight: 'heavy', color: '#ff9f43',
+    hitAt: (gameNow() + windup) / 1000 });
+  if (blocked) me.blocking = true;
+  later(windup, () => {
+    const knock = knockAway(me, ogre, blocked ? 50 / 1.2 * 0.3 : 50 / 1.2);
+    emit({ k: 'dmg', src: ogre.id, dst: ME, v: blocked ? 12 : 70, skill: 'smash', weight: 'heavy', blocked: blocked ? 48 : undefined,
+      ...knock, knockTime: 0.18, stun: blocked ? 0 : 0.45 });
+    if (!blocked) damage(me, 70);
+    later(600, () => { me.blocking = false; });
+  });
+}
+
+// guardDemo 是格挡 2.0 的几种结果：parry 在重锤落下前一刻才举盾（完美格挡，食人魔被弹开），
+// guard_break 是架势只剩一点时硬挡（盾被砸开、人被推开），back 是盾朝着反方向、从背后挨了一锤。
+function guardDemo(kind: 'parry' | 'guard_break' | 'back'): void {
+  const ogre = state.ents.get(3)!;
+  const me = state.ents.get(ME)!;
+  const windup = 600;
+  const mp = posOf(me, gameNow());
+  moveTo(ogre, mp.x + 74, mp.y - 6, gameNow());
+  ogre.facing = Math.PI;
+  me.facing = kind === 'back' ? Math.PI : 0;
+  emit({ k: 'cast', src: ogre.id, dst: ME, fx: 'melee', skill: 'smash', weight: 'heavy', color: '#ff9f43',
+    hitAt: (gameNow() + windup) / 1000 });
+  // 完美格挡：命中前 0.1 秒才举盾；其它两种一开始就举着
+  const raiseAt = kind === 'parry' ? windup - 100 : 0;
+  later(raiseAt, () => {
+    me.blocking = true;
+    if (kind === 'guard_break') { me.guard = 0.25; me.guardAt = gameNow(); }
+  });
+  later(windup, () => {
+    const now = gameNow();
+    if (kind === 'parry') {
+      const knock = knockAway(ogre, me, 18 / 2.5);
+      emit({ k: 'dmg', src: ogre.id, dst: ME, v: 0, skill: 'smash', weight: 'heavy', blocked: 60, result: 'parry',
+        ...knock, knockTime: 0.18, stun: 0.6 });
+    } else if (kind === 'guard_break') {
+      const knock = knockAway(me, ogre, 30 / 1.2);
+      me.guard = 0; me.guardAt = now;
+      emit({ k: 'dmg', src: ogre.id, dst: ME, v: 12, skill: 'smash', weight: 'heavy', blocked: 48, result: 'guard_break',
+        ...knock, knockTime: 0.18, stun: 0.8 });
+      damage(me, 12);
+      // 架势过一会儿开始回
+      for (let i = 1; i <= 20; i++) later(1000 + i * 125, () => { me.guard = i / 20; me.guardAt = gameNow(); });
+    } else {
+      // 盾还举着，但朝着另一边：照样挨了整整一锤
+      const knock = knockAway(me, ogre, 50 / 1.2);
+      emit({ k: 'dmg', src: ogre.id, dst: ME, v: 70, skill: 'smash', weight: 'heavy', ...knock, knockTime: 0.18, stun: 0.45 });
+      damage(me, 70);
+    }
+    later(700, () => { me.blocking = false; });
+  });
+}
+
+// heavySweep 是自己的旋风斩：重击，按每只怪的重量把它们推开，食人魔首领韧性高推不动。
+function heavySweep(): void {
+  const me = state.ents.get(ME)!;
+  const p = posOf(me, gameNow());
+  emit({ k: 'cast', src: ME, fx: 'circle', skill: 'whirlwind', name: '旋风斩', weight: 'heavy', color: '#e0e0e0', radius: 130, x: p.x, y: p.y });
+  later(80, () => {
+    for (const e of state.ents.values()) {
+      if (e.id === ME || e.dead || e.kind === 'pet') continue;
+      const mass = e.model === 'slime' || e.model === 'skeleton_archer' ? 0.8 : 1;
+      const armored = e.model === 'ogre_chief';
+      const knock = armored ? {} : { ...knockAway(e, me, 50 / mass), knockTime: 0.18, stun: 0.45 };
+      emit({ k: 'dmg', src: ME, dst: e.id, v: 45, skill: 'whirlwind', weight: 'heavy', ...knock });
+      damage(e, 45);
+      if (e.hp <= 0) kill(e);
+    }
+  });
+}
+
+// groundMarksDemo 一次打出四种地面印记：重锤砸狼（裂纹）、火球烧食人魔（焦痕）、冰霜打骷髅（霜）、
+// 重击把史莱姆推出去（拖痕）。
+function groundMarksDemo(): void {
+  const me = state.ents.get(ME)!;
+  emit({ k: 'cast', src: ME, dst: 2, fx: 'melee', skill: 'smash', weight: 'heavy', color: '#ffd166' });
+  later(120, () => emit({ k: 'dmg', src: ME, dst: 2, v: 30, skill: 'smash', weight: 'heavy' }));
+  emit({ k: 'cast', src: ME, dst: 3, fx: 'projectile', skill: 'fireball', name: '火球术', color: '#ff7b39' });
+  later(300, () => emit({ k: 'dmg', src: ME, dst: 3, v: 30, skill: 'fireball' }));
+  later(200, () => emit({ k: 'dmg', src: ME, dst: 4, v: 30, skill: 'frost_nova' }));
+  const slime = state.ents.get(5)!;
+  later(260, () => emit({ k: 'dmg', src: ME, dst: 5, v: 20, skill: 'whirlwind', weight: 'heavy', ...knockAway(slime, me, 60), knockTime: 0.2, stun: 0.3 }));
+}
+
+// interruptWolf 是灰狼扑上来前摇 0.5 秒，自己抢先一刀把它砍出硬直，这一口就没咬下来。
+function interruptWolf(): void {
+  const wolf = state.ents.get(2)!;
+  emit({ k: 'cast', src: wolf.id, dst: ME, fx: 'melee', skill: 'heavy_bite', weight: 'heavy', color: '#ffef5c',
+    hitAt: (gameNow() + 500) / 1000 });
+  later(220, () => {
+    emit({ k: 'cast', src: ME, dst: wolf.id, fx: 'melee', skill: 'slash', weight: 'light', color: '#ffd166' });
+    later(130, () => {
+      emit({ k: 'dmg', src: ME, dst: wolf.id, v: 30, skill: 'slash', weight: 'light', ...knockAway(wolf, state.ents.get(ME)!, 10), knockTime: 0.18, stun: 0.15 });
+      damage(wolf, 30);
+      emit({ k: 'interrupt', id: wolf.id });
+    });
+  });
 }
 
 function kill(e: ClientEntity): void {
@@ -176,15 +304,24 @@ const ACTIONS: [string, () => void][] = [
   ['普攻', () => hit(false)],
   ['暴击', () => hit(true)],
   ['重击', () => hit(true, true)],
-  ['击杀', () => { const t = target(); if (t) { emit({ k: 'cast', src: ME, dst: t.id, fx: 'melee', skill: 'heavy', color: '#ffd166' }); emit({ k: 'dmg', src: ME, dst: t.id, v: t.hp, crit: true }); damage(t, t.hp); kill(t); } }],
+  ['击杀', () => { const t = target(); if (t) { emit({ k: 'cast', src: ME, dst: t.id, fx: 'melee', skill: 'smash', color: '#ffd166' }); emit({ k: 'dmg', src: ME, dst: t.id, v: t.hp, skill: 'smash', crit: true }); damage(t, t.hp); kill(t); } }],
   ['旋风斩', () => {
-    const me = posOf(state.ents.get(ME)!, performance.now());
+    const me = posOf(state.ents.get(ME)!, gameNow());
     emit({ k: 'cast', src: ME, fx: 'circle', skill: 'whirlwind', name: '旋风斩', color: '#ff9a3c', radius: 130, x: me.x, y: me.y });
     for (const e of state.ents.values()) if (e.id !== ME && !e.dead) { const v = 45; emit({ k: 'dmg', src: ME, dst: e.id, v, crit: Math.random() < 0.3 }); damage(e, v); if (e.hp <= 0) kill(e); }
   }],
-  ['被打', () => { const t = target(); const me = state.ents.get(ME)!; if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'bite', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 40, crit: Math.random() < 0.3 }); damage(me, 40); }],
-  ['格挡', () => { const t = target(); if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'smash', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 8, blocked: 32 }); }],
-  ['箭矢', () => { emit({ k: 'cast', src: 4, dst: ME, fx: 'projectile', skill: 'arrow_shot', color: '#cfe8ff' }); emit({ k: 'dmg', src: 4, dst: ME, v: 22 }); damage(state.ents.get(ME)!, 22); }],
+  ['被打', () => { const t = target(); const me = state.ents.get(ME)!; if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'bite', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 40, skill: 'bite', crit: Math.random() < 0.3 }); damage(me, 40); }],
+  ['被重锤', () => { const me = state.ents.get(ME)!; emit({ k: 'cast', src: 3, dst: ME, fx: 'melee', skill: 'smash', color: '#ff9f43' }); emit({ k: 'dmg', src: 3, dst: ME, v: 70, skill: 'smash' }); damage(me, 70); }],
+  ['怪物重锤', () => ogreSmash(false)],
+  ['重锤被格挡', () => ogreSmash(true)],
+  ['完美格挡', () => guardDemo('parry')],
+  ['破防', () => guardDemo('guard_break')],
+  ['背后挨锤', () => guardDemo('back')],
+  ['重击击退', () => heavySweep()],
+  ['打断前摇', () => interruptWolf()],
+  ['地面印记', () => groundMarksDemo()],
+  ['格挡', () => { const t = target(); if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'smash', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 8, skill: 'smash', blocked: 32 }); }],
+  ['箭矢', () => { emit({ k: 'cast', src: 4, dst: ME, fx: 'projectile', skill: 'arrow', color: '#cfe8ff' }); emit({ k: 'dmg', src: 4, dst: ME, v: 22, skill: 'arrow' }); damage(state.ents.get(ME)!, 22); }],
   ['治疗', () => { const me = state.ents.get(ME)!; emit({ k: 'cast', src: ME, fx: 'heal', skill: 'heal', name: '治疗', color: '#7cff9b' }); emit({ k: 'heal', dst: ME, v: 120 }); me.hp = Math.min(me.maxHp, me.hp + 120); }],
   ['护盾', () => emit({ k: 'cast', src: ME, fx: 'shield', skill: 'shield', name: '圣盾', color: '#7fd8ff' })],
   ['火球术', () => {
@@ -202,7 +339,7 @@ const ACTIONS: [string, () => void][] = [
   ['免疫', () => { const t = target(); if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'bite', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 0, immune: true }); }],
   ['闪现', () => {
     const me = state.ents.get(ME)!;
-    const from = posOf(me, performance.now());
+    const from = posOf(me, gameNow());
     const dir = Math.cos(me.facing) < 0 ? -1 : 1;
     // 闪出去再闪回来，来回都看得到
     const to = { x: from.x + dir * 170, y: from.y };
@@ -212,9 +349,9 @@ const ACTIONS: [string, () => void][] = [
   ['烈焰附魔', () => { emit({ k: 'cast', src: ME, fx: 'enchant', skill: 'enchant', name: '烈焰附魔', color: '#ff8a3a' }); addLook(ME, LOOK_FIRE, 8); }],
   ['飞斧', () => {
     const victim = target();
-    const from = posOf(state.ents.get(ME)!, performance.now());
+    const from = posOf(state.ents.get(ME)!, gameNow());
     if (!victim) return;
-    const to = posOf(victim, performance.now());
+    const to = posOf(victim, gameNow());
     const dist = Math.hypot(to.x - from.x, to.y - from.y) || 1;
     const stop = Math.max(0, dist - (victim.r || 14));
     emit({ k: 'cast', src: ME, dst: victim.id, fx: 'axe', skill: 'axe', name: '飞斧', color: '#d8dde6',
@@ -224,7 +361,7 @@ const ACTIONS: [string, () => void][] = [
     if (victim.hp <= 0) kill(victim);
   }],
   ['冰霜新星', () => {
-    const me = posOf(state.ents.get(ME)!, performance.now());
+    const me = posOf(state.ents.get(ME)!, gameNow());
     emit({ k: 'cast', src: ME, fx: 'frost', skill: 'frost_nova', name: '冰霜新星', color: '#8fd8ff', radius: 130, x: me.x, y: me.y });
     for (const e of state.ents.values()) {
       if (e.id === ME || e.dead) continue;
@@ -235,15 +372,15 @@ const ACTIONS: [string, () => void][] = [
   }],
   ['治愈之泉', () => {
     const me = state.ents.get(ME)!;
-    const p = posOf(me, performance.now());
+    const p = posOf(me, gameNow());
     emit({ k: 'cast', src: ME, fx: 'zone', skill: 'healing_spring', name: '治愈之泉', color: '#7dffb0', radius: 110, x: p.x, y: p.y });
-    const now = performance.now();
+    const now = gameNow();
     addZone({ x: p.x, y: p.y, radius: 110, name: '治愈之泉', color: '#7dffb0', look: 'rune', owner: ME,
       dur: 60, interval: 1, heal: 0.03, born: now + leadOf('zone'), endsAt: now + leadOf('zone') + 60000 });
     me.hp = Math.min(me.hp, me.maxHp * 0.5);   // 先掉点血，看得到回血
   }],
   ['生命之泉', () => {
-    const now = performance.now();
+    const now = gameNow();
     const old = state.zones.find((zone) => zone.look === 'spring' && !zone.goneAt);
     if (old) { old.goneAt = now; return; }
     // 放在广场中间（村子里正好是游戏里出生点的位置）
@@ -285,13 +422,13 @@ ACTIONS.push(
   ['穿云箭', asRanger(() => {
     // 朝目标方向射穿到 380 外，沿线的敌人按远近挨个挨打
     const me = state.ents.get(ME)!;
-    const from = posOf(me, performance.now());
+    const from = posOf(me, gameNow());
     const t = target();
-    const dir = t ? Math.atan2(posOf(t, performance.now()).y - from.y, posOf(t, performance.now()).x - from.x) : (Math.cos(me.facing) < 0 ? Math.PI : 0);
+    const dir = t ? Math.atan2(posOf(t, gameNow()).y - from.y, posOf(t, gameNow()).x - from.x) : (Math.cos(me.facing) < 0 ? Math.PI : 0);
     const range = 380 + 16;
     const hits = [...state.ents.values()].filter((e) => {
       if (e.id === ME || e.dead) return false;
-      const p = posOf(e, performance.now());
+      const p = posOf(e, gameNow());
       const along = (p.x - from.x) * Math.cos(dir) + (p.y - from.y) * Math.sin(dir);
       const across = Math.abs(-(p.x - from.x) * Math.sin(dir) + (p.y - from.y) * Math.cos(dir));
       return along > 0 && along < range && across < (e.r || 14) + 10;
@@ -303,9 +440,9 @@ ACTIONS.push(
   ['箭雨', asRanger(() => {
     const t = target();
     const me = state.ents.get(ME)!;
-    const from = posOf(me, performance.now());
+    const from = posOf(me, gameNow());
     const dir = Math.cos(me.facing) < 0 ? -1 : 1;
-    const c = t ? posOf(t, performance.now()) : { x: from.x + dir * 180, y: from.y };
+    const c = t ? posOf(t, gameNow()) : { x: from.x + dir * 180, y: from.y };
     emit({ k: 'cast', src: ME, dst: t?.id, fx: 'rain', skill: 'arrow_rain', name: '箭雨', color: '#cfe6ff', radius: 90, x: c.x, y: c.y });
     for (const e of state.ents.values()) {
       if (e.id === ME || e.dead || Math.hypot(e.x - c.x, e.y - c.y) > 90 + (e.r || 14)) continue;
@@ -317,7 +454,7 @@ ACTIONS.push(
   ['冰霜箭', asRanger(() => shoot('frostarrow', 'frost_arrow', '冰霜箭', '#8fd8ff', 30))],
   ['翻滚', asRanger(() => {
     const me = state.ents.get(ME)!;
-    const from = posOf(me, performance.now());
+    const from = posOf(me, gameNow());
     const dir = Math.cos(me.facing) < 0 ? -1 : 1;
     emit({ k: 'cast', src: ME, fx: 'roll', skill: 'roll', name: '翻滚', color: '#c8f0c0', x: from.x, y: from.y, tx: from.x + dir * 130, ty: from.y });
     // 滚完转回来，下一次往回滚
@@ -393,7 +530,7 @@ const LAB_PETS: Record<string, { name: string; color: string; r: number; attack:
 };
 
 function summonPet(model: string): void {
-  const now = performance.now();
+  const now = gameNow();
   const me = state.ents.get(ME)!;
   const from = posOf(me, now);
   const cfg = LAB_PETS[model];
@@ -423,8 +560,8 @@ ACTIONS.push(
     const cfg = LAB_PETS[pet.model];
     // 小狼先扑到目标身边再咬
     if (cfg.attack === 'melee') {
-      const p = posOf(t, performance.now());
-      moveTo(pet, p.x - 34, p.y + 4, performance.now());
+      const p = posOf(t, gameNow());
+      moveTo(pet, p.x - 34, p.y + 4, gameNow());
     }
     const color = pet.model === 'sprout' ? '#8fe08f' : pet.model === 'ember' ? '#ff7b39' : '#e8c9a0';
     emit({ k: 'cast', src: PET, dst: t.id, fx: cfg.attack, color });
@@ -446,7 +583,7 @@ ACTIONS.push(
   ['宠物传送', () => {
     const pet = petOf();
     if (!pet) return;
-    const now = performance.now();
+    const now = gameNow();
     const from = posOf(pet, now);
     const me = posOf(state.ents.get(ME)!, now);
     const away = from.x < me.x ? 1 : -1;
@@ -456,18 +593,43 @@ ACTIONS.push(
 
 // 滑条：[标签, FEEL 字段, 最小, 最大, 步长]
 const SLIDERS: [string, keyof typeof FEEL, number, number, number][] = [
-  ['顿帧 ms', 'hitStopMs', 0, 200, 5],
-  ['暴击顿帧 ms', 'hitStopCritMs', 0, 300, 5],
   ['镜头跟随 ms', 'camFollowMs', 0, 400, 10],
   ['镜头前瞻 px', 'camLead', 0, 160, 5],
   ['震屏倍数', 'shake', 0, 3, 0.1],
-  ['暴击缩放', 'zoomPunch', 0, 0.1, 0.005],
-  ['击退 px', 'knockPx', 0, 20, 1],
-  ['受击形变', 'squash', 0, 0.5, 0.02],
   ['溶解延迟 ms', 'dissolveDelayMs', 0, 4000, 100],
   ['溶解时长 ms', 'dissolveMs', 200, 3000, 100],
   ['扭曲倍数', 'distort', 0, 5, 0.1],
 ];
+
+// timeControls 是演出时钟的控制：正常、0.25 倍慢放、暂停，暂停时单帧步进（看各通道是不是对齐在命中那一刻）。
+function timeControls(): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'fxlab-buttons';
+  const speeds: [string, number][] = [['1×', 1], ['0.25×', 0.25], ['暂停', 0]];
+  const buttons: HTMLButtonElement[] = [];
+  for (const [label, speed] of speeds) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.className = 'toggle' + (speed === timeScale() ? ' on' : '');
+    b.onclick = () => {
+      setTimeScale(speed);
+      for (const other of buttons) other.classList.toggle('on', other === b);
+    };
+    buttons.push(b);
+    row.appendChild(b);
+  }
+  const step = document.createElement('button');
+  step.textContent = '单帧 ▸';
+  step.title = '暂停时往前走一帧（1/60 秒）';
+  step.onclick = () => stepFrame();
+  row.appendChild(step);
+  const clear = document.createElement('button');
+  clear.textContent = '清场慢放';
+  clear.title = '直接放一次清场的全局慢放';
+  clear.onclick = () => slowMotion(CLEAR.scale, CLEAR.slowMs);
+  row.appendChild(clear);
+  return row;
+}
 
 function buildPanel(): void {
   const panel = document.createElement('div');
@@ -494,11 +656,14 @@ function buildPanel(): void {
     buttons.appendChild(b);
   }
   panel.appendChild(buttons);
+  panel.appendChild(timeControls());
   for (const [label, key, min, max, step] of SLIDERS) {
     panel.appendChild(slider(label, min, max, step, FEEL[key], (v) => { FEEL[key] = v; }));
   }
   panel.appendChild(slider('泛光强度', 0, 2, 0.05, 0.8, (v) => setPostOptions({ bloom: v })));
   panel.appendChild(slider('泛光阈值', 0.3, 1, 0.02, 0.68, (v) => setPostOptions({ threshold: v })));
+  panel.appendChild(profileEditor());
+  panel.appendChild(soundPanel());
   document.body.appendChild(panel);
 
   const style = document.createElement('style');
@@ -513,7 +678,11 @@ function buildPanel(): void {
 #fxlab button.toggle.on { background: #5a3d12; border-color: #e8b65a; }
 #fxlab label { display: grid; grid-template-columns: 82px 1fr 40px; align-items: center; gap: 4px; }
 #fxlab input[type=range] { width: 100%; }
-#fxlab .v { text-align: right; color: #c9b88f; font-variant-numeric: tabular-nums; }`;
+#fxlab .v { text-align: right; color: #c9b88f; font-variant-numeric: tabular-nums; }
+#fxlab { max-height: calc(100vh - 80px); overflow-y: auto; }
+#fxlab .fxlab-sub { color: #e8b65a; margin: 8px 0 4px; }
+#fxlab select { background: #1d1424; color: #f3e9d2; border: 1px solid #5a4630; font: inherit; }
+#fxlab textarea { width: 100%; height: 90px; background: #1d1424; color: #f3e9d2; border: 1px solid #5a4630; font: 11px monospace; }`;
   document.head.appendChild(style);
 }
 
@@ -533,4 +702,81 @@ function slider(label: string, min: number, max: number, step: number, value: nu
   input.oninput = () => { const v = Number(input.value); set(v); out.textContent = String(v); };
   row.append(name, input, out);
   return row;
+}
+
+// 档位滑条：[标签, Profile 字段, 最小, 最大, 步长]
+const PROFILE_SLIDERS: [string, keyof Profile, number, number, number][] = [
+  ['顿帧 ms', 'hitStopMs', 0, 250, 5],
+  ['击退 px', 'knockPx', 0, 40, 1],
+  ['受击形变', 'squash', 0, 0.6, 0.02],
+  ['打中镜头', 'kickOut', 0, 15, 0.5],
+  ['挨打镜头', 'kickIn', 0, 15, 0.5],
+  ['震屏 px', 'shake', 0, 10, 0.5],
+  ['手柄震动', 'rumble', 0, 1, 0.05],
+  ['压环境声', 'duck', 0, 1, 0.05],
+];
+const PROFILE_LABELS: [ProfileName, string][] = [['light', '轻'], ['medium', '中'], ['heavy', '重'], ['block', '格挡'], ['parry', '完美格挡'], ['guard_break', '破防'], ['immune', '免疫']];
+
+// profileEditor 是档位表编辑器：选一档，拖滑条改这一档的参数，导出整张表的 JSON 粘回 feel/profiles.ts。
+function profileEditor(): HTMLElement {
+  const box = document.createElement('div');
+  box.innerHTML = '<div class="fxlab-sub">命中档位（普攻=轻，飞斧=中，重击/被重锤=重）</div>';
+  const tabs = document.createElement('div');
+  tabs.className = 'fxlab-buttons';
+  const rows = document.createElement('div');
+  const show = (name: ProfileName) => {
+    for (const b of tabs.children) b.classList.toggle('on', (b as HTMLElement).dataset.name === name);
+    rows.replaceChildren(...PROFILE_SLIDERS.map(([label, key, min, max, step]) =>
+      slider(label, min, max, step, PROFILES[name][key], (v) => { PROFILES[name][key] = v; })));
+  };
+  for (const [name, label] of PROFILE_LABELS) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.className = 'toggle';
+    b.dataset.name = name;
+    b.onclick = () => show(name);
+    tabs.appendChild(b);
+  }
+  const output = document.createElement('textarea');
+  output.hidden = true;
+  const exportButton = document.createElement('button');
+  exportButton.textContent = '导出档位表';
+  exportButton.onclick = () => {
+    output.hidden = false;
+    output.value = JSON.stringify(PROFILES, null, 1);
+    output.select();
+  };
+  box.append(tabs, rows, exportButton, output);
+  show('light');
+  return box;
+}
+
+// soundPanel 是音效试听：音量、按名字播放任意配方、命中声的武器 × 材质 × 档位组合。
+function soundPanel(): HTMLElement {
+  const box = document.createElement('div');
+  box.innerHTML = '<div class="fxlab-sub">音效（M 静音）</div>';
+  box.appendChild(slider('音量', 0, 1, 0.05, getVolume(), setVolume));
+  const options = (list: readonly string[]) => list.map((v) => `<option>${v}</option>`).join('');
+  const matrix = document.createElement('div');
+  matrix.className = 'fxlab-buttons';
+  matrix.innerHTML = `<select id="sfx-weapon">${options(WEAPONS)}</select><select id="sfx-material">${options(MATERIALS)}</select>`
+    + `<select id="sfx-tier">${options(TIERS)}</select>`;
+  const playHit = document.createElement('button');
+  playHit.textContent = '命中';
+  playHit.onclick = () => {
+    const value = (id: string) => (matrix.querySelector(`#${id}`) as HTMLSelectElement).value;
+    play(`hit.${value('sfx-weapon')}.${value('sfx-material')}.${value('sfx-tier')}`);
+  };
+  matrix.appendChild(playHit);
+  box.appendChild(matrix);
+  const others = document.createElement('div');
+  others.className = 'fxlab-buttons';
+  for (const name of Object.keys(RECIPES).filter((n) => !n.startsWith('hit.') || n === 'hit.crit')) {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.onclick = () => play(name);
+    others.appendChild(b);
+  }
+  box.appendChild(others);
+  return box;
 }

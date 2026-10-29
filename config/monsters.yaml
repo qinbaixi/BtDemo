@@ -1,7 +1,12 @@
 # 怪物 / NPC 模板
+# 数值单位（全部是整数，没有小数）：时间是毫秒（1000 = 1 秒），比例 / 概率 / 倍率是万分比（10000 = 100%），
+# 距离、半径是像素，速度是像素 / 秒。服务器算出小数时一律向下取整。
+#   respawn: 死后多少毫秒复活；speed: 像素 / 秒
 #   tree:   使用的行为树，对应 bt/trees/<tree>.json 导出的 Go 文件（internal/ai/trees/<tree>.go）
 #   skills: 技能槽，行为树里 CastSkill 的 Slot 从 1 开始对应这里的顺序
 #   faction: 阵营，敌对关系见 world.yaml 的 hostile
+#   poise:  韧性，挨打时按技能的分量被打掉，打空了才会被击退和硬直（0 = 每下都会）；2 秒没挨打回满
+#   mass:   重量（万分比，默认 10000 = 1 倍），击退距离 × 10000 / mass
 templates:
   slime:
     name: 史莱姆
@@ -14,8 +19,10 @@ templates:
     radius: 14
     color: "#6ccf6c"
     skills: [bite, heavy_bite]
-    respawn: 5
+    respawn: 5000
     exp: 25
+    poise: 0
+    mass: 8000
   wolf:
     name: 灰狼
     kind: monster
@@ -27,8 +34,10 @@ templates:
     radius: 15
     color: "#9a9a9a"
     skills: [bite, heavy_bite]
-    respawn: 6
+    respawn: 6000
     exp: 45
+    poise: 10
+    mass: 10000
   skeleton_archer:
     name: 骷髅弓手
     kind: monster
@@ -40,8 +49,10 @@ templates:
     radius: 14
     color: "#e8e3d0"
     skills: [arrow]
-    respawn: 7
+    respawn: 7000
     exp: 55
+    poise: 0
+    mass: 8000
   ogre_chief:
     name: 食人魔首领
     kind: monster
@@ -53,8 +64,10 @@ templates:
     radius: 26
     color: "#c0392b"
     skills: [smash, boss_whirl, enrage]
-    respawn: 20
+    respawn: 20000
     exp: 300
+    poise: 120
+    mass: 25000
   guard:
     name: 村庄守卫
     kind: npc
@@ -66,8 +79,10 @@ templates:
     radius: 16
     color: "#3b82f6"
     skills: [guard_hit, guard_heal]
-    respawn: 10
+    respawn: 10000
     exp: 0
+    poise: 40
+    mass: 14000
   villager:
     name: 村民
     kind: npc
@@ -79,5 +94,7 @@ templates:
     radius: 13
     color: "#f4c27a"
     skills: []
-    respawn: 8
+    respawn: 8000
     exp: 5
+    poise: 0
+    mass: 10000

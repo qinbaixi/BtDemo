@@ -3,8 +3,7 @@
 package zone
 
 import (
-	"math"
-
+	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/game/aoi"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/pb"
@@ -21,8 +20,8 @@ func New(state *core.State, grid *aoi.Grid) *System {
 	for _, cfg := range state.Cfg.World.HealZones {
 		state.Zones.Add(&core.Zone{
 			Cfg:       cfg,
-			X:         cfg.X,
-			Y:         cfg.Y,
+			X:         float64(cfg.X),
+			Y:         float64(cfg.Y),
 			Faction:   cfg.Faction,
 			NextPulse: state.Now() + cfg.Interval,
 		})
@@ -35,7 +34,7 @@ func (sys *System) Tick() {
 	now := sys.state.Now()
 	sys.state.Zones.Filter(func(zone *core.Zone) bool { return zone.Until == 0 || zone.Until > now })
 	for _, zone := range sys.state.Zones.List() {
-		if now >= zone.NextPulse-1e-9 { // 时钟是累加的浮点数，留一点余量免得晚一个 tick
+		if now >= zone.NextPulse {
 			zone.NextPulse += zone.Cfg.Interval
 			sys.pulse(zone)
 		}
@@ -45,7 +44,7 @@ func (sys *System) Tick() {
 // pulse 给站在 zone 里（地上画的椭圆）、没满血的友方回一次血。
 func (sys *System) pulse(zone *core.Zone) {
 	var targets []*core.Entity
-	sys.grid.InRange(zone.X, zone.Y, zone.Cfg.Radius, func(entity *core.Entity) {
+	sys.grid.InRange(zone.X, zone.Y, float64(zone.Cfg.Radius), func(entity *core.Entity) {
 		if entity.Alive() && sys.Friendly(zone, entity) && entity.HP < entity.Attr.MaxHP &&
 			zone.Cfg.Contains(zone.X, zone.Y, entity.X, entity.Y) {
 			targets = append(targets, entity)
@@ -53,14 +52,15 @@ func (sys *System) pulse(zone *core.Zone) {
 	})
 	for _, entity := range targets {
 		before := entity.HP
-		entity.SetHP(math.Min(entity.Attr.MaxHP, entity.HP+math.Round(entity.Attr.MaxHP*zone.Cfg.Heal)))
-		amount := math.Round(entity.HP - before) // 报实际回了多少（快满血时比 heal 少）
+		heal := config.ScaleBasisPoints(entity.Attr.MaxHP, zone.Cfg.Heal)
+		entity.SetHP(min(entity.Attr.MaxHP, entity.HP+heal))
+		amount := entity.HP - before // 报实际回了多少（快满血时比 heal 少）
 		sys.state.Events.Emit(
 			entity,
 			&core.Event{
 				Kind:  pb.EventKind_HEAL.Enum(),
 				Dst:   core.I32(entity.ID),
-				Value: core.F32(amount),
+				Value: core.I32(amount),
 				Zone:  core.I32(zone.ID),
 			},
 		)

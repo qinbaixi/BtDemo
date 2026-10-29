@@ -137,6 +137,18 @@
 - 每个技能的主色在 `config/skills.yaml` 的 `color`，特效要跟这个颜色走。
 - 刀光是短促的弧形拖尾，存在时间约 0.1～0.2 秒。
 
+### 命中序列帧（可以替换）
+
+每次命中，受击点会按受击者的材质播一遍小动画（`render/flipbook.ts`）：`metal`（金属火星，打在盔甲和盾上）、`bone`（骨渣）、`flesh`（血点和血雾）、`beast`（血点和兽毛）、`goo`（黏液）、`wood`（木屑和碎叶）。
+
+- 一张横条图，每格 96×96 像素，7 帧左右，按 0.26 秒播完（帧数可以不同，播放时长不变）。
+- 帧中心就是命中点，**命中方向朝右**（播放时按受击方向翻转）；ppu 2，轻击按原大，中击 1.25 倍，重击 1.6 倍。
+- 最后一帧要淡到几乎透明，程序不会再额外淡出。
+- 发光的火星用加法混合（`"blend": "add"`），黑底即可；血、骨渣、黏液用普通混合（默认），透明底，带一点深色描边才压得住亮背景。
+- 清单写法：`"fx": { "hit.metal": { "sheet": "fx/hit.metal.png", "frame": [96, 96], "frames": 7, "blend": "add" } }`。
+
+地面印记（裂纹、焦痕、冰霜、拖痕，`render/pixi/decals.ts`）目前只有程序画的版本。
+
 ## 7. 调色（LUT）
 
 整个画面最后会过一次调色：暗部偏冷紫、亮部偏暖金、略提对比和饱和度（`render/grade.ts` 的 `gradeColor`）。美术想统一调整色调时：
@@ -150,7 +162,7 @@
 ### 文件
 
 - PNG，32 位带透明，sRGB，不要预乘透明度。
-- 文件名小写英文和下划线，和清单里的名字一致：`characters/knight.png`、`props/house_0.png`（`_0` 是变体号）、`ground/ground.png`。
+- 文件名小写英文和下划线，和清单里的名字一致：`characters/knight.png`、`props/house_0.png`（`_0` 是变体号）、`ground/ground.png`、`fx/hit.metal.png`。
 - 放在 `web/public/art/` 下面。
 
 ### 清单 `web/public/art/manifest.json`
@@ -179,7 +191,11 @@
     "brazier": { "images": ["props/brazier_0.png"], "anchor": [60, 200], "ppu": 2, "frames": 12, "fps": 12 }
   },
   "ground": "ground/ground.png",
-  "lut": "grade/lut.png"
+  "lut": "grade/lut.png",
+  "fx": {
+    "hit.metal": { "sheet": "fx/hit.metal.png", "frame": [96, 96], "frames": 7, "blend": "add" },
+    "hit.flesh": { "sheet": "fx/hit.flesh.png", "frame": [96, 96], "frames": 7 }
+  }
 }
 ```
 

@@ -1,3 +1,7 @@
+# 数值单位（全部是整数，没有小数）：时间是毫秒（1000 = 1 秒），比例 / 概率 / 倍率是万分比（10000 = 100%），
+# 距离、半径是像素，速度是像素 / 秒。服务器算出小数时一律向下取整。
+# tick_rate 必须能整除 1000（每帧是整数毫秒）。
+
 # 服务监听地址：只写端口（如 8090）或 ":8090" 监听所有网卡，"127.0.0.1:8090" 只允许本机访问。
 # 启动参数 -addr 会覆盖这里的设置。
 addr: ":8090"
@@ -9,7 +13,18 @@ tick_rate: 20        # 世界逻辑帧率（每秒）
 sync_rate: 10        # 状态同步频率（每秒）
 
 session:
-  keep: 30           # 断线后角色保留多少秒：期间原地站着、照样会被打会死，重连能接着玩
+  keep: 30000        # 断线后角色保留多少毫秒：期间原地站着、照样会被打会死，重连能接着玩
+
+# 命中的分量（skills.yaml 的 weight）：击退距离（像素，再除以目标的 mass）、硬直毫秒数、打掉的韧性、被盾挡住时扣掉的架势
+hit:
+  weights:
+    light:  { knock: 10, stun: 150, poise: 10, guard: 12 }
+    medium: { knock: 26, stun: 250, poise: 25, guard: 22 }
+    heavy:  { knock: 50, stun: 450, poise: 45, guard: 40 }
+  knock_time: 180    # 击退位移多少毫秒走完
+  wall_stun: 200     # 被打到撞墙额外硬直（毫秒）
+  poise_reset: 2000  # 多少毫秒没挨打韧性回满
+  reach: 24          # 前摇结束时目标比射程多跑出这么远仍算命中，再远就打空
 
 # 阵营敌对关系：key 会主动攻击 / 可以攻击 value 中的阵营
 hostile:
@@ -22,14 +37,36 @@ hostile:
 player:
   name_prefix: 勇者
   level: 1
-  respawn: 3
-  block: { reduce: 0.8, speed: 0.5 }   # 按住右键格挡（只有 can_block 的职业能格挡）：受到的伤害减少 80%，移动速度减半，不能放技能
+  respawn: 3000      # 死亡后多少毫秒复活
+  # 按住右键格挡（只有 can_block 的职业能格挡）：移动速度减半，不能放技能。
+  #   只挡盾正面 arc 度以内的攻击（选了目标时盾朝着目标），挡住的减伤 reduce（万分比）；移速倍率 speed（万分比）
+  #   架势 guard：挡一下扣 hit.weights 的 guard，扣空就破防（盾被打开，硬直 break_stun 毫秒、被推开 break_knock）
+  #     guard_delay 毫秒没挡到东西开始回：放下盾每秒回 guard_regen，举着盾每秒回 guard_regen_held
+  #   完美格挡：举盾后 parry 毫秒内挡住近战，不掉血、不扣架势，攻击者被弹开 parry_knock、硬直 parry_stun 毫秒
+  #     （远程攻击只能普通格挡；盾放下不到 parry_rearm 毫秒再举起没有完美格挡窗口）
+  # 格挡参数写 0 或不写都表示用默认值（reduce 8000、speed 5000 …），不能配成 0
+  block:
+    reduce: 8000
+    speed: 5000
+    arc: 140
+    guard: 100
+    guard_delay: 1000
+    guard_regen: 40
+    guard_regen_held: 10
+    break_stun: 800
+    break_knock: 30
+    parry: 180
+    parry_rearm: 400
+    parry_stun: 600
+    parry_knock: 18
+  poise: 30                            # 韧性和重量，含义同 monsters.yaml（狼咬三下才会把人咬得一踉跄）
+  mass: 12000                          # 万分比，1.2 倍
   bag: 24                              # 背包格数（装备着的物品不占格子）
   starter: [leather_vest, life_charm]  # 每个新玩家背包里都有的物品（不装备），物品见 items.yaml
   # 职业：第一个是新玩家的默认职业；进游戏和死亡时可以换职业（和挑技能一起，见 Loadout）
   #   skills: 默认技能，第 1 个是固定的普攻（J / 左键），后面是默认选择
   #   skill_pool: 可以挑的技能，挑 len(skills)-1 个放到第 2 格起
-  #   growth: 每升一级增加的基础属性；can_block: 能不能按住右键格挡
+  #   growth: 每升一级增加的基础属性，单位是万分之一点（15000 = 每级 +1.5 点，零头累积到下一级）；can_block: 能不能按住右键格挡
   #   starter: 第一次当这个职业时放进背包的物品（本职业的普通武器）
   #   skins: 外观，第一个是默认；color 是选择面板上的色块。皮肤只换配色和部件画法，骨骼和动作不变
   classes:
@@ -40,7 +77,7 @@ player:
       color: "#4da3ff"
       can_block: true
       attrs: { str: 10, agi: 8, int: 8, vit: 12 }
-      growth: { str: 2, agi: 1.5, int: 1.5, vit: 2 }
+      growth: { str: 20000, agi: 15000, int: 15000, vit: 20000 }
       speed: 170
       radius: 16
       skills: [slash, fireball, whirlwind, heal, warcry, shield]
@@ -57,7 +94,7 @@ player:
       color: "#8fd17a"
       can_block: false
       attrs: { str: 6, agi: 14, int: 8, vit: 9 }
-      growth: { str: 1, agi: 2.4, int: 1.2, vit: 1.6 }
+      growth: { str: 10000, agi: 24000, int: 12000, vit: 16000 }
       speed: 180
       radius: 15
       skills: [shot, pierce_shot, arrow_rain, roll, frost_arrow, focus]
@@ -68,24 +105,24 @@ player:
         - { id: nightshade, name: 夜影猎手, color: "#5b4a7a", desc: 深紫色的夜行斗篷和面罩 }
         - { id: snowfield,  name: 雪原猎人, color: "#dfeaf2", desc: 白色毛皮镶边的雪原猎装 }
 
-# 常驻回血区：站在里面的友方（和 faction 互不敌对的阵营）每隔 interval 秒回复 最大生命 × heal
+# 常驻回血区：站在里面的友方（和 faction 互不敌对的阵营）每隔 interval 毫秒回复 最大生命 × heal（万分比）
 #   look: 客户端画法 spring 泉水 | rune 法阵
 
 # 装备掉落：怪物死亡时按概率给击杀者（打出致命一击的玩家）一件装备，直接进背包（背包满了就不给）
-#   chance: 普通怪掉落概率；bosses: 单独配置概率的怪物（模板 id: 概率）
+#   chance: 普通怪掉落概率（万分比）；bosses: 单独配置概率的怪物（模板 id: 概率，万分比）
 #   rarity: 各稀有度的抽取权重
-#   class_bias: 只从击杀者职业能用的物品（本职业或通用）里抽的概率，其余时候从所有物品里抽
+#   class_bias: 只从击杀者职业能用的物品（本职业或通用）里抽的概率（万分比），其余时候从所有物品里抽
 loot:
-  chance: 0.3
-  bosses: { ogre_chief: 1.0 }
+  chance: 3000
+  bosses: { ogre_chief: 10000 }
   rarity: { common: 6, rare: 3, epic: 1 }
-  class_bias: 0.7
+  class_bias: 7000
 
 # 宠物：每个玩家可以带一只（模板见 pets.yaml），进游戏默认召唤第一个
-#   respawn: 宠物死后几秒在主人身边复活
-#   swap_cooldown: 换宠物（含收回）之后几秒内不能再换
+#   respawn: 宠物死后多少毫秒在主人身边复活
+#   swap_cooldown: 换宠物（含收回）之后多少毫秒内不能再换
 #   teleport: 离主人超过这个距离（像素）直接传送到主人身边
 pet:
-  respawn: 10
-  swap_cooldown: 5
+  respawn: 10000
+  swap_cooldown: 5000
   teleport: 600

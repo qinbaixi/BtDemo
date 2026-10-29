@@ -147,9 +147,9 @@ func (sys *System) summon(owner *core.Entity, template *config.Pet) *core.Entity
 		Owner:   owner.ID,
 		PetCfg:  template,
 	}
-	pet.Radius = template.Radius
+	pet.Radius = float64(template.Radius)
 	x, y := sys.spot(owner, pet)
-	pet.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: template.Radius}
+	pet.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: pet.Radius}
 	pet.Speed = template.Speed
 	pet.Skills = make([]*config.Skill, 0, len(template.Skills))
 	for _, id := range template.Skills {
@@ -170,7 +170,8 @@ func (sys *System) summon(owner *core.Entity, template *config.Pet) *core.Entity
 // revive 让死去的宠物在主人身边满血复活。
 func (sys *System) revive(owner, pet *core.Entity) {
 	pet.SetDead(false)
-	pet.Cooldowns = map[string]float64{}
+	pet.Impact = core.Impact{}
+	pet.Cooldowns = map[string]config.Millis{}
 	pet.Steering = core.Steering{}
 	pet.LastAttacker, pet.LastHitAt = 0, 0
 	sys.applyLevel(pet, owner.Level)
@@ -195,19 +196,13 @@ func (sys *System) syncLevel(owner, pet *core.Entity) {
 	}
 }
 
-// applyLevel 把宠物的等级设成 level，基础属性 = 模板 attrs + growth × (等级 - 1)。
+// applyLevel 把宠物的等级设成 level，基础属性 = 模板 attrs + ⌊growth × (等级 - 1) / 10000⌋。
 func (sys *System) applyLevel(pet *core.Entity, level int) {
 	level = max(1, level)
 	template := pet.PetCfg
-	steps := float64(level - 1)
 	pet.SetLevel(level)
-	pet.Growth = template.Growth
-	pet.Base = config.Attrs{
-		Str: template.Attrs.Str + template.Growth.Str*steps,
-		Agi: template.Attrs.Agi + template.Growth.Agi*steps,
-		Int: template.Attrs.Int + template.Growth.Int*steps,
-		Vit: template.Attrs.Vit + template.Growth.Vit*steps,
-	}
+	pet.Born, pet.Growth = template.Attrs, template.Growth
+	pet.Base = template.Attrs.Grown(template.Growth, level-1)
 }
 
 // spot 是宠物在主人身边的出场位置：主人身后偏一点，不会卡进障碍物。
@@ -224,8 +219,8 @@ func (sys *System) emitSummon(pet *core.Entity) {
 			Src:   core.I32(pet.ID),
 			Fx:    proto.String(core.FXPetSummon),
 			Color: proto.String(pet.Color),
-			X:     core.F32(core.Round1(pet.X)),
-			Y:     core.F32(core.Round1(pet.Y)),
+			X:     core.FloorI32(pet.X),
+			Y:     core.FloorI32(pet.Y),
 		},
 	)
 }

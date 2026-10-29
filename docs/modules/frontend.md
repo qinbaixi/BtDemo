@@ -37,32 +37,50 @@ web/
   public/.gitkeep       构建时复制到 dist，保证没构建前端也能编译服务端
   src/
     main.ts             入口：把各模块接起来，每帧主循环
+    fxlab.ts            特效实验页（?fxlab）：假角色、按钮播命中/技能/格挡/地面印记，调档位和后期参数
+    sfxlab.ts           调音页（?sfxlab）：试听每个声音、烘焙版/实时版 A/B、调音量音高、导出 mix.ts
     input.ts            键盘鼠标：移动、选目标、放技能（J K L U I O）、G/Q/` 开关
     net/
       types.ts          前端用的消息类型（Welcome、增量 State / Self、事件……）
-      protocol.ts       protobuf ⇄ types.ts 的转换，协议收发都经过 tap（调试面板用）
+      protocol.ts       protobuf ⇄ types.ts 的转换（毫秒→秒、万分比→小数、方向→×10000 都在这里做，见 [网络协议](#网络协议)），协议收发都经过 tap（调试面板用）
       connection.ts     WebSocket，断线自动重连（500ms、1s、2s、5s 退避），重连发 Hello{token}
       pb.js / pb.d.ts   生成的代码，不提交（npm run proto）
     game/
       config.ts         插值时长、动画时长、配色、属性表等常量
       math.ts           clamp、lerp、hypot、fmt
+      clock.ts          演出时钟 gameNow()：画面、动画、特效、声音排期都用它；清场慢放时走慢，之后追上真实时间
+      settings.ts       玩家设置（音效、环境声音量，震屏强度，闪白、震动、慢放开关），存在 localStorage
       state.ts          State 和 ClientEntity 类型、全局 state、插值 posOf、头顶位置 headY
       sync.ts           处理 Frame 里的 welcome / enter / leave / state / event / self / zones / ai / toast 等消息；welcome 后下载地图建场景
       map.ts            下载并解析所在场景的地图（/maps/*.tmj）（Tiled 地图，和服务端读同一份）
       events.ts         事件 → 动画、特效、飘字
+    feel/
+      profiles.ts       打击感档位表（light/medium/heavy、格挡、完美格挡、破防……）和技能 → 档位/武器
+      director.ts       一次命中分发到顿帧、击退、镜头、音效、震动、压低环境声、命中序列帧、地面印记；清场慢放
+      haptics.ts        手柄（vibrationActuator）和手机（navigator.vibrate）震动
+    audio/
+      kit.ts            合成积木（噪声、振荡器、包络、滤波）
+      recipes.ts        每个声音的配方（武器.材质.档位 命名，找不到时逐级回退）
+      engine.ts         音频总线（sfx / ui / amb）：先用烘焙好的音频图集，没有或 ?sfx=live 时实时合成；duck() 压低环境声
+      ambience.ts       环境声：按所在区域混合风、营火底噪，随机鸟叫、乌鸦、钟声、火堆噼啪
+      sprite.ts         读 audio/audio.json + sfx.webm / sfx.m4a，切成每个声音的变体
+      bake.ts           ?sfxbake 时离线渲染全部配方，给 tools/sfxbake/bake.mjs 调用
+      mix.ts            每个声音的音量 / 音高微调（sfxlab 导出后粘贴进来）
     render/
       world.ts          Pixi 舞台和一帧的绘制：镜头、地面标记、角色、光照
       overlay.ts        叠加的 2D 画布：名字血条、气泡、飘字、调试线条、暗角（不开后期处理时还有技能特效、环境粒子）
       lighting.ts       GPU 光照：暗色层（擦除混合挖出光斑）+ 彩色光（加法混合）
       grade.ts          调色：默认调色函数烘焙成 LUT 贴图，也能加载美术给的 LUT 图片
       art.ts            美术资源：读 art/manifest.json，有图的角色/物件/地表/LUT 用图，没有的继续程序画
-      bake.ts           把程序画的模型和物件按美术规范导出成模板（地址带 ?bake 时可用）
+      bake.ts           把程序画的模型、物件、命中序列帧按美术规范导出成模板（地址带 ?bake 时可用）
+      flipbook.ts       命中序列帧：每种材质一组（金属火星、骨渣、血点、兽毛、黏液、木屑），清单里有图就用图
       pixi/
         actorView.ts    一个角色：阴影、自己脚下的印记、身体精灵 + 墨线着色器、染色、闪现残影
         inkFilter.ts    墨线着色器：描边、轮廓光、受击白闪
         sceneView.ts    地表切块贴图、物件精灵、动态物件（火焰）
         canvasSprite.ts 用 Canvas 2D 画内容的精灵（程序化模型、火焰、地面特效用它接进 Pixi）
         postFilter.ts   后期处理：泛光（亮部提取 + Kawase 模糊）+ LUT 调色，一个滤镜做完
+        decals.ts       地面印记：重击裂纹、火焰焦痕、冰霜、击退拖痕（最多 40 个，6 秒后淡出）
       models.ts         角色模型和动作（程序化绘制，美术到位后替换）
       knightActions.ts  玩家（骑士、游侠）每个技能的专属动作：关键帧、手脚 IK、出手时刻
       fx.ts             技能和战斗特效、粒子、屏幕震动（Canvas 2D）
@@ -75,6 +93,7 @@ web/
       debug.ts          调试抽屉：标签页、跟随选中目标、向服务端要追踪
       debug-ai.ts       AI 决策页：整棵行为树（可折叠）叠加每帧结果和判断依据，暂停后逐帧回看，节点详情
       debug-proto.ts    调试抽屉：协议收发列表
+      settings.ts       设置面板（Esc 或右上角“设置”按钮）
     styles/             CSS，由 main.ts 引入
 ```
 
@@ -85,7 +104,7 @@ web/
 ```text
 #game（WebGL，Pixi）
   scene          整个画面；高画质时加后期处理滤镜（泛光 + 调色）
-    world        跟随镜头：地表 → 地面标记（AOI、边界、射程、目标圈）→ 地面特效 → 角色和物件（按脚底 y 排序）
+    world        跟随镜头：地表 → 区域光圈 → 地面印记 → 地面标记（AOI、边界、射程、目标圈）→ 地面特效 → 角色和物件（按脚底 y 排序）
     darkness     光照暗色层（屏幕空间，半分辨率渲染纹理）
     glow         光源彩色叠加（跟随镜头）
     fx           技能特效 → 环境粒子（Canvas 2D 画到整屏画布再交给 Pixi，这样能发光）
@@ -124,10 +143,11 @@ web/
 
 ## 网络协议
 
+- **单位**：协议里没有浮点数，`protocol.ts` 是唯一做换算的地方。`sec()` 把毫秒换成秒（`Frame.time`、`*_at`、`until`、`ready_at`、`dur`、`stun`、`hit_at`、技能 `cooldown`、宠物 `respawn_in` / `cooldown`、行为树的时间和间隔）；`frac()` 把万分比换成小数（暴击、暴击伤害、冷却缩减、架势、回血区 `heal`）；`dir()` 把方向乘 10000 再发给服务端。其余前端代码仍按秒和小数写。
 - **连接**（`net/connection.ts`）：连上后第一帧必须发 `ClientMsg{hello: Hello{token}}`。token 来自上一次 `Welcome.token`，存在 sessionStorage `btdemo.token`（读写都 try/catch），没有就发空串。协议里没有序号、确认和客户端心跳（服务端发 WebSocket ping，浏览器自动回 pong）。
 - **断线**：服务端把角色保留 30 秒。断线后按 500ms、1s、2s、5s 退避自动重连，重连发 `Hello{token}`，服务端回 `Welcome{resumed}` 加全量。断线期间不攒输入（`send` 直接丢掉），界面显示“连接已断开，正在重连”，画面不清空；收到 Welcome 后 `resendMove()` 把当前按键状态重发。
 - **帧**：服务端每个 WebSocket 帧是 `Frame{time, msgs}`，`protocol.decode` 返回 `{ time, msgs }`，`sync.ts` 的 `handleFrame` 按顺序处理每条消息；调试面板的协议查看器（`protocol.tap`）每条消息调一次。
-- **时钟**：每收到一帧就更新 `state.clockOffset`（本地 `performance.now()` 减服务端时间），`localTime(serverTime)` 把 `*_at` / `until` 这类服务端时间点换成本地毫秒，用来倒计时（技能冷却 `state.cds`、Buff `endsAt`、复活 `respawnAt`、回血区 `endsAt`）。
+- **时钟**：每收到一帧就更新 `state.clockOffset`（本地 `performance.now()` 减服务端时间，单位都是秒），`localTime(serverTime)` 把 `*_at` / `until` 这类服务端时间点换成本地毫秒，用来倒计时（技能冷却 `state.cds`、Buff `endsAt`、复活 `respawnAt`、回血区 `endsAt`）。
 - **增量**：`EntityInfo`（`enter`）带完整 `state`；之后的 `state` 消息只带变化的字段，`onState` 只覆盖出现了的字段（有 `x` / `y` 才做位置插值），不认识的实体 id 直接忽略。`self` 同理，`onSelf` 合并成完整的 `state.self`：`base` / `attr` 出现就整体替换，`cds_set` / `buffs_set` 为真时 `cds` / `buffs` 是完整新列表，`respawn_at` 是复活时间点（0 = 没死）。
 - **Welcome.resumed**：为真表示还是原来的角色，清空实体等 `enter` 重发，但保留玩家自己的选择（不弹选技能面板、不重发宠物选择、不清目标、不清 `state.self`）。
 
@@ -201,6 +221,24 @@ web/
 - 宠物实体的 `kind` 是 `pet`，`owner` 是主人的实体 id；名牌由 `state.ts` 的 `refreshPetNames` 拼成「主人名 的 宠物名」，颜色在 `overlay.ts`（自己的金色，别人的青绿）。
 - 不能被选为目标：`input.ts` 的 `pickEntity` 跳过宠物，自动普攻只打怪物。调试模式下点宠物只让 BT 面板看它（`debug.ts` 的 `pickPet`），不改游戏里的目标。
 
+## 打击感（feel/）
+
+一次 `DAMAGE` 事件在 `game/events.ts` 里先交给 `feel/director.ts`：`buildHit` 整理成 `HitContext`（谁打谁、档位、武器 × 材质、`HitResult`、和自己有没有关系、服务端给的击退落点和硬直），`playHit` 再按 `feel/profiles.ts` 的档位表分发到各个通道：
+
+- **顿帧**：受击者（近战时连攻击者）的动作停 `hitStopMs`；完美格挡且自己参与时整个画面停一下（`PARRY.worldStopMs`）。
+- **身体**：受击形变和小位移；有服务端击退时沿击退曲线滑到落点（`state.ts` 的 `slide`），撞墙扬一团土；硬直时受击姿势定格。
+- **镜头**（`render/camera.ts`）：方向冲击、震屏、缩放冲击，只在自己打人或挨打时动。
+- **声音**：武器 × 材质 × 档位的命中声，暴击、格挡、破防各加一层；别人之间的命中小声（约 -9dB）。
+- **画面**：命中序列帧、地面印记；**震动**和**压低环境声**（P4）。
+
+视角规则：自己（或自己的宠物）参与的命中全通道满强度，别人之间的只有特效、飘字和小声的音效。
+
+前摇：带 `hit_at` 的 `CAST` 让出招者的动作停在武器举到最高那一帧、身体发抖，脚下画预警圈（`fx.telegraph`，重招是红色），到点再砸下去；收到 `INTERRUPT` 就收起动作。
+
+本地预测：按技能键时冷却好了就先播出招动作和挥空声（`events.ts` 的 `predictCast`），服务端的 `CAST` 到了接着播，不从头再来。
+
+`?fxlab` 里能逐档拖滑条调档位表（顿帧、击退、形变、镜头、震屏、震动、压环境声），导出 JSON 粘回 `profiles.ts`。
+
 ## 技能特效和外观
 
 **特效**（`render/fx.ts` 的 `cast()`，按 `fx` 分支）：
@@ -265,6 +303,28 @@ npm run build         # 生成协议代码 + 类型检查 + 输出 web/dist
 ```
 
 发布或只跑服务端时：先 `npm run build`，再 `go build`，前端就嵌在二进制里了。`start.bat` 会自动做这两步。没构建前端就编译服务端时，首页会提示先构建。
+
+## 音效管线
+
+声音全部来自 `audio/recipes.ts` 的配方（程序合成）。为了省掉运行时合成的开销、也方便换真实素材，配方会**烘焙**成一个音频图集：
+
+```sh
+cd web
+npm i --no-save playwright && npx playwright install chromium   # 第一次
+npm run sfx:bake      # 输出 web/public/audio/sfx.webm、sfx.m4a、audio.json（需要 ffmpeg，没有就只出 sfx.wav）
+```
+
+- 改了配方要重新烘焙，否则游戏里听到的还是旧的（`?sfx=live` 强制实时合成，可以先听效果）。
+- 换真实素材：把 wav 放进 `assets-src/audio/<声音名>/`（多个文件就是多个变体），在 `assets-src/audio/CREDITS.md` 记下来源和授权，再烘焙一次。声音名见 sfxlab 页面。
+- 调音：打开 `?sfxlab`，拖音量和音高，点“导出”，把结果粘贴进 `audio/mix.ts`。
+- 加载失败（文件缺失、浏览器不支持）时自动回到实时合成，不会没声音。
+
+## 演出时钟和慢放
+
+前端所有“现在几点”都用 `game/clock.ts` 的 `gameNow()`，不直接用 `performance.now()`（只有帧率监测这种要真实时间的例外）。
+平时两者一样；`slowMotion(scale, ms)` 让演出时钟变慢，落下的时间之后以 1.6 倍速追回来。服务端不受影响，所以慢放只用在很短的时刻：
+自己打死镜头里最后一只怪或者首领时（`feel/director.ts` 的 `playClear`，参数在 `feel/profiles.ts` 的 `CLEAR`）。
+`?fxlab` 里有 1× / 0.25× / 暂停 / 单帧按钮，用来逐帧看命中。
 
 ## 改协议
 

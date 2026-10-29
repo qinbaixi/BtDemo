@@ -90,7 +90,7 @@ reg.Task("chase_target", func(ctx *bt.Ctx) bt.Status { ... })
 ## map、切片
 
 ```go
-cooldowns := map[string]float64{}   // 字典：技能 id -> 冷却结束时间
+cooldowns := map[string]config.Millis{}   // 字典：技能 id -> 冷却结束时间
 ids := []int{}                      // 切片：可变长数组
 ids = append(ids, 3)                // 追加要接住返回值
 v, ok := m[key]                     // ok 表示 key 是否存在

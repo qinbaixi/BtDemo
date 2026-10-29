@@ -51,7 +51,7 @@ func (sys *System) flushFrame(session *Session) {
 	if len(session.pending) == 0 {
 		return
 	}
-	frame := &pb.Frame{Time: core.F32(sys.state.Now()), Msgs: session.pending}
+	frame := &pb.Frame{Time: core.I64(sys.state.Now()), Msgs: session.pending}
 	session.pending = nil
 	if session.link == nil {
 		return

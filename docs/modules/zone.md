@@ -7,25 +7,25 @@
 | 来源 | 配置 | 持续 | 客户端画法 |
 |---|---|---|---|
 | 地图自带（出生点的“生命之泉”） | `world.yaml` 的 `heal_zones` | 常驻 | `spring`：石头池沿围着一池发光的水，边缘一圈缓缓转动的虚线 |
-| 技能放下（“治愈之泉”，`kind: zone`） | `skills.yaml` 技能的 `zone` | `duration` 秒（60） | `rune`：法阵，外圈亮的那段弧是剩余时间，最后 5 秒闪烁 |
+| 技能放下（“治愈之泉”，`kind: zone`） | `skills.yaml` 技能的 `zone` | `duration` 毫秒（60000） | `rune`：法阵，外圈亮的那段弧是剩余时间，最后 5 秒闪烁 |
 
 ## 配置
 
 ```yaml
 # world.yaml
 heal_zones:
-  - { name: 生命之泉, x: 520, y: 800, radius: 130, heal: 0.05, interval: 1, faction: player, look: spring, color: "#7dffc4" }
+  - { name: 生命之泉, x: 520, y: 800, radius: 130, heal: 500, interval: 1000, faction: player, look: spring, color: "#7dffc4" }
 
 # skills.yaml
-healing_spring: { name: 治愈之泉, kind: zone, cooldown: 40, fx: zone, color: "#7dffb0",
-                  zone: { name: 治愈之泉, radius: 110, heal: 0.03, interval: 1, duration: 60, look: rune, color: "#7dffb0" } }
+healing_spring: { name: 治愈之泉, kind: zone, cooldown: 40000, fx: zone, color: "#7dffb0",
+                  zone: { name: 治愈之泉, radius: 110, heal: 300, interval: 1000, duration: 60000, look: rune, color: "#7dffb0" } }
 ```
 
 `config.Zone` 的字段：
 
-- `radius`：横向半径。区域是**压扁的椭圆**，纵向半径 = `radius × ZoneAspect`（0.6），和地上画的一样（其他地面特效也是压扁画的）。客户端的 `ZONE_ASPECT`（`web/src/game/config.ts`）必须和 `config.ZoneAspect` 一样。
-- `heal`：每次回复最大生命的比例；`interval`：隔几秒回一次，默认 1。
-- `duration`：技能放的持续多少秒，必须大于 0；`heal_zones` 不能写（常驻）。
+- `radius`：横向半径。区域是**压扁的椭圆**，纵向半径 = `radius × ZoneAspect / 10000`（`ZoneAspect` 是万分比，6000 = 0.6），和地上画的一样（其他地面特效也是压扁画的）。客户端的 `ZONE_ASPECT`（`web/src/game/config.ts`）必须和 `config.ZoneAspect` 一样。
+- `heal`：每次回复最大生命的万分比（500 = 5%）；`interval`：隔多少毫秒回一次，默认 1000。
+- `duration`：技能放的持续多少毫秒，必须大于 0；`heal_zones` 不能写（常驻）。
 - `faction`：只有 `heal_zones` 用，给哪个阵营回血；技能放的用施法者的阵营。
 - `look`：`spring` 或 `rune`（默认）；`color`：客户端颜色。
 
@@ -38,7 +38,7 @@ healing_spring: { name: 治愈之泉, kind: zone, cooldown: 40, fx: zone, color:
 - `zone.New` 在世界创建时放下 `heal_zones`。
 - `combat.CastAimed` 的 `zone` 分支：发 `CAST` 事件（带 `x`、`y`、`radius`），用 `State.Zones.Replace` 在施法者脚下放一块区域；**同一个人再放一次，旧的消失**。
 - `zone.System.Tick`（每个 tick，在 `Combat.Tick` 之后）：去掉到时间的区域；到了回血时间的区域给里面的友方回血。
-- `core.Zones.Version` 在区域增减时变化。`session.Flush` 发现某个会话收到的版本旧了，就在这一帧里发一条 `ZoneList`，带**整份**列表。区域很少，不做 AOI 过滤。`Zone.until` 是服务端时间（和 `Frame.time` 同一个时钟），客户端换成本地时间画倒计时。
+- `core.Zones.Version` 在区域增减时变化。`session.Flush` 发现某个会话收到的版本旧了，就在这一帧里发一条 `ZoneList`，带**整份**列表。区域很少，不做 AOI 过滤。`Zone.until` 是服务端时间（毫秒，和 `Frame.time` 同一个时钟），客户端换成本地时间画倒计时。
 
 ## 客户端
 

@@ -669,6 +669,8 @@ h4 {
   pointer-events: auto;
 }
 .bag-btn:hover { border-color: var(--gold); color: #fff; }
+/* 设置按钮压在装备按钮正下方 */
+.settings-btn { top: 108px; }
 
 /* 在选技能面板下面一层：死亡时弹出的选技能面板盖在装备面板上 */
 .bag {
@@ -788,7 +790,43 @@ h4 {
   .bag-tip-line { display: none; }
   .skin-card { min-width: 84px; }
   .bag-btn { top: auto; bottom: 150px; right: 8px; }
+  .settings-btn { top: auto; bottom: 118px; right: 8px; }
 }
+
+/* ======================= settings panel ======================= */
+.settings-panel { width: min(360px, 100%); }
+.settings-rows { display: flex; flex-direction: column; gap: 8px; }
+.settings-row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.settings-row input[type="range"] { width: 100%; margin: 0; accent-color: var(--gold); cursor: pointer; }
+.settings-name { color: var(--text); white-space: nowrap; }
+.settings-value { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.settings-toggle { grid-template-columns: 1fr auto; cursor: pointer; }
+.settings-toggle input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--gold); cursor: pointer; }
+.settings-note {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  padding-top: 8px;
+  border-top: 1px solid rgba(224, 178, 90, 0.2);
+}
+.settings-foot { display: flex; justify-content: flex-end; }
+.settings-reset {
+  padding: 4px 14px;
+  border: 1px solid var(--gold);
+  background: rgba(9, 6, 12, 0.85);
+  color: #fbe9c0;
+  font: 12px var(--font);
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+.settings-reset:hover { color: #fff; }
 
 /* ======================= 场景牌子 / 线路面板 / 过场 ======================= */
 /* 顶部中间的场景牌子：场景名 · 线号，点开线路面板 */

@@ -1,8 +1,6 @@
 package session
 
 import (
-	"math"
-
 	"google.golang.org/protobuf/proto"
 
 	"github.com/qinbaixi/BtDemo/internal/config"
@@ -26,7 +24,7 @@ func entityInfo(entity *core.Entity) *pb.EntityInfo {
 		Kind:  kindToPB[entity.Kind].Enum(),
 		Name:  proto.String(entity.Name),
 		Color: proto.String(entity.Color),
-		R:     core.F32(entity.Radius),
+		R:     core.FloorI32(entity.Radius),
 		State: entityDelta(entity, core.DirtyAll),
 		Model: proto.String(entity.Model),
 		Skin:  proto.String(entity.Skin),
@@ -40,14 +38,14 @@ func entityInfo(entity *core.Entity) *pb.EntityInfo {
 func entityDelta(entity *core.Entity, dirty core.Dirty) *pb.EntityState {
 	delta := &pb.EntityState{Id: core.I32(entity.ID)}
 	if dirty&core.DirtyPos != 0 {
-		delta.X = core.F32(core.Round1(entity.X))
-		delta.Y = core.F32(core.Round1(entity.Y))
+		delta.X = core.FloorI32(entity.X)
+		delta.Y = core.FloorI32(entity.Y)
 	}
 	if dirty&core.DirtyHP != 0 {
-		delta.Hp = core.F32(math.Ceil(entity.HP))
+		delta.Hp = core.I32(entity.HP)
 	}
 	if dirty&core.DirtyMaxHP != 0 {
-		delta.MaxHp = core.F32(math.Ceil(entity.Attr.MaxHP))
+		delta.MaxHp = core.I32(entity.Attr.MaxHP)
 	}
 	if dirty&core.DirtyLevel != 0 {
 		delta.Lv = core.I32(entity.Level)
@@ -62,13 +60,17 @@ func entityDelta(entity *core.Entity, dirty core.Dirty) *pb.EntityState {
 		delta.Dead = proto.Bool(entity.Dead)
 	}
 	if dirty&core.DirtyShield != 0 {
-		delta.Shield = core.F32(math.Ceil(entity.Shield()))
+		delta.Shield = core.I32(entity.Shield())
 	}
 	if dirty&core.DirtyBlocking != 0 {
 		delta.Blocking = proto.Bool(entity.Blocking)
 	}
 	if dirty&core.DirtyLooks != 0 {
 		delta.Looks = core.I32(int(entity.Looks()))
+	}
+	// 只有玩家会格挡，怪物和 NPC 不发架势
+	if dirty&core.DirtyGuard != 0 && entity.Kind == core.KindPlayer {
+		delta.Guard = core.I32(core.GuardShown(entity.GuardSpent))
 	}
 	return delta
 }
@@ -84,15 +86,15 @@ func skillInfo(slot int, skill *config.Skill) *pb.SkillInfo {
 		Id:       proto.String(skill.ID),
 		Name:     proto.String(skill.Name),
 		Kind:     proto.String(skill.Kind),
-		Range:    core.F32(skill.Range),
-		Radius:   core.F32(radius),
-		Cooldown: core.F32(skill.Cooldown),
+		Range:    core.I32(skill.Range),
+		Radius:   core.I32(radius),
+		Cooldown: core.I32(int(skill.Cooldown)),
 		Color:    proto.String(skill.Color),
 		Fx:       proto.String(skill.FX),
 		Desc:     proto.String(skill.Desc),
 	}
 	if skill.Kind == "dash" || skill.Kind == "rain" {
-		info.Distance = core.F32(skill.Distance) // 位移距离 / 箭雨没有目标时的落点距离
+		info.Distance = core.I32(skill.Distance) // 位移距离 / 箭雨没有目标时的落点距离
 	}
 	return info
 }
@@ -157,7 +159,7 @@ func itemInfos(items []*config.Item) []*pb.ItemInfo {
 			if value := item.Stats[stat]; value != 0 {
 				info.Stats = append(info.Stats, &pb.ItemStat{
 					Stat:  proto.String(stat),
-					Value: proto.Float32(float32(value)),
+					Value: proto.Int32(int32(value)), // crit、crit_dmg、cdr 是万分比
 				})
 			}
 		}
@@ -192,50 +194,50 @@ func skillBar(skills []*config.Skill) []*pb.SkillInfo {
 }
 
 // selfInfo 是玩家自身的属性、冷却和增益效果（全部字段）。时间都是到期的时间点（Frame.time 的时钟），
-// 不是剩余秒数，这样它们只在施法、加 Buff 时变一次，不会每帧都变。
-func selfInfo(entity *core.Entity, now float64) *pb.SelfInfo {
+// 不是剩余毫秒数，这样它们只在施法、加 Buff 时变一次，不会每帧都变。
+func selfInfo(entity *core.Entity, now config.Millis) *pb.SelfInfo {
 	self := &pb.SelfInfo{
 		Lv:   core.I32(entity.Level),
 		Exp:  core.I32(entity.Exp),
 		Next: core.I32(attr.ExpToNext(entity.Level)),
-		Hp:   core.F32(math.Ceil(entity.HP)),
+		Hp:   core.I32(entity.HP),
 		Base: &pb.Attrs{
-			Str: core.F32(entity.Base.Str),
-			Agi: core.F32(entity.Base.Agi),
-			Int: core.F32(entity.Base.Int),
-			Vit: core.F32(entity.Base.Vit),
+			Str: core.I32(entity.Base.Str),
+			Agi: core.I32(entity.Base.Agi),
+			Int: core.I32(entity.Base.Int),
+			Vit: core.I32(entity.Base.Vit),
 		},
 		Attr: &pb.Derived{
-			MaxHp:   core.F32(entity.Attr.MaxHP),
-			Atk:     core.F32(entity.Attr.Atk),
-			Matk:    core.F32(entity.Attr.MAtk),
-			Def:     core.F32(entity.Attr.Def),
-			Mdef:    core.F32(entity.Attr.MDef),
-			Crit:    core.F32(entity.Attr.Crit),
-			CritDmg: core.F32(entity.Attr.CritDmg),
-			Speed:   core.F32(entity.Attr.Speed),
+			MaxHp:   core.I32(entity.Attr.MaxHP),
+			Atk:     core.I32(entity.Attr.Atk),
+			Matk:    core.I32(entity.Attr.MAtk),
+			Def:     core.I32(entity.Attr.Def),
+			Mdef:    core.I32(entity.Attr.MDef),
+			Crit:    core.I32(entity.Attr.Crit),
+			CritDmg: core.I32(entity.Attr.CritDmg),
+			Speed:   core.I32(entity.Attr.Speed),
 		},
 		Dead:     proto.Bool(entity.Dead),
 		CdsSet:   proto.Bool(true),
 		BuffsSet: proto.Bool(true),
 	}
 	if entity.Dead {
-		self.RespawnAt = core.F32(core.Round1(entity.RespawnAt))
+		self.RespawnAt = core.I64(entity.RespawnAt)
 	} else {
-		self.RespawnAt = core.F32(0)
+		self.RespawnAt = core.I64(0)
 	}
 	for _, skill := range entity.Skills {
 		if readyAt := entity.Cooldowns[skill.ID]; readyAt > now {
 			self.Cds = append(self.Cds, &pb.SkillCooldown{
 				Skill:   proto.String(skill.ID),
-				ReadyAt: core.F32(core.Round1(readyAt)),
+				ReadyAt: core.I64(readyAt),
 			})
 		}
 	}
 	for _, buff := range entity.Buffs {
 		self.Buffs = append(self.Buffs, &pb.BuffInfo{
 			Name:  proto.String(buff.Cfg.Name),
-			Until: core.F32(core.Round1(buff.Until)),
+			Until: core.I64(buff.Until),
 		})
 	}
 	return self
@@ -305,17 +307,17 @@ func obstacles(navMap *nav.Map) []*pb.Obstacle {
 	for _, shape := range shapes {
 		obstacle := &pb.Obstacle{
 			Shape: pb.ObstacleShape(shape.Kind).Enum(),
-			Ax:    core.F32(shape.A.X),
-			Ay:    core.F32(shape.A.Y),
+			Ax:    core.FloorI32(shape.A.X),
+			Ay:    core.FloorI32(shape.A.Y),
 		}
 		switch shape.Kind {
 		case nav.Rect:
-			obstacle.Bx, obstacle.By = core.F32(shape.B.X), core.F32(shape.B.Y)
+			obstacle.Bx, obstacle.By = core.FloorI32(shape.B.X), core.FloorI32(shape.B.Y)
 		case nav.Capsule:
-			obstacle.Bx, obstacle.By = core.F32(shape.B.X), core.F32(shape.B.Y)
-			obstacle.R = core.F32(shape.Radius)
+			obstacle.Bx, obstacle.By = core.FloorI32(shape.B.X), core.FloorI32(shape.B.Y)
+			obstacle.R = core.FloorI32(shape.Radius)
 		default:
-			obstacle.R = core.F32(shape.Radius)
+			obstacle.R = core.FloorI32(shape.Radius)
 		}
 		obs = append(obs, obstacle)
 	}
@@ -328,17 +330,17 @@ func zoneInfos(zones []*core.Zone) []*pb.Zone {
 	for _, zone := range zones {
 		infos = append(infos, &pb.Zone{
 			Id:       core.I32(zone.ID),
-			X:        core.F32(core.Round1(zone.X)),
-			Y:        core.F32(core.Round1(zone.Y)),
-			Radius:   core.F32(zone.Cfg.Radius),
+			X:        core.FloorI32(zone.X),
+			Y:        core.FloorI32(zone.Y),
+			Radius:   core.I32(zone.Cfg.Radius),
 			Name:     proto.String(zone.Cfg.Name),
 			Color:    proto.String(zone.Cfg.Color),
 			Look:     proto.String(zone.Cfg.Look),
 			Owner:    core.I32(zone.Owner),
-			Until:    core.F32(core.Round1(zone.Until)),
-			Dur:      core.F32(zone.Cfg.Duration),
-			Interval: core.F32(zone.Cfg.Interval),
-			Heal:     core.F32(zone.Cfg.Heal),
+			Until:    core.I64(zone.Until),
+			Dur:      core.I32(int(zone.Cfg.Duration)),
+			Interval: core.I32(int(zone.Cfg.Interval)),
+			Heal:     core.I32(zone.Cfg.Heal),
 		})
 	}
 	return infos
@@ -365,12 +367,12 @@ func petStatus(state *core.State, owner *core.Entity) *pb.PetStatus {
 	status := &pb.PetStatus{
 		Pet:      proto.String(owner.PetID),
 		Entity:   core.I32(owner.PetEntity),
-		Cooldown: core.F32(math.Max(0, core.Round1(owner.PetSwapAt-now))),
+		Cooldown: core.I32(int(max(0, owner.PetSwapAt-now))),
 	}
-	respawnIn := 0.0
+	var respawnIn config.Millis
 	if pet := state.Ents.Get(owner.PetEntity); pet != nil && pet.Dead {
-		respawnIn = math.Max(0, core.Round1(pet.RespawnAt-now))
+		respawnIn = max(0, pet.RespawnAt-now)
 	}
-	status.RespawnIn = core.F32(respawnIn)
+	status.RespawnIn = core.I32(int(respawnIn))
 	return status
 }

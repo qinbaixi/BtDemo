@@ -2,6 +2,7 @@
 // monster or NPC, and a "协议" tab listing every frame sent and received.
 // Toggled with the ` key or the 调试 button.
 
+import { gameNow } from '../game/clock';
 import { createProtoPanel } from './debug-proto';
 import type { ClientEntity } from '../game/state';
 import { createAiPanel } from './debug-ai';
@@ -49,7 +50,7 @@ export function createDebug({ send, entity }: {
   ai.append(head);
   const panel = createAiPanel(ai, sub, () => {
     // 缺树结构（比如断线重连）：重新发一次 watch，服务端会附上结构
-    const now = performance.now();
+    const now = gameNow();
     if (watching && now - defAskedAt > 2000) {
       defAskedAt = now;
       send({ t: 'watch', id: watching });
@@ -93,7 +94,7 @@ export function createDebug({ send, entity }: {
     const want = open && tab === 'ai' && e && e.kind !== 'player' ? target : 0;
     if (want !== watching) {
       watching = want;
-      traceAt = performance.now();
+      traceAt = gameNow();
       send({ t: 'watch', id: want });
     }
     renderHead();
@@ -146,7 +147,7 @@ export function createDebug({ send, entity }: {
     // trace takes Sync.ai.
     trace(t: AiTrace) {
       if (!t || t.id !== watching) return;
-      if (t.ticks.length) traceAt = performance.now();   // dead entities send no ticks
+      if (t.ticks.length) traceAt = gameNow();   // dead entities send no ticks
       if (t.id !== traceId) {
         traceId = t.id;
         panel.clear();

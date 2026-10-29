@@ -41,7 +41,7 @@ func TestBlinkMovesAndStopsAtWall(t *testing.T) {
 		t.Fatalf("cast event from %v to %v", event.GetX(), event.GetTx())
 	}
 	// 再闪一次就撞墙：停在墙前面，身体不进墙
-	player.Cooldowns = map[string]float64{}
+	player.Cooldowns = map[string]config.Millis{}
 	if err := world.Combat.CastAimed(player, blink, 0, 1, 0); err != nil {
 		t.Fatalf("blink into wall: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestBlinkMovesAndStopsAtWall(t *testing.T) {
 		t.Fatalf("blink into wall ended at x = %v", player.X)
 	}
 	// 紧贴着墙再往墙里闪：放不出来，也不进冷却
-	player.Cooldowns = map[string]float64{}
+	player.Cooldowns = map[string]config.Millis{}
 	player.X = 400 - player.Radius
 	world.Grid.Moved(player)
 	if err := world.Combat.CastAimed(player, blink, 0, 1, 0); err != combat.ErrNoRoom {
@@ -78,7 +78,7 @@ func TestAxeHitsFirstEnemyOnLine(t *testing.T) {
 		t.Fatalf("cast dst %v ended at x = %v", event.GetDst(), event.GetTx())
 	}
 	// 往反方向扔：没打中，一直飞到地图边缘（左边只有 100 像素，不到射程）
-	player.Cooldowns = map[string]float64{}
+	player.Cooldowns = map[string]config.Millis{}
 	if err := world.Combat.CastAimed(player, axe, 0, -1, 0); err != nil {
 		t.Fatalf("axe miss: %v", err)
 	}
@@ -110,14 +110,14 @@ func TestInvulnerableTakesNoDamage(t *testing.T) {
 }
 
 func TestEnchantAddsMagicDamage(t *testing.T) {
-	plain := func(enchanted bool) float64 {
+	plain := func(enchanted bool) int {
 		world := testWorld()
 		player := addTestEntity(world, 1, "player", 0, 0, playerBase)
 		monster := addTestEntity(world, 2, "monster", 60, 0, monsterBase)
 		player.Attr.Crit = 0
 		if enchanted {
 			enchant := &config.Skill{ID: "enchant", Kind: "self",
-				Buff: &config.Buff{Name: "烈焰附魔", Duration: 8, BonusMagic: 0.6, Look: "fire"}}
+				Buff: &config.Buff{Name: "烈焰附魔", Duration: 8000, BonusMagic: 6000, Look: "fire"}}
 			if err := world.Combat.Cast(player, enchant, 0); err != nil {
 				t.Fatalf("enchant: %v", err)
 			}
@@ -138,12 +138,12 @@ func TestFrostSlowsTargets(t *testing.T) {
 	player := addTestEntity(world, 1, "player", 0, 0, playerBase)
 	monster := addTestEntity(world, 2, "monster", 60, 0, monsterBase)
 	speed := monster.Attr.Speed
-	frost := &config.Skill{ID: "frost", Kind: "aoe", Radius: 120, Damage: "magic", Ratio: 0.1, Base: 1,
-		Debuff: &config.Buff{Name: "冰冻", Duration: 3, SpeedPct: -0.5, Look: "frost"}}
+	frost := &config.Skill{ID: "frost", Kind: "aoe", Radius: 120, Damage: "magic", Ratio: 1000, Base: 1,
+		Debuff: &config.Buff{Name: "冰冻", Duration: 3000, SpeedPct: -5000, Look: "frost"}}
 	if err := world.Combat.Cast(player, frost, 0); err != nil {
 		t.Fatalf("frost: %v", err)
 	}
-	if monster.Attr.Speed != speed*0.5 || monster.Looks() != config.Looks["frost"] {
+	if monster.Attr.Speed != speed/2 || monster.Looks() != config.Looks["frost"] {
 		t.Fatalf("speed %v (was %v), looks %v", monster.Attr.Speed, speed, monster.Looks())
 	}
 	if len(player.Buffs) != 0 {
@@ -186,7 +186,7 @@ func TestLoadoutOnlyAtJoinAndDeath(t *testing.T) {
 		t.Fatalf("loadout = %v", got)
 	}
 	// 放过技能之后就不能换了
-	cast := &pb.ClientMsg{Msg: &pb.ClientMsg_Cast{Cast: &pb.Cast{Slot: proto.Int32(3), Dx: proto.Float32(1)}}}
+	cast := &pb.ClientMsg{Msg: &pb.ClientMsg_Cast{Cast: &pb.Cast{Slot: proto.Int32(3), Dx: proto.Int32(10000)}}}
 	world.Input(session, cast)
 	loadout("heal", "fireball")
 	if got := ids(); got[1] != "blink" {

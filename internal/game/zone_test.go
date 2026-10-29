@@ -13,15 +13,16 @@ func healingSpring() *config.Skill {
 	return &config.Skill{
 		ID:       "healing_spring",
 		Kind:     "zone",
-		Cooldown: 40,
+		Cooldown: 40000,
 		FX:       "zone",
-		Zone:     &config.Zone{Name: "治愈之泉", Radius: 100, Heal: 0.1, Interval: 1, Duration: 60},
+		Zone:     &config.Zone{Name: "治愈之泉", Radius: 100, Heal: 1000, Interval: 1000, Duration: 60000},
 	}
 }
 
 // stepSeconds 让世界跑 seconds 秒。
-func stepSeconds(world *World, seconds float64) {
-	for range int(seconds * float64(world.State.Cfg.World.TickRate)) {
+// stepMillis 让世界走 duration 毫秒（按 tick 数，不足一个 tick 的部分舍掉）。
+func stepMillis(world *World, duration config.Millis) {
+	for range int(duration / world.State.Clock.Dt) {
 		world.Step()
 	}
 }
@@ -44,8 +45,8 @@ func TestZoneSkillHealsFriendsOnly(t *testing.T) {
 	if zones := world.State.Zones.List(); len(zones) != 1 || zones[0].Owner != player.ID {
 		t.Fatalf("zones after cast: %+v", zones)
 	}
-	stepSeconds(world, 1.01)
-	wantHP := 10 + float64(int(player.Attr.MaxHP*0.1+0.5))
+	stepMillis(world, 1010)
+	wantHP := 10 + player.Attr.MaxHP/10
 	if player.HP != wantHP || inside.HP != wantHP {
 		t.Fatalf("after 1s HP player %v inside %v, want %v", player.HP, inside.HP, wantHP)
 	}
@@ -53,12 +54,12 @@ func TestZoneSkillHealsFriendsOnly(t *testing.T) {
 		t.Fatalf("outside %v below %v monster %v should not heal", outside.HP, below.HP, monster.HP)
 	}
 	// 回满之后不再回，也不超过上限
-	stepSeconds(world, 20)
+	stepMillis(world, 20000)
 	if player.HP != player.Attr.MaxHP {
 		t.Fatalf("after 20s HP %v, want full %v", player.HP, player.Attr.MaxHP)
 	}
 	// 60 秒到了就消失
-	stepSeconds(world, 40)
+	stepMillis(world, 40000)
 	if len(world.State.Zones.List()) != 0 {
 		t.Fatalf("zone still there after 61s")
 	}
@@ -71,7 +72,7 @@ func TestZoneRecastReplacesOld(t *testing.T) {
 	skill := healingSpring()
 	for _, caster := range []int{player.ID, other.ID, player.ID} {
 		entity := world.Get(caster)
-		entity.Cooldowns = map[string]float64{}
+		entity.Cooldowns = map[string]config.Millis{}
 		if err := world.Combat.Cast(entity, skill, 0); err != nil {
 			t.Fatalf("cast: %v", err)
 		}
@@ -85,7 +86,7 @@ func TestZoneRecastReplacesOld(t *testing.T) {
 func TestSpawnSpringAndSync(t *testing.T) {
 	cfg := testWorld().State.Cfg
 	cfg.World.HealZones = []*config.Zone{
-		{Name: "生命之泉", X: 200, Y: 200, Radius: 120, Heal: 0.05, Interval: 1, Faction: "player", Look: "spring"},
+		{Name: "生命之泉", X: 200, Y: 200, Radius: 120, Heal: 500, Interval: 1000, Faction: "player", Look: "spring"},
 	}
 	world, err := newWorld(cfg, 1, nil)
 	if err != nil {
@@ -93,7 +94,7 @@ func TestSpawnSpringAndSync(t *testing.T) {
 	}
 	player := addTestEntity(world, 100, "player", 210, 200, playerBase)
 	player.HP = 1
-	stepSeconds(world, 1.01)
+	stepMillis(world, 1010)
 	if player.HP <= 1 {
 		t.Fatalf("spawn spring did not heal: HP %v", player.HP)
 	}

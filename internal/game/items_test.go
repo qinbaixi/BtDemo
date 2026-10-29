@@ -264,9 +264,9 @@ func TestItemStatsApplied(t *testing.T) {
 	player := session.Player
 	before := player.Attr
 	giveAndEquip(t, world, session, "sage_ring")
-	// 贤者之戒：int +3 → MAtk +7.5、MDef +3；cdr 0.15
-	if math.Abs(player.Attr.MAtk-before.MAtk-7.5) > 1e-9 || math.Abs(player.Attr.MDef-before.MDef-3) > 1e-9 ||
-		player.Attr.CDR != 0.15 {
+	// 贤者之戒：int +3 → MAtk +7（⌊(int+3)×5/2⌋ 的差）、MDef +3；cdr 1500
+	if player.Attr.MAtk-before.MAtk != 7 || player.Attr.MDef-before.MDef != 3 ||
+		player.Attr.CDR != 1500 {
 		t.Fatalf("sage ring: %+v -> %+v", before, player.Attr)
 	}
 	slash := player.Skills[0]
@@ -274,24 +274,24 @@ func TestItemStatsApplied(t *testing.T) {
 	if err := world.Combat.Cast(player, slash, target.ID); err != nil {
 		t.Fatal(err)
 	}
-	wantCooldown := world.State.Now() + slash.Cooldown*0.85
-	if math.Abs(player.Cooldowns[slash.ID]-wantCooldown) > 1e-9 {
+	wantCooldown := world.State.Now() + slash.Cooldown*85/100
+	if player.Cooldowns[slash.ID] != wantCooldown {
 		t.Fatalf("cooldown until %v, want %v", player.Cooldowns[slash.ID], wantCooldown)
 	}
 	// 鹰羽坠饰：派生属性直接加
 	giveAndEquip(t, world, session, "hawk_pendant") // 换下贤者之戒
-	if math.Abs(player.Attr.Crit-before.Crit-0.06) > 1e-9 || math.Abs(player.Attr.CritDmg-before.CritDmg-0.3) > 1e-9 ||
+	if player.Attr.Crit-before.Crit != 600 || player.Attr.CritDmg-before.CritDmg != 3000 ||
 		player.Attr.CDR != 0 {
 		t.Fatalf("hawk pendant: %+v", player.Attr)
 	}
 	// 守护者胸甲：max_hp +40 直接加，血量按比例保留
 	player.HP = player.Attr.MaxHP / 2
 	giveAndEquip(t, world, session, "guardian_mail")
-	if math.Abs(player.Attr.MaxHP-before.MaxHP-40) > 1e-9 || math.Abs(player.HPRatio()-0.5) > 1e-9 {
+	if player.Attr.MaxHP-before.MaxHP != 40 || player.HP != player.Attr.MaxHP/2 {
 		t.Fatalf("guardian mail: max hp %v, ratio %v", player.Attr.MaxHP, player.HPRatio())
 	}
 	// 冷却缩减有上限
-	capped := attr.ComputeWithGear(playerBase, 100, nil, config.StatBonus{CDR: 0.9})
+	capped := attr.ComputeWithGear(playerBase, 100, nil, config.StatBonus{CDR: 9000})
 	if capped.CDR != config.MaxCDR {
 		t.Fatalf("cdr = %v, want capped at %v", capped.CDR, config.MaxCDR)
 	}
@@ -312,7 +312,7 @@ func TestLifestealHealsAttacker(t *testing.T) {
 	heals := queuedEvents(world, pb.EventKind_HEAL, "lifesteal")
 	taken := lastDamage(world).GetValue()
 	if len(heals) != 1 || heals[0].GetDst() != int32(player.ID) ||
-		heals[0].GetValue() != float32(math.Round(float64(taken)*0.1)) || player.HP != 50+float64(heals[0].GetValue()) {
+		heals[0].GetValue() != taken/10 || player.HP != 50+int(heals[0].GetValue()) {
 		t.Fatalf("lifesteal heals %v after %v damage, hp %v", heals, taken, player.HP)
 	}
 }
@@ -329,13 +329,13 @@ func TestIgniteAddsMagicDamage(t *testing.T) {
 		t.Fatal("ignite procced on a failed roll")
 	}
 	forceLuck(world, true)
-	player.Cooldowns = map[string]float64{}
+	player.Cooldowns = map[string]config.Millis{}
 	world.State.Events.Clear()
 	world.Combat.Cast(player, player.Skills[0], target.ID)
 	ignites := queuedEvents(world, pb.EventKind_DAMAGE, "ignite")
 	mdef := target.Attr.MDef
-	want := math.Round(player.Attr.Atk * 0.6 * (1 - mdef/(mdef+100)))
-	if len(ignites) != 1 || ignites[0].GetSrc() != int32(player.ID) || ignites[0].GetValue() != float32(want) {
+	want := int32(math.Floor(float64(player.Attr.Atk) * 0.6 * 100 / float64(mdef+100)))
+	if len(ignites) != 1 || ignites[0].GetSrc() != int32(player.ID) || ignites[0].GetValue() != want {
 		t.Fatalf("ignite events %v, want value %v", ignites, want)
 	}
 }
@@ -352,6 +352,7 @@ func TestThornsReflectsOnlyNearbyAttackers(t *testing.T) {
 	if err := world.Combat.Cast(near, bite, player.ID); err != nil {
 		t.Fatal(err)
 	}
+	landWindup(world, near)
 	thorns := queuedEvents(world, pb.EventKind_DAMAGE, "thorns")
 	if len(thorns) != 1 || thorns[0].GetSrc() != int32(player.ID) || thorns[0].GetDst() != int32(near.ID) {
 		t.Fatalf("thorns events = %v", thorns)
@@ -366,6 +367,7 @@ func TestThornsReflectsOnlyNearbyAttackers(t *testing.T) {
 	if err := world.Combat.Cast(far, arrow, player.ID); err != nil {
 		t.Fatal(err)
 	}
+	landWindup(world, far)
 	if len(queuedEvents(world, pb.EventKind_DAMAGE, "thorns")) != 0 {
 		t.Fatal("thorns reflected a far attacker")
 	}
@@ -401,15 +403,17 @@ func TestBlockHeal(t *testing.T) {
 	if err := world.Combat.Cast(monster, world.State.Cfg.Skills["bite"], player.ID); err != nil {
 		t.Fatal(err)
 	}
+	landWindup(world, monster)
 	heals := queuedEvents(world, pb.EventKind_HEAL, "block_heal")
-	if len(heals) != 1 || heals[0].GetValue() != float32(math.Round(player.Attr.MaxHP*0.04)) {
+	if len(heals) != 1 || int(heals[0].GetValue()) != player.Attr.MaxHP*4/100 {
 		t.Fatalf("block heal events = %v", heals)
 	}
 	// 没格挡就不回
 	player.Blocking = false
-	monster.Cooldowns = map[string]float64{}
+	monster.Cooldowns = map[string]config.Millis{}
 	world.State.Events.Clear()
 	world.Combat.Cast(monster, world.State.Cfg.Skills["bite"], player.ID)
+	landWindup(world, monster)
 	if len(queuedEvents(world, pb.EventKind_HEAL, "block_heal")) != 0 {
 		t.Fatal("block heal without blocking")
 	}
@@ -448,7 +452,7 @@ func TestMultishotOnBasicAttack(t *testing.T) {
 	}
 	// 射程内没有别的敌人：再射同一个
 	second.Dead = true
-	player.Cooldowns = map[string]float64{}
+	player.Cooldowns = map[string]config.Millis{}
 	world.State.Events.Clear()
 	world.Combat.Cast(player, player.Skills[0], first.ID)
 	if hits := queuedEvents(world, pb.EventKind_DAMAGE, "multishot"); len(hits) != 1 || hits[0].GetDst() != int32(first.ID) {
@@ -475,7 +479,7 @@ func TestChillSlowsTarget(t *testing.T) {
 	if len(buffs) != 1 || buffs[0].GetDst() != int32(target.ID) || buffs[0].GetName() != config.ChillBuffName {
 		t.Fatalf("chill buffs = %v", buffs)
 	}
-	if math.Abs(target.Attr.Speed-target.Speed*0.7) > 1e-9 || target.Looks()&config.Looks["frost"] == 0 {
+	if target.Attr.Speed != target.Speed*7/10 || target.Looks()&config.Looks["frost"] == 0 {
 		t.Fatalf("speed %v (base %v), looks %v", target.Attr.Speed, target.Speed, target.Looks())
 	}
 }
@@ -491,14 +495,14 @@ func TestAmbushCritsAfterDash(t *testing.T) {
 	if err := world.Combat.CastAimed(player, roll, 0, 1, 0); err != nil {
 		t.Fatal(err)
 	}
-	if player.AmbushUntil != world.State.Now()+3 {
+	if player.AmbushUntil != world.State.Now()+3000 {
 		t.Fatalf("ambush until %v", player.AmbushUntil)
 	}
 	world.Combat.Cast(player, player.Skills[0], target.ID)
 	if !lastDamage(world).GetCrit() || player.AmbushUntil != 0 {
 		t.Fatal("first hit after the dash did not crit")
 	}
-	player.Cooldowns = map[string]float64{}
+	player.Cooldowns = map[string]config.Millis{}
 	world.Combat.Cast(player, player.Skills[0], target.ID)
 	if lastDamage(world).GetCrit() {
 		t.Fatal("ambush crit twice")
@@ -515,8 +519,8 @@ func TestRegenHealsOverTime(t *testing.T) {
 	for i := 0; i < world.State.Cfg.World.TickRate; i++ {
 		world.Step()
 	}
-	if math.Abs(player.HP-before-player.Attr.MaxHP*0.01) > 1e-6 {
-		t.Fatalf("regen healed %v in 1s, want %v", player.HP-before, player.Attr.MaxHP*0.01)
+	if player.HP-before != player.Attr.MaxHP*1/100 {
+		t.Fatalf("regen healed %v in 1s, want %v", player.HP-before, player.Attr.MaxHP*1/100)
 	}
 }
 

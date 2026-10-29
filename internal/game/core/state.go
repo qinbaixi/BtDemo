@@ -29,16 +29,16 @@ func NewState(cfg *config.Config, seed int64) *State {
 }
 
 // NewSceneState 创建一个场景的世界状态：实体 ID 从所有场景共用的 ids 里分配，
-// 这样玩家换场景后 ID 不变；时钟从 start 秒开始，让各个场景的游戏时间对得上
+// 这样玩家换场景后 ID 不变；时钟从 start 毫秒开始，让各个场景的游戏时间对得上
 // （客户端按帧里的时间换算冷却，换了场景时钟不能跳）。
-func NewSceneState(cfg *config.Config, seed int64, ids *IDSource, start float64) *State {
-	dt := 1 / float64(cfg.World.TickRate)
-	ticks := int(start / dt)
+func NewSceneState(cfg *config.Config, seed int64, ids *IDSource, start config.Millis) *State {
+	dt := config.Millis(1000 / max(1, cfg.World.TickRate))
+	ticks := start / dt
 	return &State{
 		Cfg:   cfg,
 		Rand:  rand.New(rand.NewSource(seed)),
 		Luck:  rand.New(rand.NewSource(seed + 1)),
-		Clock: Clock{Dt: dt, Tick: ticks, Now: float64(ticks) * dt},
+		Clock: Clock{Dt: dt, Tick: int(ticks), Now: ticks * dt},
 		Ents:  Entities{byID: map[int]*Entity{}, source: ids},
 	}
 }
@@ -61,17 +61,22 @@ func (source *IDSource) Reserve(id int) {
 	}
 }
 
-// Now 返回当前的游戏时间（秒）。
-func (state *State) Now() float64 { return state.Clock.Now }
+// Now 返回当前的游戏时间（毫秒）。
+func (state *State) Now() config.Millis { return state.Clock.Now }
 
 // Hostile 报告 a 是否会攻击 b。
 func (state *State) Hostile(a, b *Entity) bool {
 	return a != b && state.Cfg.Hostile(a.Faction, b.Faction)
 }
 
-// Lucky 用 Luck 掷一次概率为 chance 的骰子。
-func (state *State) Lucky(chance float64) bool {
-	return state.Luck.Float64() < chance
+// Lucky 用 Luck 掷一次概率为 chance（万分比）的骰子。
+func (state *State) Lucky(chance config.BasisPoints) bool {
+	return Roll(state.Luck, chance)
+}
+
+// Roll 用 source 掷一次概率为 chance（万分比）的骰子：从 0..9999 里抽一个整数，小于 chance 就中。
+func Roll(source *rand.Rand, chance config.BasisPoints) bool {
+	return source.Intn(config.OneHundredPercent) < chance
 }
 
 // Scatter 返回 (x, y) 周围 spread 范围内的一个随机点。
@@ -81,12 +86,20 @@ func (state *State) Scatter(x, y, spread float64) (float64, float64) {
 	return x + math.Cos(angle)*radius, y + math.Sin(angle)*radius
 }
 
-// Clock 是游戏时间，每次按固定的一个 tick 推进。
-type Clock struct {
-	Now  float64 // 自开始以来的秒数
-	Dt   float64 // 每个 tick 的秒数
-	Tick int     // 自开始以来的 tick 数
+// ScatterAround 返回出生点 point 周围 point.Spread 范围内的一个随机点。
+func (state *State) ScatterAround(point config.Point) (float64, float64) {
+	return state.Scatter(float64(point.X), float64(point.Y), float64(point.Spread))
 }
+
+// Clock 是游戏时间（整数毫秒），每次按固定的一个 tick 推进。
+type Clock struct {
+	Now  config.Millis // 自开始以来的毫秒数
+	Dt   config.Millis // 每个 tick 的毫秒数（1000 / tick_rate，配置保证能整除）
+	Tick int           // 自开始以来的 tick 数
+}
+
+// DtSeconds 是每个 tick 的秒数，给移动这类按速度（像素 / 秒）算位移的几何计算用。
+func (clock *Clock) DtSeconds() float64 { return float64(clock.Dt) / 1000 }
 
 // Advance 将时钟向前推进一个 tick。
 func (clock *Clock) Advance() {
@@ -110,7 +123,7 @@ type Entities struct {
 func (entities *Entities) New() *Entity {
 	return &Entity{
 		Identity: Identity{ID: entities.source.Next()},
-		Combat:   Combat{Cooldowns: map[string]float64{}},
+		Combat:   Combat{Cooldowns: map[string]config.Millis{}},
 	}
 }
 

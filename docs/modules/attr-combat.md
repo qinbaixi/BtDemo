@@ -11,18 +11,20 @@
 
 ```text
 MaxHP   = 80 + Vit×12 + Str×2
-Atk     = 8 + Str×2 + Agi×0.5          物理攻击
-MAtk    = 8 + Int×2.5                  法术攻击
-Def     = 4 + Vit×1 + Str×0.5          物理防御
-MDef    = 4 + Int×1 + Vit×0.5          法术防御
-Crit    = min(0.6, 0.05 + Agi×0.004)   暴击率
-CritDmg = 1.5 + Agi×0.005              暴击伤害倍数
+Atk     = 8 + Str×2 + ⌊Agi/2⌋          物理攻击
+MAtk    = 8 + ⌊Int×5/2⌋                  法术攻击
+Def     = 4 + Vit + ⌊Str/2⌋          物理防御
+MDef    = 4 + Int + ⌊Vit/2⌋          法术防御
+Crit    = min(6000, 500 + Agi×40)   暴击率
+CritDmg = 15000 + Agi×50              暴击伤害倍数
 Speed   = 配置的移速
 
 装备：str/agi/int/vit 先加到基础属性上再套上面的公式；max_hp、atk 等直接加在结果上；
-      CDR = min(0.4, Σcdr)，技能冷却 ×(1 − CDR)
-Buff：Atk、MAtk ×(1+ΣAtkPct)，Def、MDef ×(1+ΣDefPct)，Speed ×(1+ΣSpeedPct)（装备加的部分也一起缩放）
+      CDR = min(4000, Σcdr)，技能冷却 ×(10000 − CDR) / 10000
+Buff：Atk、MAtk 按 (10000+ΣAtkPct) / 10000 缩放，Def、MDef 按 (10000+ΣDefPct) / 10000，Speed 按 (10000+ΣSpeedPct) / 10000（向下取整；装备加的部分也一起缩放）
 ```
+
+整数版与 `attr.go` 顶部注释一致（全部向下取整）。暴击率、暴击伤害是万分比：`6000` = 60%，`15000` = 1.5 倍。
 
 ### 关键函数
 
@@ -45,15 +47,16 @@ Buff：Atk、MAtk ×(1+ΣAtkPct)，Def、MDef ×(1+ΣDefPct)，Speed ×(1+ΣSpee
 ### 技能配置（skills.yaml）
 
 ```yaml
-slash:    { kind: target, range: 70,  cooldown: 0.7, damage: physical, ratio: 1.0, base: 4 }
-whirlwind:{ kind: aoe,    radius: 110, cooldown: 5,  damage: physical, ratio: 1.2, base: 6 }
-heal:     { kind: self,   cooldown: 8, heal: 0.35 }
-warcry:   { kind: self,   cooldown: 15, buff: { duration: 6, atk_pct: 0.4, speed_pct: 0.25 } }
+# 时间是毫秒（700 = 0.7 秒），比例是万分比（10000 = 100%）
+slash:    { kind: target, range: 70,  cooldown: 700, damage: physical, ratio: 10000, base: 4 }
+whirlwind:{ kind: aoe,    radius: 110, cooldown: 5000, damage: physical, ratio: 12000, base: 6 }
+heal:     { kind: self,   cooldown: 8000, heal: 3500 }
+warcry:   { kind: self,   cooldown: 15000, buff: { duration: 6000, atk_pct: 4000, speed_pct: 2500 } }
 ```
 
 - `target`：单体，需要一个敌对的目标，在射程内（边缘距离）。
 - `aoe`：以自己为中心，半径内所有敌对单位。
-- `self`：作用于自己，治疗（`heal` = 最大生命的百分比）和 / 或 Buff。
+- `self`：作用于自己，治疗（`heal` = 最大生命的万分比）和 / 或 Buff。
 - `dash`：闪现，朝瞄准方向位移 `distance` 像素，撞墙就停在墙前，不伤害任何人。
 - `line`：投掷物（飞斧），朝瞄准方向飞 `range` 像素，打中直线上第一个敌人，被墙挡住就停在墙前。伤害按 `damage`、`ratio`、`base` 算。带 `pierce: true`（穿云箭）时不因命中停下：直线上的每个敌人都挨一下，飞到射程尽头或墙前。
 - `rain`：箭雨。落点是选中的目标（存活、敌对、边缘距离不超过 `range`）所在的位置；没有这样的目标，就是施法者沿瞄准方向 `distance` 处（夹在地图内）。对落点 `radius` 内（边缘距离）的所有敌人造成伤害。
@@ -66,9 +69,9 @@ warcry:   { kind: self,   cooldown: 15, buff: { duration: 6, atk_pct: 0.4, speed
 
 Buff 的字段（`config.Buff`）：
 
-- `shield_pct`：护盾，吸收最大生命 × `shield_pct` 的伤害。
+- `shield_pct`：护盾，吸收最大生命 × `shield_pct` / 10000 的伤害。
 - `invulnerable`：持续期间不受任何伤害（圣光庇护）。
-- `bonus_magic`：武器附魔，物理技能每次命中额外造成 法强 × `bonus_magic` 的法术伤害（烈焰附魔）。
+- `bonus_magic`：武器附魔，物理技能每次命中额外造成 法强 × `bonus_magic` / 10000 的法术伤害（烈焰附魔）。
 - `look`：客户端外观，只能是 `haste`、`holy`、`fire`、`frost` 之一，同步成 `EntityState.looks` 里的一位，画法见 [前端](frontend.md)。
 
 玩家和怪物用的是同一套技能和同一个 `CastAimed` 函数，区别只是谁来调用：玩家由 `session.Input` 调，怪物由行为树的 `cast_skill` 节点调。`Cast(e, skill, targetID)` 就是没有方向的 `CastAimed`。
@@ -77,10 +80,11 @@ Buff 的字段（`config.Buff`）：
 
 ```text
 CastAimed(e, skill, targetID, aimX, aimY)
-  ├─ 死了 → ErrDead；格挡中 → ErrBlocking；冷却中 → ErrCooldown
+  ├─ 死了 → ErrDead；格挡中 → ErrBlocking；硬直或被击退中 → ErrStunned；前摇中 → ErrBusy；冷却中 → ErrCooldown
   ├─ target：目标无效或不敌对 → ErrNoTarget；太远 → ErrTooFar
-  │          发 CAST 事件 → CalcDamage → applyDamage（可能挂上 debuff）
-  ├─ aoe：   发 CAST 事件（带半径）→ 先收集半径内的敌人，再逐个结算
+  │          发 CAST 事件 → 有 windup：开始前摇（CAST 带 hit_at），到点再结算（见下面“命中的分量”）
+  │                          没有：马上 strike → CalcDamage → applyDamage（可能挂上 debuff）
+  ├─ aoe：   发 CAST 事件（带半径）→ 有 windup 同上；结算时先收集半径内的敌人，再逐个结算
   ├─ dash：  没有方向 → ErrNoAim；nav.Reach 沿方向走到最远（最多 distance，撞墙停住）；
   │          一步都走不了 → ErrNoRoom；移动到终点，发 CAST（x、y 是起点，tx、ty 是终点）；不伤害
   ├─ line：  没有方向 → ErrNoAim；从身体边缘出发，nav.Reach 算出飞行距离（最多 range + 自身半径，
@@ -91,22 +95,32 @@ CastAimed(e, skill, targetID, aimX, aimY)
   │          发 CAST（fx rain，x、y 是落点，radius，dst 是目标或空），再按 id 顺序给落点 radius 内的敌人结算
   ├─ self：  发 CAST 事件 → 治疗（HEAL 事件）/ 加 Buff（BUFF 事件，重放刷新不叠加；
   │          Buff 有 shield_pct 时带一个护盾，能吸收 最大生命 × shield_pct 的伤害）
-  └─ 成功后：Cooldowns[技能] = 现在 + cooldown × (1 − CDR)；CanPick = false（放过技能就不能再换技能了）
+  └─ 成功后：Cooldowns[技能] = 现在 + cooldown × (10000 − CDR) / 10000（毫秒，向下取整）；CanPick = false（放过技能就不能再换技能了）
 ```
 
 返回的 error 是给玩家看的中文提示，session 会把它作为 `Toast` 发给客户端；行为树里失败就让节点返回 Failure。
 
 AOE 先收集目标再结算，是因为结算可能杀死目标，而遍历 AOI 格子时不能修改它。
 
+### 命中的分量：前摇、韧性、击退、硬直（combat/impact.go）
+
+每个技能有一个分量档位 `weight`（`light` / `medium` / `heavy`，skills.yaml，默认 light），每档的效果在 `world.yaml` 的 `hit.weights`：击退距离 `knock`、硬直毫秒数 `stun`、打掉的韧性 `poise`、被挡住时扣的架势 `guard`。技能也可以用自己的 `knock`、`stun`、`poise_dmg` 覆盖档位的值（`HitRules.Hit`）。DAMAGE 事件带上 `weight`，前端按它选顿帧、震屏和音效（`web/src/feel/profiles.ts`）。
+
+- **前摇**（`windup`，只有 `target` 和 `aoe` 技能能有）：出招时发 CAST（带 `hit_at`，命中的服务端时间），实体身上记 `Impact.Windup`，过 `windup` 毫秒后由 `resolveWindups` 结算（每个 tick 先收集到点的再结算）。结算时目标可以比射程多跑出 `hit.reach`，再远就打空。前摇期间被打出硬直（或者举盾）会被打断（`CancelWindup`），发 `INTERRUPT` 事件，这一下不结算。前摇中不能再出招（`ErrBusy`），怪物的行为树暂停。现在所有怪物技能都有前摇，玩家只有旋风斩有一点。
+- **韧性**（`poise`，monsters.yaml 的模板、pets.yaml、`world.yaml` 的 `player.poise`）：每次命中扣掉档位的 `poise`，扣空了才会被击退和硬直，然后重新算；`hit.poise_reset` 毫秒没挨打韧性回满。没扣空就是霸体，这一下不退不停（首领食人魔韧性 120，普通怪 0～10）。
+- **击退**：距离 = 档位的 `knock` × 10000 ÷ 目标的重量 `mass`（万分比，10000 = 1 倍）。`push` 用 `nav.Reach` 沿“攻击者 → 目标”的方向算出能推到哪（被墙和物件挡住就停在跟前），实体身上记 `Impact.Knock`，由 move 在 `hit.knock_time` 毫秒内先快后慢地推过去（见 [nav 和 move](nav-move.md)）。没推满就是撞墙：事件带 `wall`，硬直再加 `hit.wall_stun`。DAMAGE 事件里 `kx`、`ky` 是落点，`knock_time` 是用时。
+- **硬直**：`Impact.StunUntil` 之前不能移动、不能出招，行为树暂停，同时打断前摇。DAMAGE 事件带 `stun` 毫秒数。尸体只被打飞，不硬直。
+- 被普通格挡挡住的命中只推开 30%，不硬直、不扣韧性；完美格挡和破防见下面的格挡。
+
 ### 伤害公式
 
 ```text
-原始伤害 = 攻击 × ratio + base               （法术技能用 MAtk 对 MDef）
+原始伤害 = 攻击 × ratio / 10000 + base               （法术技能用 MAtk 对 MDef）
 减伤后   = 原始伤害 × (1 − 防御 / (防御 + 100))
-附魔     = 物理技能才有：身上每个带 bonus_magic 的 Buff，各加 法强 × bonus_magic × (1 − 目标法防/(目标法防+100))
-暴击     = 随机 < 暴击率 时 × CritDmg （附魔那份也一起乘）；ambush 特效生效时必定暴击
+附魔     = 物理技能才有：身上每个带 bonus_magic 的 Buff，各加 法强 × bonus_magic / 10000 × (1 − 目标法防/(目标法防+100))
+暴击     = 随机 < 暴击率 时 × CritDmg / 10000 （附魔那份也一起乘）；ambush 特效生效时必定暴击
 浮动     = × 0.95 ~ 1.05
-最终     = max(1, 四舍五入)
+最终     = max(1, 向下取整)
 ```
 
 防御减免是 `防御/(防御+100)`：100 防御减伤 50%，300 防御减伤 75%，永远到不了 100%，堆防御收益递减。
@@ -118,7 +132,12 @@ AOE 先收集目标再结算，是因为结算可能杀死目标，而遍历 AOI
 `applyDamage` 按顺序处理，伤害事件里分别记下来，前端据此飘“免疫”“格挡”“吸收 N”：
 
 0. **无敌**：目标身上有 `invulnerable` 的 Buff（圣光庇护）时，整次伤害免掉，事件 `immune` 为真、`v` 为 0，后面的格挡、护盾、debuff 都不再处理。
-1. **格挡**：玩家按住右键时 `entity.Blocking` 为真，伤害减少 `world.yaml` 的 `player.block.reduce`（默认 0.8，即减 80%），记在 `Event.blocked`。格挡时移速乘 `player.block.speed`（默认 0.5），不能放技能。
+1. **格挡**（格挡 2.0，代码在 `combat/guard.go`）：玩家按住右键时 `entity.Blocking` 为真。只挡盾正面 `player.block.arc`（默认 140°）以内来的攻击，选了敌对目标时盾朝着目标，否则朝举盾时面向的那一侧（`Block.face`）；背后挨打照常扣血。挡住时：
+   - **完美格挡**（`PARRY`）：举盾后 `block.parry`（180 毫秒）内挡住近战技能，伤害全挡、不扣架势，攻击者被弹开 `parry_knock`、硬直 `parry_stun`（无视韧性，打断它的前摇）。远程（投射物、飞斧、箭雨，见 `Skill.Ranged`）只能普通格挡；盾放下不到 `parry_rearm` 毫秒再举起没有完美格挡窗口。
+   - **普通格挡**（`BLOCK`）：伤害减少 `block.reduce`（默认 8000 = 80%），按命中档位扣架势（`hit.weights.*.guard`，架势上限 `block.guard`）。
+   - **破防**（`GUARD_BREAK`）：架势扣空的那一下仍按普通格挡减伤，然后盾被打开放下、被推开 `break_knock`、硬直 `break_stun`；硬直中举不起盾。
+   - 架势 `guard_delay` 毫秒没挡到东西后开始回：放下盾每秒回 `guard_regen`，举着盾每秒回 `guard_regen_held`。剩余架势（万分比）按 500（5%）取整同步到 `EntityState.guard`。
+   挡掉的量记在 `Event.blocked`，结果记在 `Event.result`（完美格挡时事件里的击退和硬直说的是攻击者）。格挡时移速乘 `player.block.speed`（默认 5000 = 0.5 倍），不能放技能。
 2. **护盾**：剩下的伤害先由护盾 Buff 的 `Absorb` 吸收，记在 `Event.absorbed`；护盾打完这个 Buff 就被移除（时间到也会移除）。
 
 剩下的才扣生命（`Event.v`），可能是 0。

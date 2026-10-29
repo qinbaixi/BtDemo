@@ -19,10 +19,12 @@ func (sys *System) afterHit(src, dst *core.Entity, skill *config.Skill, result d
 	// 攻击者的特效
 	if result.taken > 0 && src.Alive() {
 		for _, effect := range src.Effects(config.EffectLifesteal) {
-			sys.heal(src, result.taken*effect.Pct, config.EffectLifesteal)
+			sys.heal(src, config.ScaleBasisPoints(result.taken, effect.Pct), config.EffectLifesteal)
 		}
 	}
-	if dst.Alive() {
+	// 被完美格挡弹开的一下什么都没打着：攻击者的点燃、冰冻、多重射击都不触发
+	parried := result.outcome == pb.HitResult_PARRY
+	if dst.Alive() && !parried {
 		for _, effect := range src.Effects(config.EffectIgnite) {
 			if dst.Alive() && sys.state.Lucky(effect.Chance) {
 				sys.ignite(src, dst, skill, effect)
@@ -35,7 +37,7 @@ func (sys *System) afterHit(src, dst *core.Entity, skill *config.Skill, result d
 			}
 		}
 	}
-	if len(src.Skills) > 0 && src.Skills[0] == skill {
+	if len(src.Skills) > 0 && src.Skills[0] == skill && !parried {
 		for _, effect := range src.Effects(config.EffectMultishot) {
 			if src.Alive() && sys.state.Lucky(effect.Chance) {
 				sys.multishot(src, dst, skill)
@@ -48,7 +50,7 @@ func (sys *System) afterHit(src, dst *core.Entity, skill *config.Skill, result d
 	}
 	if result.blocked > 0 {
 		for _, effect := range dst.Effects(config.EffectBlockHeal) {
-			sys.heal(dst, dst.Attr.MaxHP*effect.Pct, config.EffectBlockHeal)
+			sys.heal(dst, config.ScaleBasisPoints(dst.Attr.MaxHP, effect.Pct), config.EffectBlockHeal)
 		}
 	}
 	if result.taken > 0 && src.Alive() && core.EdgeDist(src, dst) <= config.ThornsRange {
@@ -60,14 +62,13 @@ func (sys *System) afterHit(src, dst *core.Entity, skill *config.Skill, result d
 	}
 }
 
-// ignite 让 src 对 dst 追加一次 攻击 × ratio 的魔法伤害（按 dst 的法术防御减免）。
+// ignite 让 src 对 dst 追加一次 攻击 × ratio / 10000 的魔法伤害（按 dst 的法术防御减免，向下取整，最少 1）。
 func (sys *System) ignite(
 	src, dst *core.Entity,
 	skill *config.Skill,
 	effect *config.ItemEffect,
 ) {
-	raw := src.Attr.Atk * effect.Ratio
-	amount := math.Max(1, math.Round(raw*(1-dst.Attr.MDef/(dst.Attr.MDef+100))))
+	amount := max(1, int(math.Floor(fraction(src.Attr.Atk, effect.Ratio)*mitigation(dst.Attr.MDef))))
 	sys.damage(src, dst, amount, false, skill.ID, config.EffectIgnite)
 }
 
@@ -79,13 +80,13 @@ func (sys *System) multishot(src, dst *core.Entity, skill *config.Skill) {
 	sys.grid.InRange(
 		src.X,
 		src.Y,
-		skill.Range+src.Radius+core.MaxRadius,
+		float64(skill.Range)+src.Radius+core.MaxRadius,
 		func(other *core.Entity) {
 			if other == dst || !other.Alive() || !sys.state.Hostile(src, other) {
 				return
 			}
 			dist := core.EdgeDist(src, other)
-			if dist > skill.Range {
+			if dist > float64(skill.Range) {
 				return
 			}
 			// 距离相同时取 ID 小的，结果不依赖遍历顺序
@@ -108,17 +109,17 @@ func (sys *System) multishot(src, dst *core.Entity, skill *config.Skill) {
 	sys.damage(src, target, dmg, crit, skill.ID, config.EffectMultishot)
 }
 
-// thorns 让 owner 把受到的 taken 点伤害按 pct 反弹给攻击者 attacker（物理伤害，按 attacker 的防御减免）。
-func (sys *System) thorns(owner, attacker *core.Entity, taken float64, effect *config.ItemEffect) {
-	raw := taken * effect.Pct
-	amount := math.Max(1, math.Round(raw*(1-attacker.Attr.Def/(attacker.Attr.Def+100))))
+// thorns 让 owner 把受到的 taken 点伤害按 pct 反弹给攻击者 attacker
+// （物理伤害，按 attacker 的防御减免，向下取整，最少 1）。
+func (sys *System) thorns(owner, attacker *core.Entity, taken int, effect *config.ItemEffect) {
+	amount := max(1, int(math.Floor(fraction(taken, effect.Pct)*mitigation(attacker.Attr.Def))))
 	sys.damage(owner, attacker, amount, false, "", config.EffectThorns)
 }
 
-// heal 给 entity 回复 amount 点生命（四舍五入，不超过最大生命），回了血就发 HEAL 事件
+// heal 给 entity 回复 amount 点生命（不超过最大生命），回了血就发 HEAL 事件
 // （proc 不空时写进事件，是触发它的特效名）。
-func (sys *System) heal(entity *core.Entity, amount float64, proc string) {
-	amount = math.Min(math.Round(amount), entity.Attr.MaxHP-entity.HP)
+func (sys *System) heal(entity *core.Entity, amount int, proc string) {
+	amount = min(amount, entity.Attr.MaxHP-entity.HP)
 	if amount <= 0 {
 		return
 	}
@@ -126,7 +127,7 @@ func (sys *System) heal(entity *core.Entity, amount float64, proc string) {
 	event := &core.Event{
 		Kind:  pb.EventKind_HEAL.Enum(),
 		Dst:   core.I32(entity.ID),
-		Value: core.F32(amount),
+		Value: core.I32(amount),
 	}
 	if proc != "" {
 		event.Proc = proto.String(proc)
@@ -134,17 +135,26 @@ func (sys *System) heal(entity *core.Entity, amount float64, proc string) {
 	sys.state.Events.Emit(entity, event)
 }
 
-// startAmbush 在 entity 放完位移技能后调用：有 ambush 特效时，接下来 dur 秒内的下一次伤害必定暴击。
+// startAmbush 在 entity 放完位移技能后调用：有 ambush 特效时，接下来 dur 毫秒内的下一次伤害必定暴击。
 func (sys *System) startAmbush(entity *core.Entity) {
 	for _, effect := range entity.Effects(config.EffectAmbush) {
-		entity.AmbushUntil = math.Max(entity.AmbushUntil, sys.state.Now()+effect.Dur)
+		entity.AmbushUntil = max(entity.AmbushUntil, sys.state.Now()+effect.Dur)
 	}
 }
 
-// regen 每帧给活着的 entity 回复 最大生命 × pct × 帧长（每秒合计 最大生命 × pct），不发事件。
+// regen 每帧给活着的 entity 回复 最大生命 × pct × 帧长（每秒合计 ⌊最大生命 × pct / 10000⌋），不发事件。
+// 每帧的量常常不到 1 点，零头以万分之一点为单位攒在 RegenCarry 里，攒够 1 点才加到生命上。
 func (sys *System) regen(entity *core.Entity) {
-	for _, effect := range entity.Effects(config.EffectRegen) {
-		perTick := entity.Attr.MaxHP * effect.Pct * sys.state.Clock.Dt
-		entity.SetHP(math.Min(entity.Attr.MaxHP, entity.HP+perTick))
+	effects := entity.Effects(config.EffectRegen)
+	if len(effects) == 0 || entity.HP >= entity.Attr.MaxHP {
+		entity.RegenCarry = 0 // 满血时不攒，免得掉血后一下子回一大口
+		return
 	}
+	for _, effect := range effects {
+		// 万分之一点 / 帧 = 最大生命 × pct（万分比）× 帧长（毫秒）/ 1000
+		entity.RegenCarry += int(int64(entity.Attr.MaxHP) * int64(effect.Pct) * sys.state.Clock.Dt / 1000)
+	}
+	whole := entity.RegenCarry / config.OneHundredPercent
+	entity.RegenCarry %= config.OneHundredPercent
+	entity.SetHP(min(entity.Attr.MaxHP, entity.HP+whole))
 }

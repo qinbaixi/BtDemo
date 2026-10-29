@@ -16,11 +16,11 @@
 `attr.Recalc` 会把所有装备着的物品的 `Bonus`（`config.StatBonus`，由 `stats` 在校验时换算）加进去：
 
 1. `str`、`agi`、`int`、`vit` 先加到基础属性上，再套派生公式；
-2. `max_hp`、`atk`、`matk`、`def`、`mdef`、`crit`、`crit_dmg`、`speed` 直接加在公式结果上（暴击率 0.6 的上限只管公式那部分）；
-3. `cdr` 求和后限制在 `config.MaxCDR`（0.4）以内，存进 `Attr.CDR`；
+2. `max_hp`、`atk`、`matk`、`def`、`mdef`、`crit`、`crit_dmg`、`speed` 直接加在公式结果上（暴击率 6000（60%）的上限只管公式那部分）；
+3. `cdr` 求和后限制在 `config.MaxCDR`（4000 = 40%）以内，存进 `Attr.CDR`；
 4. 最后 Buff 照常缩放（装备加的那部分也一起缩放）。
 
-`combat.CastAimed` 设冷却时乘 `(1 - Attr.CDR)`。穿脱装备后调 `Recalc`，血量按比例保留。
+`combat.CastAimed` 设冷却时乘 `(10000 - Attr.CDR) / 10000`。穿脱装备后调 `Recalc`，血量按比例保留。
 
 ## 穿脱和皮肤（item.System）
 
@@ -55,17 +55,19 @@ item 和 combat 不直接发消息，只在实体上做标记，由 session 的 
 
 | 谁的 | kind | 条件和效果 | 事件 |
 | --- | --- | --- | --- |
-| 攻击者 | `lifesteal` | 实际扣血 > 0：回复 扣血 × pct | `HEAL` dst=自己 proc=lifesteal |
-| 攻击者 | `ignite` | 目标活着，chance：追加 攻击 × ratio 的魔法伤害（按目标法防减免） | `DAMAGE` proc=ignite |
+| 攻击者 | `lifesteal` | 实际扣血 > 0：回复 扣血 × pct（万分比） | `HEAL` dst=自己 proc=lifesteal |
+| 攻击者 | `ignite` | 目标活着，chance：追加 攻击 × ratio（万分比）的魔法伤害（按目标法防减免） | `DAMAGE` proc=ignite |
 | 攻击者 | `chill` | 目标活着，chance：挂「冰冻」减速（和冰霜箭同名，互相刷新），外观 frost | `BUFF` proc=chill |
 | 攻击者 | `multishot` | 技能是 1 号位普攻，chance：对射程内离自己最近的另一个敌人再射一箭（没有就射同一个，它死了就不射） | `CAST` fx=arrow proc=multishot，然后 `DAMAGE` proc=multishot |
 | 受击者 | `block_heal` | 活着、这次有格挡掉的伤害：回复 最大生命 × pct | `HEAL` proc=block_heal |
 | 受击者 | `thorns` | 活着、实际扣血 > 0、攻击者活着且边缘距离 ≤ 120：反弹 扣血 × pct（物理，按攻击者防御减免） | `DAMAGE` src=自己 dst=攻击者 proc=thorns |
 
+特效参数里的 `pct`、`chance`、`ratio`、`speed` 是万分比，`dur` 是毫秒。
+
 另外两个不在命中时触发：
 
 - `ambush`：放完位移技能（dash）后 `AmbushUntil = 现在 + dur`；在那之前的下一次 `CalcDamage` 必定暴击（`DAMAGE crit=true`），用掉就清零。
-- `regen`：`combat.Tick` 每帧给活着的实体回复 最大生命 × pct × 帧长，不发事件。
+- `regen`：`combat.Tick` 每帧给活着的实体回复 最大生命 × pct（万分比）× 帧长（毫秒）÷ 1000 的量（零头攒在 `RegenCarry` 里），不发事件。
 
 **特效不连锁**：特效自己造成的伤害走 `damage`，不再调 `afterHit`，所以反伤不会再被反伤，追加的伤害也不吸血、不再触发别的特效。
 

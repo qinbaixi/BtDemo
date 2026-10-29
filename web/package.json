@@ -7,7 +7,8 @@
     "dev": "npm run proto && vite",
     "build": "npm run proto && tsc --noEmit && vite build",
     "typecheck": "npm run proto && tsc --noEmit",
-    "proto": "pbjs -t static-module -w es6 --no-verify --no-delimited -o src/net/pb.js ../proto/btdemo.proto && pbts -o src/net/pb.d.ts src/net/pb.js"
+    "proto": "pbjs -t static-module -w es6 --no-verify --no-delimited -o src/net/pb.js ../proto/btdemo.proto && pbts -o src/net/pb.d.ts src/net/pb.js",
+    "sfx:bake": "node ../tools/sfxbake/bake.mjs"
   },
   "devDependencies": {
     "protobufjs-cli": "^2.7.1",

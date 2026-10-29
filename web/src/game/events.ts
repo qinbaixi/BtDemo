@@ -1,11 +1,13 @@
 // 把服务端事件（施法、伤害、死亡……）变成动画、特效和飘字。
 
-import type { GameEvent } from '../net/types';
-import { cameraKick, cameraPunch } from '../render/camera';
+import { gameNow } from './clock';
+import type { GameEvent, SkillInfo } from '../net/types';
+import { buildHit, isMine, onCast, onDeath, playHit, sfxAt } from '../feel/director';
+import { forgetBlock } from '../input';
 import { ACTIONS, muzzleOffset } from '../render/knightActions';
-import { ATTACK_MS, FEEL, LOOK_FIRE, MODEL_SCALE, RARITY_COLOR } from './config';
+import { ATTACK_IMPACT, ATTACK_MS, LOOK_FIRE, MODEL_SCALE, RARITY_COLOR } from './config';
 import { hypot } from './math';
-import { faceToward, headY, posOf, state, type ClientEntity, type FloatOpts } from './state';
+import { faceToward, headY, localTime, posOf, state, type ClientEntity, type FloatOpts } from './state';
 
 const ROLL_SLIDE = 0.75;   // 翻滚动作里身体在地上滑动的那一段（占动作时长的比例）
 
@@ -17,6 +19,7 @@ export function onEvent(ev: GameEvent, now: number): void {
       // 宠物出现（召唤 / 复活）和瞬移回主人身边：只放特效，不是技能
       if (ev.fx === 'pet_summon') {
         fx.petSummon(ev.src, ev.x ?? 0, ev.y ?? 0, ev.color || '#ffe08a', now);
+        onCast(ev, src, now, 0);
         break;
       }
       if (ev.fx === 'pet_teleport') {
@@ -24,6 +27,7 @@ export function onEvent(ev: GameEvent, now: number): void {
         fx.petSummon(ev.src, ev.x ?? 0, ev.y ?? 0, src?.color || '#ffe08a', now, true);
         if (src && typeof ev.tx === 'number') blinkTo(src, ev, now);
         fx.petSummon(ev.src, ev.tx ?? 0, ev.ty ?? 0, src?.color || '#ffe08a', now + 120, true);
+        onCast(ev, src, now, 0);
         break;
       }
       let lead = 0;
@@ -32,15 +36,30 @@ export function onEvent(ev: GameEvent, now: number): void {
         // 玩家的每个技能有自己的动作（见 render/knightActions.ts，游侠的动作名前面加 "ranger:"），怪物都是普通攻击动作
         const actionName = src.model === 'ranger' ? `ranger:${ev.fx}` : ev.fx;
         const action = src.kind === 'player' && ev.fx ? ACTIONS[actionName!] : undefined;
+        // 自己按键时已经先播了这个动作（本地预测，见 predictCast），服务端确认后接着播，不从头再来
+        const predicted = src.id === state.myId && takePrediction(ev.skill, now);
+        // 前摇：服务端到 hitAt 才结算命中，动作和特效都对准那一刻
+        const windupMs = ev.hitAt ? Math.max(0, localTime(ev.hitAt) - now) : 0;
+        if (src.id === state.myId && windupMs > 0) busyUntil = now + windupMs;
+        src.windupFrom = 0;
         // 装备特效追加的一箭（连射）和正常那一箭同时射出，不重新播一遍拉弓动作
-        if (!ev.proc) {
+        if (!ev.proc && !predicted) {
           src.attackAt = now;
           // 宠物的施放类技能（嚎叫、爆燃、愈合）用 fx 当动作名，模型里画仰头 / 胀大 / 举手
           const petCast = src.kind === 'pet' && (ev.fx === 'buff' || ev.fx === 'circle' || ev.fx === 'heal');
           src.action = action ? actionName! : petCast ? ev.fx! : '';
           src.attackMs = action ? action.ms : ATTACK_MS;
+          if (!action && windupMs > 0) {
+            // 普通攻击动作：武器举起来停住，砸下去打到人的那一刻正好是命中时刻
+            src.attackAt = now + windupMs - ATTACK_IMPACT * ATTACK_MS;
+            src.windupFrom = now;
+          }
         }
-        lead = action ? action.lead : 0;
+        lead = action ? action.lead : windupMs > 0 ? windupMs - 40 : 0;
+        if (predicted) lead = Math.max(0, lead - (now - src.attackAt));
+        if (windupMs > 0 && src.kind !== 'player') {
+          fx.telegraph(src.id, ev.dst || 0, ev.radius || 0, ev.weight === 'heavy', windupMs, now);
+        }
         const dst = ev.dst && ev.dst !== ev.src ? state.ents.get(ev.dst) : null;
         if (dst) { const dp = posOf(dst, now); faceToward(src, dp.x, dp.y, now); }
         else if (typeof ev.tx === 'number' && typeof ev.x === 'number' && Math.abs(ev.tx - ev.x) > 1) {
@@ -60,6 +79,7 @@ export function onEvent(ev: GameEvent, now: number): void {
       }
       // 特效等动作出手时才放（火球从推出去的手心飞出、冰霜新星在剑插地时炸开）
       const delay = fx.cast(ev, now, lead, origin);
+      if (!src || src.id !== state.myId || !predictedSwing(ev.skill)) onCast(ev, src, now, delay);
       state.lands.set(ev.src, { at: now + delay, color: ev.color });
       // 玩家的技能，以及怪物的大招，头顶报技能名
       const big = ev.fx === 'circle' || ev.fx === 'buff';
@@ -76,13 +96,14 @@ export function onEvent(ev: GameEvent, now: number): void {
       const proc = PROC_DAMAGE[ev.proc || ''];
       const color = proc ? proc.color : land ? land.color : '#ffd166';
       const hit = () => {
-        const t = performance.now();
+        const t = gameNow();
         const e = state.ents.get(ev.dst);
         const v = ev.v || 0;
         let side = Math.random() < 0.5 ? -1 : 1;
-        if (e) {
-          e.hitAt = t;
-          const push = feelHit(e, ev.src, !!ev.crit, !!ev.blocked, v, t);
+        // 顿帧、受击位移、镜头、命中声都在 feel/director.ts 里按档位处理
+        const context = buildHit(ev);
+        if (context) {
+          const push = playHit(context, t);
           if (Math.abs(push) > 0.2) side = Math.sign(push);
         }
         // 伤害数字往被推开的方向抛出去（竖着打时随机左右）
@@ -93,7 +114,21 @@ export function onEvent(ev: GameEvent, now: number): void {
           addFloat(t, ev.dst, '免疫', '#ffe9a0', 18, 900, { pop: true, rise: 46 });
           return;
         }
-        if (ev.blocked) {
+        if (ev.result === 'parry') {
+          // 完美格挡：盾前一圈亮金色的冲击环，一个字都不掉；被弹开的攻击者头上冒“失衡”
+          if (ev.src) fx.deflect(ev.src, t);
+          fx.perfectBlock(ev.dst, ev.src || 0, t);
+          addFloat(t, ev.dst, '完美格挡', '#ffe9a0', 19, 1100, { pop: true, rise: 54 });
+          if (ev.src && ev.stun) addFloat(t, ev.src, '失衡', '#ffd166', 15, 900, { rise: 40 });
+          return;
+        }
+        if (ev.result === 'guard_break') {
+          // 破防：盾被砸开，碎片四溅，盾放下（自己的话右键要重新按）
+          fx.guardBreak(ev.dst, t);
+          addFloat(t, ev.dst, '破防', '#ff7a45', 20, 1100, { pop: true, rise: 54 });
+          if (e) e.blocking = false;
+          if (ev.dst === state.myId) forgetBlock(true);
+        } else if (ev.blocked) {
           // 格挡：盾上迸出火花，伤害数字小一号
           fx.block(ev.dst, t);
           addFloat(t, ev.dst, '格挡', '#9ad7ff', 18, 900, { pop: true, rise: 46 });
@@ -126,6 +161,7 @@ export function onEvent(ev: GameEvent, now: number): void {
         // 站在回血区里：小一号的数字，身上冒两个小十字
         addFloat(now, ev.dst, `+${ev.v}`, '#7cff9b', 13, 800, { rise: 30 });
         fx.zoneHeal(ev.dst, now);
+        sfxAt('heal.tick', ev.dst, now, true);
         break;
       }
       // 自己放的治疗：等动作出手、绿光亮起来再飘数字；吸血、格挡回血等装备特效等那一下打中
@@ -133,11 +169,12 @@ export function onEvent(ev: GameEvent, now: number): void {
       const proc = PROC_HEAL[ev.proc || ''];
       const show = proc
         ? () => {
-          const t = performance.now();
+          const t = gameNow();
           fx.procHeal(ev.dst, ev.proc!, t);
+          sfxAt('heal.tick', ev.dst, t, true);
           addFloat(t, ev.dst, `${proc.label} +${ev.v}`, proc.color, 14, 900, { rise: 30 });
         }
-        : () => addFloat(performance.now(), ev.dst, `+${ev.v}`, '#7cff9b', 18, 1000);
+        : () => addFloat(gameNow(), ev.dst, `+${ev.v}`, '#7cff9b', 18, 1000);
       if (land && land.at > now) state.pending.push({ at: land.at, fn: show });
       else show();
       break;
@@ -149,13 +186,14 @@ export function onEvent(ev: GameEvent, now: number): void {
       state.bubbles.delete(ev.id);
       const e = state.ents.get(ev.id);
       if (e && e.deadAt < 0) e.deadAt = now;
-      // 倒地时被打飞一小段（方向沿用最后一次受击）
-      if (e) e.knockAmp = FEEL.knockPx * 3;
+      // 倒地时被打飞一小段（方向沿用最后一次受击），自己打死的再停一下、响收尾音
+      if (e) onDeath(e, now);
       fx.death(ev.id, e ? e.color : '#ffffff', now);
       break;
     }
     case 'respawn':
       fx.respawn(ev.id, now);
+      sfxAt('respawn', ev.id, now);
       addFloat(now, ev.id, '复活', '#7cff9b', 16, 1000);
       break;
     case 'say':
@@ -172,13 +210,30 @@ export function onEvent(ev: GameEvent, now: number): void {
         const mine = ev.dst === state.myId;
         state.pending.push({
           at: now + flight,
-          fn: () => addFloat(performance.now(), ev.dst, `获得 ${item.name}`, color, mine ? 17 : 13, 1500, { pop: mine, rise: 54 }),
+          fn: () => {
+            addFloat(gameNow(), ev.dst, `获得 ${item.name}`, color, mine ? 17 : 13, 1500, { pop: mine, rise: 54 });
+            if (mine) sfxAt(`loot.${item.rarity || 'common'}`, ev.dst, gameNow());
+          },
         });
       }
       break;
     }
+    case 'interrupt': {
+      // 前摇被打出硬直：举着的武器放下，预警圈收掉
+      const e = state.ents.get(ev.id!);
+      if (e) {
+        e.windupFrom = 0;
+        e.attackAt = -1e9;
+      }
+      fx.cancel(ev.id!);
+      state.lands.delete(ev.id!);
+      addFloat(now, ev.id!, '打断', '#ffffff', 16, 800, { pop: true, rise: 44 });
+      sfxAt('interrupt', ev.id, now);
+      break;
+    }
     case 'lvl':
       fx.levelUp(ev.id, now);
+      sfxAt('levelup', ev.id, now, !isMine(ev.id));
       addFloat(now, ev.id, `升级! Lv ${ev.lv}`, '#ffd54a', 26, 1600, { pop: true, rise: 60 });
       break;
   }
@@ -194,48 +249,6 @@ const PROC_HEAL: Record<string, { label: string; color: string }> = {
   lifesteal: { label: '吸血', color: '#ff7a8a' },
   block_heal: { label: '格挡', color: '#7cff9b' },
 };
-
-// feelHit 处理一次命中的打击感：双方顿帧、受击方向、镜头冲击、连击数。
-// 返回受击方向的横向分量（伤害数字往这边飘）。
-function feelHit(target: ClientEntity, srcId: number, crit: boolean, blocked: boolean, damage: number, now: number): number {
-  const src = srcId ? state.ents.get(srcId) : undefined;
-  const tp = posOf(target, now);
-  let dx = 0;
-  let dy = 0;
-  if (src && src !== target) {
-    const sp = posOf(src, now);
-    const len = Math.hypot(tp.x - sp.x, tp.y - sp.y);
-    if (len > 0.5) { dx = (tp.x - sp.x) / len; dy = (tp.y - sp.y) / len; }
-  }
-  if (dx === 0 && dy === 0) dx = Math.cos(target.facing) < 0 ? 1 : -1;   // 不知道谁打的：往身后推
-  target.knockX = dx;
-  target.knockY = dy;
-  const amp = blocked ? FEEL.knockPx * 0.5 : FEEL.knockPx * (crit ? 1.7 : 1);
-  // 已经倒地（箭比死亡事件晚到）时保留被打飞的距离
-  target.knockAmp = target.dead ? Math.max(target.knockAmp, amp) : amp;
-
-  // 顿帧：受击者停住；近战的攻击者也停（远程的箭飞到时攻击动作早就结束了）
-  const stop = blocked ? FEEL.hitStopBlockMs : crit ? FEEL.hitStopCritMs : FEEL.hitStopMs;
-  target.freezeUntil = Math.max(target.freezeUntil, now + stop);
-  const srcPos = src ? posOf(src, now) : null;
-  if (src && srcPos && src !== target && hypot(srcPos.x, srcPos.y, tp.x, tp.y) < 140) src.freezeUntil = Math.max(src.freezeUntil, now + stop);
-
-  // 镜头：只在自己打人或被打时动，旁边 NPC 互殴不晃屏幕
-  if (srcId === state.myId && target.id !== state.myId) {
-    cameraKick(dx, dy, crit ? 7 : 2.5);
-    if (crit) cameraPunch(FEEL.zoomPunch);
-    // 一次范围技能同时打中好几个只算一击（同一时刻的命中合并）
-    const combo = state.combo;
-    if (damage > 0 && now - combo.at > 1) {
-      combo.n = now - combo.at < 2000 ? combo.n + 1 : 1;
-      combo.at = now;
-    }
-  } else if (target.id === state.myId) {
-    cameraKick(dx, dy, blocked ? 3 : crit ? 8 : 4.5);
-    if (damage > 0) state.hurtAt = now;
-  }
-  return dx;
-}
 
 // addFloat 在实体头顶加一行飘字（实体消失后停在最后的位置）。
 export function addFloat(
@@ -276,4 +289,59 @@ function blinkTo(e: ClientEntity, ev: GameEvent, now: number): void {
   e.x = e.px = e.rx = ev.tx!;
   e.y = e.py = e.ry = ev.ty ?? e.y;
   e.t0 = now;
+}
+
+// 自己的出招还在前摇里（服务端这时不接受新的出招）
+let busyUntil = 0;
+export function castBusy(now: number): boolean {
+  return now < busyUntil;
+}
+
+// —— 本地预测出手：按下技能键就先播动作和挥空声，不等服务端的 CAST 回来（省掉一个来回的延迟）。
+// 服务端确认时（同一个技能、PREDICT_MS 内）动作接着播；没确认（被拒绝）这一下就是挥了个空。
+const PREDICT_MS = 500;
+let prediction: { skill: string; at: number; swing: boolean } | null = null;
+
+// predictCast 在自己按下技能时调用：只预测单体和自身范围技能（位移、投掷要等服务端的落点）。
+export function predictCast(skill: SkillInfo, targetId: number, now: number): void {
+  const me = state.ents.get(state.myId);
+  if (!me || me.dead || castBusy(now) || (skill.kind !== 'target' && skill.kind !== 'aoe') || !skill.fx) return;
+  const actionName = me.model === 'ranger' ? `ranger:${skill.fx}` : skill.fx;
+  const action = ACTIONS[actionName];
+  if (!action) return;
+  const target = targetId ? state.ents.get(targetId) : undefined;
+  if (skill.kind === 'target') {
+    // 单体技能要有够得着的目标才预测，不然服务端会拒绝（"目标太远"），白挥一下
+    if (!target || target.dead || target.kind !== 'monster') return;
+    const mp = posOf(me, now);
+    const tp = posOf(target, now);
+    if (hypot(mp.x, mp.y, tp.x, tp.y) - (me.r || 14) - (target.r || 14) > (skill.range || 0) + 10) return;
+  }
+  if (target) { const tp = posOf(target, now); faceToward(me, tp.x, tp.y, now); }
+  me.attackAt = now;
+  me.action = actionName;
+  me.attackMs = action.ms;
+  const swing = skill.fx === 'melee';
+  if (swing) predictSwing(skill.id, me, now, action.lead);
+  prediction = { skill: skill.id, at: now, swing };
+}
+
+// takePrediction 在收到自己的 CAST 时调用：这个技能刚预测过就返回 true（并用掉这次预测）。
+function takePrediction(skill: string | undefined, now: number): boolean {
+  const hit = !!prediction && prediction.skill === skill && now - prediction.at < PREDICT_MS;
+  if (hit) lastConfirmed = prediction;
+  prediction = null;
+  return hit;
+}
+let lastConfirmed: { skill: string; at: number; swing: boolean } | null = null;
+
+// predictedSwing 说明这个技能的挥空声在预测时已经响过了。
+function predictedSwing(skill: string | undefined): boolean {
+  const confirmed = lastConfirmed;
+  lastConfirmed = null;
+  return !!confirmed && confirmed.skill === skill && confirmed.swing;
+}
+
+function predictSwing(skill: string, me: ClientEntity, now: number, lead: number): void {
+  onCast({ k: 'cast', src: me.id, skill, fx: 'melee' }, me, now, lead);
 }

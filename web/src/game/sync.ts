@@ -1,5 +1,7 @@
 // 处理服务端的帧和消息：welcome / enter / leave / state / event / self / zones / ai / toast / skills / inventory / petStatus，更新本地状态。
 
+import { gameNow } from './clock';
+import { forgetEntity, sfxAt } from '../feel/director';
 import type { Debug } from '../ui/debug';
 import { buildSkillBar, renderPetHud, renderSelf, setConn, showToast } from '../ui/hud';
 import { refreshBag, renderBagStats } from '../ui/bag';
@@ -28,10 +30,11 @@ export interface SyncDeps {
 
 // handleFrame 处理一个 WebSocket 帧：先用帧里的服务端时间校准时钟，再按顺序处理每条消息。
 export function handleFrame(frame: ServerFrame, deps: SyncDeps): void {
-  const now = performance.now();
+  const now = gameNow();
   // 偏移里含这一帧的网络延迟：取最小的那个（延迟最小的帧最接近真实偏移），每帧允许回升 1ms 以跟上时钟漂移，
   // 这样倒计时不会随网络抖动跳来跳去
-  const sample = now - frame.time * 1000;
+  // 用真实时间校准（演出时钟慢放时会落后，混进偏移里要好几秒才回得来），换算时再减去落后的部分（localTime）
+  const sample = performance.now() - frame.time * 1000;
   // 差了 2 秒以上说明服务端时钟重新开始了（服务器重启），直接重新取
   const restarted = sample - state.clockOffset > 2000;
   state.clockOffset = state.clockSynced && !restarted ? Math.min(sample, state.clockOffset + 1) : sample;
@@ -68,6 +71,7 @@ function handleMessage(m: ServerMessage, now: number, deps: SyncDeps): void {
     case 'leave':
       for (const id of m.ids || []) {
         state.ents.delete(id);
+        forgetEntity(id);
         state.bubbles.delete(id);
         state.lands.delete(id);
         if (id === state.target) {
@@ -254,7 +258,9 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
 function onState(s: EntityState, now: number): void {
   const e = state.ents.get(s.id);
   if (!e) return;
-  if (s.x !== undefined || s.y !== undefined) {
+  // 击退途中：位置以击退曲线为准（终点就是服务端的落点），途中同步来的位置先不管
+  const knocked = !!e.slide?.knock && now < e.slide.at + e.slide.ms;
+  if ((s.x !== undefined || s.y !== undefined) && !knocked) {
     const x = s.x ?? e.x;
     const y = s.y ?? e.y;
     const cur = posOf(e, now);
@@ -287,11 +293,15 @@ function onState(s: EntityState, now: number): void {
   if (s.tg !== undefined) e.tg = s.tg;
   if (s.shield !== undefined) {
     if (s.shield > e.shield) e.shieldMax = s.shield;          // 新加了一层护盾
-    else if (s.shield <= 0 && e.shield > 0 && !e.dead) state.fx?.shieldBreak(e.id, now);
+    else if (s.shield <= 0 && e.shield > 0 && !e.dead) {
+      state.fx?.shieldBreak(e.id, now);
+      sfxAt('shield.break', e.id, now);
+    }
     e.shield = s.shield;
   }
   if (s.blocking !== undefined) e.blocking = s.blocking && !e.dead;
   if (s.looks !== undefined) e.looks = e.dead ? 0 : s.looks;
+  if (s.guard !== undefined && s.guard !== e.guard) { e.guard = s.guard; e.guardAt = now; }
   e.fresh = false;
 }
 

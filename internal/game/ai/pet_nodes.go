@@ -6,18 +6,19 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/qinbaixi/BtDemo/internal/bt"
+	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
 // 宠物节点用的常量。
 const (
-	ownerCombatWindow = 5.0  // 主人攻击或被攻击之后，多少秒内算“在战斗中”
-	followStandFactor = 0.7  // 跟随时站在离主人 Distance 的这个比例处
-	followSideAngle   = 0.7  // 主人在走时，宠物站在正后方偏这个弧度的一侧
-	followCatchUp     = 1.3  // 落得很远时的追赶速度倍率
-	followFarFactor   = 3.0  // 离主人超过 Distance 的几倍算“落得很远”
-	tinyLength        = 1e-6 // 两点几乎重合时算不出方向，换一个固定方向
+	ownerCombatWindow config.Millis = 5000 // 主人攻击或被攻击之后，多少毫秒内算“在战斗中”
+	followStandFactor               = 0.7  // 跟随时站在离主人 Distance 的这个比例处
+	followSideAngle                 = 0.7  // 主人在走时，宠物站在正后方偏这个弧度的一侧
+	followCatchUp                   = 1.3  // 落得很远时的追赶速度倍率
+	followFarFactor                 = 3.0  // 离主人超过 Distance 的几倍算“落得很远”
+	tinyLength                      = 1e-6 // 两点几乎重合时算不出方向，换一个固定方向
 )
 
 // registerPet 注册宠物行为树用的节点：守护主人的服务、跟随主人、保持距离、
@@ -34,7 +35,7 @@ func (sys *System) registerPet() {
 		}
 		keep := ctx.Node.Num("Distance", 60)
 		dist := core.Dist(agent.Entity, owner)
-		if limit := sys.state.Cfg.World.Pet.Teleport; limit > 0 && dist > limit {
+		if limit := float64(sys.state.Cfg.World.Pet.Teleport); limit > 0 && dist > limit {
 			sys.teleportToOwner(agent.Entity, owner, keep)
 			ctx.Explain("离主人 %.0f > %.0f，传送到主人身边", dist, limit)
 			return bt.Success
@@ -152,17 +153,17 @@ func (sys *System) registerPet() {
 			ctx.Explain("主人不在场")
 			return false
 		}
-		hitAgo := ctx.Now - owner.LastHitAt
-		dealtAgo := ctx.Now - owner.LastDealtAt
+		hitAgo := sys.state.Now() - owner.LastHitAt
+		dealtAgo := sys.state.Now() - owner.LastDealtAt
 		hit := owner.LastAttacker != 0 && hitAgo <= ownerCombatWindow
 		dealt := owner.LastDealtAt > 0 && dealtAgo <= ownerCombatWindow
 		switch {
 		case hit:
-			ctx.Explain("主人 %.1fs 前被攻击", hitAgo)
+			ctx.Explain("主人 %dms 前被攻击", hitAgo)
 		case dealt:
-			ctx.Explain("主人 %.1fs 前出手", dealtAgo)
+			ctx.Explain("主人 %dms 前出手", dealtAgo)
 		default:
-			ctx.Explain("主人 %.0fs 内没有战斗", ownerCombatWindow)
+			ctx.Explain("主人 %dms 内没有战斗", ownerCombatWindow)
 		}
 		return hit || dealt
 	})
@@ -263,10 +264,10 @@ func (sys *System) teleportToOwner(pet, owner *core.Entity, keep float64) {
 			Src:   core.I32(pet.ID),
 			Fx:    proto.String(core.FXPetTeleport),
 			Color: proto.String(pet.Color),
-			X:     core.F32(core.Round1(fromX)),
-			Y:     core.F32(core.Round1(fromY)),
-			Tx:    core.F32(core.Round1(pet.X)),
-			Ty:    core.F32(core.Round1(pet.Y)),
+			X:     core.FloorI32(fromX),
+			Y:     core.FloorI32(fromY),
+			Tx:    core.FloorI32(pet.X),
+			Ty:    core.FloorI32(pet.Y),
 		},
 	)
 }

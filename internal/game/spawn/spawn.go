@@ -31,7 +31,7 @@ func New(state *core.State, grid *aoi.Grid, moveSys *move.System, aiSys *ai.Syst
 func (sys *System) SpawnConfigured() {
 	for _, spawnCfg := range sys.state.Cfg.Spawns {
 		for i := 0; i < spawnCfg.Count; i++ {
-			x, y := sys.state.Scatter(spawnCfg.X, spawnCfg.Y, spawnCfg.Spread)
+			x, y := sys.state.ScatterAround(config.Point{X: spawnCfg.X, Y: spawnCfg.Y, Spread: spawnCfg.Spread})
 			sys.Template(sys.state.Cfg.Templates[spawnCfg.Template], x, y)
 		}
 	}
@@ -49,10 +49,11 @@ func (sys *System) Template(template *config.Template, x, y float64) *core.Entit
 		Model:   template.Model,
 		Tmpl:    template,
 	}
-	entity.Radius = template.Radius
+	entity.Radius = float64(template.Radius)
 	x, y = sys.move.FreeSpot(entity, x, y)
-	entity.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: template.Radius}
-	entity.Level, entity.Base, entity.Speed = template.Level, template.Attrs, template.Speed
+	entity.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: entity.Radius}
+	entity.Level, entity.Speed = template.Level, template.Speed
+	entity.Born, entity.Base = template.Attrs, template.Attrs
 	entity.Skills = sys.skills(template.Skills)
 	attr.Init(entity)
 	sys.aiSys.Attach(entity, template.Tree)
@@ -71,10 +72,10 @@ func (sys *System) Player() *core.Entity {
 		Faction: "player",
 		Name:    fmt.Sprintf("%s%d", player.NamePrefix, entity.ID),
 	}
-	entity.Radius = class.Radius
-	x, y := sys.state.Scatter(player.Spawn.X, player.Spawn.Y, player.Spawn.Spread)
+	entity.Radius = float64(class.Radius)
+	x, y := sys.state.ScatterAround(player.Spawn)
 	x, y = sys.move.FreeSpot(entity, x, y)
-	entity.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: class.Radius}
+	entity.Transform = core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: entity.Radius}
 	entity.SetLevel(max(1, player.Level))
 	sys.ApplyClass(entity, class)
 	attr.Init(entity)
@@ -89,16 +90,11 @@ func (sys *System) ApplyClass(entity *core.Entity, class *config.Class) {
 	entity.Class = class.ID
 	entity.Model, entity.Color = class.Model, class.Color
 	entity.Skin = class.DefaultSkin()
-	entity.Radius = class.Radius
-	entity.Base, entity.Growth, entity.Speed = class.Attrs, class.Growth, class.Speed
-	for level := 1; level < entity.Level; level++ {
-		entity.Base.Str += class.Growth.Str
-		entity.Base.Agi += class.Growth.Agi
-		entity.Base.Int += class.Growth.Int
-		entity.Base.Vit += class.Growth.Vit
-	}
+	entity.Radius = float64(class.Radius)
+	entity.Born, entity.Growth, entity.Speed = class.Attrs, class.Growth, class.Speed
+	entity.Base = class.Attrs.Grown(class.Growth, entity.Level-1)
 	entity.Skills = sys.skills(class.Skills)
-	entity.Cooldowns = map[string]float64{}
+	entity.Cooldowns = map[string]config.Millis{}
 	// 现在只有刚进游戏和死亡期间能换职业，那时身上没有 Buff；以后放宽了也别把上个职业的 Buff 带过来
 	entity.Buffs = nil
 	entity.MarkDirty(core.DirtyShield | core.DirtyLooks)
@@ -147,12 +143,14 @@ func (sys *System) Tick() {
 
 func (sys *System) respawn(entity *core.Entity) {
 	entity.SetDead(false)
+	entity.Impact = core.Impact{} // 尸体被打飞的那段击退不能带到复活之后
 	x, y := entity.HomeX, entity.HomeY
 	if entity.Kind == core.KindPlayer {
+		entity.MarkDirty(core.DirtyGuard) // 架势也回满了
 		spawnAt := sys.state.Cfg.World.Player.Spawn
-		x, y = sys.state.Scatter(spawnAt.X, spawnAt.Y, spawnAt.Spread)
+		x, y = sys.state.ScatterAround(spawnAt)
 	}
-	entity.Cooldowns = map[string]float64{}
+	entity.Cooldowns = map[string]config.Millis{}
 	entity.Steering = core.Steering{}
 	entity.LastAttacker, entity.LastHitAt = 0, 0
 	attr.Init(entity)

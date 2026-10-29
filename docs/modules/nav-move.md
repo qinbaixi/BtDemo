@@ -81,8 +81,10 @@ func (m *System) By(e, dx, dy)        // 移动一段并碰撞滑动（玩家、
 func (m *System) Place(e, x, y)       // 瞬移到最近空地（复活）
 func (m *System) FreeSpot(e, x, y)    // 只算最近空地，不移动（选游荡点、逃跑点）
 func (m *System) Toward(e, x, y, step) bool   // 沿路径朝目标走 step 像素，返回是否到达
-func (m *System) Tick()               // 每帧：玩家按输入方向走
+func (m *System) Tick()               // 每帧：推进所有实体的击退位移；玩家按输入方向走（硬直、被击退时不走）
 ```
+
+击退（`Impact.Knock`）由 combat 在命中时定好起点和终点（终点用 `nav.Reach` 避开了障碍物），move 每帧按进度先快后慢地把实体放到路线上，走完清掉 `Knock`。被击退和硬直期间玩家的动作是 `stagger`，不响应移动输入；怪物由 ai 暂停行为树。
 
 所有改位置的操作最后都调用 `grid.Moved(entity)`，AOI 格子随之更新。
 
@@ -94,8 +96,8 @@ func (m *System) Tick()               // 每帧：玩家按输入方向走
 | --- | --- |
 | 还没有计划 | 第一次 |
 | 目标离计划时的位置移动超过 24 像素 | 追的是会动的玩家 |
-| 距上次规划超过 0.75 秒 | 定期修正 |
-| 连续 0.4 秒几乎没动（被其他东西挡住） | 卡住了，换条路 |
+| 距上次规划超过 750 毫秒 | 定期修正 |
+| 连续 400 毫秒几乎没动（被其他东西挡住） | 卡住了，换条路 |
 
 没到重新规划的时候，如果路径本来就通向目标，就把最后一个路点更新成目标的当前位置；如果从当前位置已经能直线看到目标，就丢掉中间路点直接走过去。
 
@@ -115,4 +117,4 @@ func (m *System) Tick()               // 每帧：玩家按输入方向走
 ## 想改什么去哪
 
 - 加一种物件：见 [地图](map.md#加一种新物件)。只是装饰、不挡路的，形状写 `none`。
-- 调寻路手感：`move.go` 顶部的 `repathEvery`、`goalMoved`、`stuckSeconds`；网格精度是 `grid.go` 的 `CellSize`。
+- 调寻路手感：`move.go` 顶部的 `repathEvery`、`goalMoved`、`stuckTime`；网格精度是 `grid.go` 的 `CellSize`。

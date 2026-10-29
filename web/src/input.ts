@@ -1,5 +1,8 @@
 // 键盘和鼠标输入：移动、选目标、放技能、切换显示。
 
+import { gameNow } from './game/clock';
+import { play, toggleMute } from './audio/engine';
+import { castBusy, predictCast } from './game/events';
 import { MOVE_DIR, SKILL_KEYS } from './game/config';
 import { clamp, hypot } from './game/math';
 import {
@@ -11,6 +14,7 @@ import { showToast } from './ui/hud';
 import { bagKey, toggleBag } from './ui/bag';
 import { linesKey, toggleLines } from './ui/lines';
 import { pickerKey } from './ui/picker';
+import { refreshSettingsPanel, toggleSettings, closeSettingsPanel } from './ui/settings';
 
 // 切换画质时提示每一档有什么
 const QUALITY_DETAIL: Record<Quality, string> = {
@@ -52,21 +56,27 @@ function sendMove(force = false): void {
 export function resendMove(): void {
   lastMove = '';
   sendMove(true);
-  if (blocking) deps.send({ t: 'block', on: true });
+  if (blocking) {
+    const me = state.ents.get(state.myId);
+    deps.send({ t: 'block', on: true, face: me && Math.cos(me.facing) < 0 ? -1 : 1 });
+  }
 }
 
 export function castSlot(slot: number): void {
   const skill = state.skillBySlot[slot];
   if (!skill || state.pickerOpen || state.bagOpen) return;   // 挑技能时不放技能（放了就不能再换了），开着装备面板时也不放
-  if (blocking) { showToast('格挡中不能出招'); return; }   // 服务端也会拒绝，这里省一次来回
+  if (blocking) { showToast('格挡中不能出招'); play('ui.deny', { bus: 'ui' }); return; }   // 服务端也会拒绝，这里省一次来回
+  const now = gameNow();
+  if (stunned(now)) return;   // 硬直中服务端不收，按了也没用
   const aim = skill.kind === 'dash' || skill.kind === 'line' || skill.kind === 'rain' ? aimFor(skill.kind) : { dx: 0, dy: 0 };
   deps.send({ t: 'cast', slot, target: state.target || 0, ...aim });
+  if (cdRemaining(skill.id, now) <= 0.03) predictCast(skill, state.target, now);
 }
 
 // aimFor 给闪现、飞斧和箭雨定方向：飞斧优先扔向当前目标；箭雨有目标时落在目标上
 // （目标太远时服务端退回按方向落点，所以方向也朝目标发）；闪现和没有目标时朝按住的方向键，什么都没按就朝角色面向。
 function aimFor(kind: string): { dx: number; dy: number } {
-  const now = performance.now();
+  const now = gameNow();
   const me = state.ents.get(state.myId);
   if (!me) return { dx: 0, dy: 0 };
   const target = state.ents.get(state.target);
@@ -134,29 +144,58 @@ function attackTarget(now: number): ClientEntity | null {
 }
 
 function tryAttack(): void {
-  const now = performance.now();
+  const now = gameNow();
   const sk = state.skillBySlot[ATTACK_SLOT];
-  if (!sk || state.pickerOpen || state.bagOpen || blocking || cdRemaining(sk.id, now) > 0.03) return;
+  if (!sk || state.pickerOpen || state.bagOpen || blocking || stunned(now) || castBusy(now) || cdRemaining(sk.id, now) > 0.03) return;
   const t = attackTarget(now);
   if (!t) return;
   if (t.id !== state.target) state.target = t.id;
   deps.send({ t: 'cast', slot: ATTACK_SLOT, target: t.id });
+  predictCast(sk, t.id, now);
   // 先在本地记上冷却，不等下一次同步，否则按住左键时这段时间里会一直发、一直被拒
   state.cds[sk.id] = now + (sk.cooldown || 0) * 1000;
 }
 
-// forgetBlock 在换成不能格挡的职业时丢掉本地的格挡状态（服务端那边已经取消了，不用再发）。
-export function forgetBlock(): void {
+// stunned 说明自己正处于硬直（被重击打得踉跄，服务端不接受出招）。
+function stunned(now: number): boolean {
+  const me = state.ents.get(state.myId);
+  return !!me && now < me.stunUntil;
+}
+
+// forgetBlock 在换成不能格挡的职业、或者被破防时丢掉本地的格挡状态（服务端那边已经取消了，不用再发）；
+// 被破防后要再挡得重新按右键。
+export function forgetBlock(broken = false): void {
   blocking = false;
   state.blockHeld = false;
+  if (broken) guardBroken = true;
+}
+
+// 被破防后架势回到一半以前举不起盾（和服务端 combat.GuardRecovered 一样）
+const GUARD_RECOVERED = 0.5;
+let guardBroken = false;
+
+// canRaise 说明现在举不举得起盾：死了、硬直、被击退途中、破防后架势还没回来时不行（服务端也不收，
+// 这里先拦住，免得本地以为举着盾、一直不能出招）。
+function canRaise(now: number): boolean {
+  const me = state.ents.get(state.myId);
+  if (!me || me.dead || stunned(now)) return false;
+  if (me.slide?.knock && now < me.slide.at + me.slide.ms) return false;
+  if (guardBroken && me.guard < GUARD_RECOVERED) return false;
+  guardBroken = false;
+  return true;
 }
 
 function setBlock(on: boolean): void {
   if (on && !state.canBlock) return;   // 这个职业没有盾，右键不格挡
   if (blocking === on) return;
+  if (on && !canRaise(gameNow())) return;
   blocking = on;
   state.blockHeld = on;
-  deps.send({ t: 'block', on });
+  const me = state.ents.get(state.myId);
+  // 举盾时告诉服务端盾朝哪边（没选目标时用；选了目标盾朝着目标）
+  const face = me && Math.cos(me.facing) < 0 ? -1 : 1;
+  deps.send({ t: 'block', on, face });
+  if (on) play('block.raise', { gain: 0.8 });
 }
 
 function stopMouse(): void {
@@ -219,11 +258,25 @@ function onKeyDown(e: KeyboardEvent): void {
     return;
   }
   if (e.code === 'KeyN') {
+    closeSettingsPanel();   // 面板同时只开一个
     if (!state.pickerOpen) toggleLines();
     return;
   }
   if (e.code === 'KeyE') {
+    closeSettingsPanel();
     if (!state.pickerOpen) toggleBag();   // 选技能面板开着时先选完技能
+    return;
+  }
+  // Esc 先关选技能、装备、线路面板（上面已经处理），都没开才开关设置面板
+  if (e.code === 'Escape') {
+    toggleSettings();
+    return;
+  }
+  if (e.code === 'KeyM') {
+    const muted = toggleMute();
+    refreshSettingsPanel();   // 设置面板开着时同步静音勾选框
+    if (!muted) play('ui.toggle', { bus: 'ui' });
+    showToast(muted ? '音效已关闭（按 M 打开）' : '音效已打开');
     return;
   }
   if (e.code === 'KeyG') {
@@ -283,7 +336,7 @@ export function initInput(d: InputDeps): void {
     if (ev.button !== 0) return;
     // 左键：点到实体先选中它；点到的是怪就顺手打一下，按住不放会一直打
     const w = toWorld(ev);
-    const hit = pickEntity(w.x, w.y, performance.now());
+    const hit = pickEntity(w.x, w.y, gameNow());
     if (hit && hit.kind === 'pet') {        // 调试模式下点宠物：只给 BT 面板看，不选目标、不打
       d.debug.pickPet(hit.id);
       return;
@@ -305,7 +358,7 @@ export function initInput(d: InputDeps): void {
   canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
   canvas.addEventListener('mousemove', (ev) => {
     const w = toWorld(ev);
-    canvas.style.cursor = pickEntity(w.x, w.y, performance.now()) ? 'pointer' : 'default';
+    canvas.style.cursor = pickEntity(w.x, w.y, gameNow()) ? 'pointer' : 'default';
   });
 
   window.addEventListener('keydown', onKeyDown);

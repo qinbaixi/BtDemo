@@ -1,7 +1,9 @@
 # 技能配置
+# 数值单位（全部是整数，没有小数）：时间是毫秒（1000 = 1 秒），比例 / 概率 / 倍率是万分比（10000 = 100%），
+# 距离、半径是像素，速度是像素 / 秒。服务器算出小数时一律向下取整。
 #   desc:   选技能面板上的一句话说明
 #   kind:   target 单体（需要目标）| aoe 以自身为中心的范围伤害 | self 作用于自己（治疗 / 增益）
-#           | ally 对行为树指定的友方目标（宠物的主人）治疗：heal 按目标最大生命的比例，目标必须在 range 内
+#           | ally 对行为树指定的友方目标（宠物的主人）治疗：heal 按目标最大生命的万分比，目标必须在 range 内
 #           | dash 朝瞄准方向位移 distance 像素（遇到障碍物停下）
 #           | line 朝瞄准方向扔出投掷物，命中直线上 range 内第一个敌人（被障碍物挡住就停）；
 #             pierce: true 时穿透，命中直线上的每个敌人，飞到射程尽头或墙前
@@ -9,89 +11,94 @@
 #             打落点 radius 内的所有敌人
 #           | zone 在脚下放一个回血区（见 zone），同一个人再放时旧的消失
 #   damage: physical 物理（攻击 vs 防御）| magic 法术（法强 vs 法抗）
-#   伤害 = (攻击 × ratio + base) × 防御减免 × 暴击 × 随机浮动
-#   heal:   治疗量 = 最大生命 × heal
+#   cooldown: 冷却毫秒数
+#   伤害 = (攻击 × ratio / 10000 + base) × 防御减免 × 暴击 × 随机浮动（95%~105%），最后向下取整，最少 1
+#   heal:   治疗量 = ⌊最大生命 × heal / 10000⌋
 #   fx:     前端表现 melee | projectile | circle | heal | buff | shield | zone …
-#   buff.shield_pct: 护盾，吸收 最大生命 × shield_pct 的伤害，吸收完或到时间消失
+#   buff.duration: 持续毫秒数；atk_pct / def_pct / speed_pct 是万分比（4000 = +40%）
+#   buff.shield_pct: 护盾，吸收 最大生命 × shield_pct（万分比）的伤害，吸收完或到时间消失
 #   buff.invulnerable: 持续期间不受任何伤害
 #   buff.bonus_magic: 武器附魔，物理技能每次命中额外造成 法强 × bonus_magic 的法术伤害
 #   buff.speed_pct 为负数时是减速
 #   buff.look: 客户端外观 haste 疾风 | holy 金光 | fire 火焰武器 | frost 冰冻
 #   debuff: 命中时加在目标身上的效果，格式同 buff
-#   zone:   kind 为 zone 时放下的回血区：radius 半径、heal 每次回复最大生命的比例、
-#           interval 隔几秒回一次（默认 1）、duration 持续秒数、look 画法（rune 法阵）
+#   weight: 命中分量 light 轻 | medium 中 | heavy 重（默认 light）：击退距离、硬直、打掉的韧性按 world.yaml 的 hit.weights，
+#           knock / stun / poise_dmg 可以单独覆盖；前端的顿帧、镜头、命中声也按它分档
+#   windup: 前摇毫秒数（只有 target 和 aoe）：出招后过这么久才结算命中，期间被打出硬直就打断，目标跑出范围就打空
+#   zone:   kind 为 zone 时放下的回血区：radius 半径、heal 每次回复最大生命的万分比、
+#           interval 隔多少毫秒回一次（默认 1000）、duration 持续毫秒数、look 画法（rune 法阵）
 skills:
-  slash:      { name: 斩击,   kind: target, range: 70,  cooldown: 0.7, damage: physical, ratio: 1.0, base: 4,  fx: melee,      color: "#ffd166",
+  slash:      { weight: light, name: 斩击,   kind: target, range: 70,  cooldown: 700, damage: physical, ratio: 10000, base: 4,  fx: melee,      color: "#ffd166",
                 desc: 普攻，砍面前的敌人 }
-  fireball:   { name: 火球术, kind: target, range: 280, cooldown: 2.0, damage: magic,    ratio: 1.5, base: 10, fx: projectile, color: "#ff7b39",
+  fireball:   { weight: medium, name: 火球术, kind: target, range: 280, cooldown: 2000, damage: magic,    ratio: 15000, base: 10, fx: projectile, color: "#ff7b39",
                 desc: 远程法术，打一个敌人 }
-  whirlwind:  { name: 旋风斩, kind: aoe,    radius: 110, cooldown: 5,  damage: physical, ratio: 1.2, base: 6,  fx: circle,     color: "#e0e0e0",
+  whirlwind:  { weight: heavy, windup: 80, name: 旋风斩, kind: aoe,    radius: 110, cooldown: 5000,  damage: physical, ratio: 12000, base: 6,  fx: circle,     color: "#e0e0e0",
                 desc: 原地转一圈，砍身边所有敌人 }
-  heal:       { name: 治疗术, kind: self,   cooldown: 8,  heal: 0.35, fx: heal, color: "#7dff9b",
+  heal:       { name: 治疗术, kind: self,   cooldown: 8000,  heal: 3500, fx: heal, color: "#7dff9b",
                 desc: 回复 35% 生命 }
-  warcry:     { name: 战吼,   kind: self,   cooldown: 15, fx: buff, color: "#ff4d6d",
+  warcry:     { name: 战吼,   kind: self,   cooldown: 15000, fx: buff, color: "#ff4d6d",
                 desc: 6 秒内攻击 +40%，移速 +25%,
-                buff: { name: 战吼, duration: 6, atk_pct: 0.4, speed_pct: 0.25 } }
-  shield:     { name: 护盾,   kind: self,   cooldown: 14, fx: shield, color: "#7fd8ff",
+                buff: { name: 战吼, duration: 6000, atk_pct: 4000, speed_pct: 2500 } }
+  shield:     { name: 护盾,   kind: self,   cooldown: 14000, fx: shield, color: "#7fd8ff",
                 desc: 8 秒内吸收 30% 生命的伤害,
-                buff: { name: 护盾, duration: 8, shield_pct: 0.3 } }
-  haste:      { name: 疾风步, kind: self,   cooldown: 10, fx: haste, color: "#9effd8",
+                buff: { name: 护盾, duration: 8000, shield_pct: 3000 } }
+  haste:      { name: 疾风步, kind: self,   cooldown: 10000, fx: haste, color: "#9effd8",
                 desc: 4 秒内移速 +70%,
-                buff: { name: 疾风步, duration: 4, speed_pct: 0.7, look: haste } }
-  holy_guard: { name: 圣光庇护, kind: self, cooldown: 25, fx: holy, color: "#ffe9a0",
+                buff: { name: 疾风步, duration: 4000, speed_pct: 7000, look: haste } }
+  holy_guard: { name: 圣光庇护, kind: self, cooldown: 25000, fx: holy, color: "#ffe9a0",
                 desc: 2 秒内不受任何伤害,
-                buff: { name: 圣光庇护, duration: 2, invulnerable: true, look: holy } }
-  blink:      { name: 闪现,   kind: dash,   distance: 170, cooldown: 8, fx: blink, color: "#b98cff",
+                buff: { name: 圣光庇护, duration: 2000, invulnerable: true, look: holy } }
+  blink:      { name: 闪现,   kind: dash,   distance: 170, cooldown: 8000, fx: blink, color: "#b98cff",
                 desc: 朝移动方向瞬移一段距离，撞墙就停 }
-  enchant:    { name: 烈焰附魔, kind: self, cooldown: 16, fx: enchant, color: "#ff8a3a",
+  enchant:    { name: 烈焰附魔, kind: self, cooldown: 16000, fx: enchant, color: "#ff8a3a",
                 desc: 8 秒内武器着火，物理技能额外造成法术伤害,
-                buff: { name: 烈焰附魔, duration: 8, bonus_magic: 0.6, look: fire } }
-  axe:        { name: 飞斧,   kind: line,   range: 320, cooldown: 3, damage: physical, ratio: 1.3, base: 6, fx: axe, color: "#d8dde6",
+                buff: { name: 烈焰附魔, duration: 8000, bonus_magic: 6000, look: fire } }
+  axe:        { weight: medium, name: 飞斧,   kind: line,   range: 320, cooldown: 3000, damage: physical, ratio: 13000, base: 6, fx: axe, color: "#d8dde6",
                 desc: 朝面向扔出飞斧，打中直线上第一个敌人 }
-  frost_nova: { name: 冰霜新星, kind: aoe,  radius: 120, cooldown: 12, damage: magic, ratio: 0.8, base: 6, fx: frost, color: "#8fd8ff",
+  frost_nova: { weight: medium, name: 冰霜新星, kind: aoe,  radius: 120, cooldown: 12000, damage: magic, ratio: 8000, base: 6, fx: frost, color: "#8fd8ff",
                 desc: 冻伤身边的敌人，3 秒内减速 50%,
-                debuff: { name: 冰冻, duration: 3, speed_pct: -0.5, look: frost } }
-  healing_spring: { name: 治愈之泉, kind: zone, cooldown: 40, fx: zone, color: "#7dffb0",
+                debuff: { name: 冰冻, duration: 3000, speed_pct: -5000, look: frost } }
+  healing_spring: { name: 治愈之泉, kind: zone, cooldown: 40000, fx: zone, color: "#7dffb0",
                 desc: 在脚下放一个回血法阵，60 秒内站在里面每秒回复 3% 生命,
-                zone: { name: 治愈之泉, radius: 110, heal: 0.03, interval: 1, duration: 60, look: rune, color: "#7dffb0" } }
+                zone: { name: 治愈之泉, radius: 110, heal: 300, interval: 1000, duration: 60000, look: rune, color: "#7dffb0" } }
 
   # 游侠
-  shot:        { name: 射击,   kind: target, range: 300, cooldown: 0.8, damage: physical, ratio: 1.0, base: 3, fx: arrow, color: "#f0e2b6",
+  shot:        { weight: light, name: 射击,   kind: target, range: 300, cooldown: 800, damage: physical, ratio: 10000, base: 3, fx: arrow, color: "#f0e2b6",
                 desc: 普攻，朝一个敌人射箭 }
-  pierce_shot: { name: 穿云箭, kind: line, pierce: true, range: 380, cooldown: 5, damage: physical, ratio: 1.4, base: 8, fx: pierce, color: "#ffe08a",
+  pierce_shot: { weight: medium, name: 穿云箭, kind: line, pierce: true, range: 380, cooldown: 5000, damage: physical, ratio: 14000, base: 8, fx: pierce, color: "#ffe08a",
                 desc: 朝面向射出一支穿透的箭，打中直线上所有敌人 }
-  arrow_rain:  { name: 箭雨,   kind: rain,   range: 260, radius: 90, distance: 180, cooldown: 9, damage: physical, ratio: 0.9, base: 5, fx: rain, color: "#cfe6ff",
+  arrow_rain:  { weight: light, name: 箭雨,   kind: rain,   range: 260, radius: 90, distance: 180, cooldown: 9000, damage: physical, ratio: 9000, base: 5, fx: rain, color: "#cfe6ff",
                 desc: 在目标（没有目标就在前方）脚下降下箭雨，打范围内所有敌人 }
-  roll:        { name: 翻滚,   kind: dash,   distance: 130, cooldown: 6, fx: roll, color: "#c8f0c0",
+  roll:        { name: 翻滚,   kind: dash,   distance: 130, cooldown: 6000, fx: roll, color: "#c8f0c0",
                 desc: 朝移动方向翻滚一段距离，撞墙就停 }
-  frost_arrow: { name: 冰霜箭, kind: target, range: 300, cooldown: 7, damage: magic, ratio: 1.0, base: 6, fx: frostarrow, color: "#8fd8ff",
+  frost_arrow: { weight: medium, name: 冰霜箭, kind: target, range: 300, cooldown: 7000, damage: magic, ratio: 10000, base: 6, fx: frostarrow, color: "#8fd8ff",
                 desc: 射出冰箭，3 秒内目标减速 40%,
-                debuff: { name: 冰冻, duration: 3, speed_pct: -0.4, look: frost } }
-  focus:       { name: 鹰眼专注, kind: self, cooldown: 16, fx: focus, color: "#ffd27a",
+                debuff: { name: 冰冻, duration: 3000, speed_pct: -4000, look: frost } }
+  focus:       { name: 鹰眼专注, kind: self, cooldown: 16000, fx: focus, color: "#ffd27a",
                 desc: 6 秒内攻击 +35%，移速 +10%,
-                buff: { name: 鹰眼, duration: 6, atk_pct: 0.35, speed_pct: 0.1 } }
+                buff: { name: 鹰眼, duration: 6000, atk_pct: 3500, speed_pct: 1000 } }
 
-  bite:       { name: 撕咬,   kind: target, range: 60,  cooldown: 1.2, damage: physical, ratio: 1.0, base: 2,  fx: melee, color: "#b8f28b" }
-  heavy_bite: { name: 猛扑,   kind: target, range: 60,  cooldown: 5,   damage: physical, ratio: 1.5, base: 3,  fx: melee, color: "#ffef5c" }
-  arrow:      { name: 骨箭,   kind: target, range: 260, cooldown: 1.6, damage: physical, ratio: 1.1, base: 3,  fx: projectile, color: "#e8e3d0" }
-  smash:      { name: 重锤,   kind: target, range: 75,  cooldown: 1.5, damage: physical, ratio: 1.3, base: 8,  fx: melee, color: "#ff9f43" }
-  boss_whirl: { name: 旋风斩, kind: aoe,    radius: 120, cooldown: 6,  damage: physical, ratio: 1.4, base: 10, fx: circle, color: "#ff6b6b" }
-  enrage:     { name: 狂暴,   kind: self,   cooldown: 20, fx: buff, color: "#ff0040",
-                buff: { name: 狂暴, duration: 8, atk_pct: 0.5, speed_pct: 0.3 } }
-  guard_hit:  { name: 长枪突刺, kind: target, range: 70, cooldown: 1.0, damage: physical, ratio: 1.1, base: 5, fx: melee, color: "#9ad0ff" }
-  guard_heal: { name: 包扎,   kind: self,   cooldown: 12, heal: 0.4, fx: heal, color: "#7dff9b" }
+  bite:       { weight: light, windup: 300, name: 撕咬,   kind: target, range: 60,  cooldown: 1200, damage: physical, ratio: 10000, base: 2,  fx: melee, color: "#b8f28b" }
+  heavy_bite: { weight: heavy, windup: 550, name: 猛扑,   kind: target, range: 60,  cooldown: 5000,   damage: physical, ratio: 15000, base: 3,  fx: melee, color: "#ffef5c" }
+  arrow:      { weight: light, windup: 450, name: 骨箭,   kind: target, range: 260, cooldown: 1600, damage: physical, ratio: 11000, base: 3,  fx: projectile, color: "#e8e3d0" }
+  smash:      { weight: heavy, windup: 600, name: 重锤,   kind: target, range: 75,  cooldown: 1500, damage: physical, ratio: 13000, base: 8,  fx: melee, color: "#ff9f43" }
+  boss_whirl: { weight: heavy, windup: 800, name: 旋风斩, kind: aoe,    radius: 120, cooldown: 6000,  damage: physical, ratio: 14000, base: 10, fx: circle, color: "#ff6b6b" }
+  enrage:     { name: 狂暴,   kind: self,   cooldown: 20000, fx: buff, color: "#ff0040",
+                buff: { name: 狂暴, duration: 8000, atk_pct: 5000, speed_pct: 3000 } }
+  guard_hit:  { weight: medium, windup: 300, name: 长枪突刺, kind: target, range: 70, cooldown: 1000, damage: physical, ratio: 11000, base: 5, fx: melee, color: "#9ad0ff" }
+  guard_heal: { name: 包扎,   kind: self,   cooldown: 12000, heal: 4000, fx: heal, color: "#7dff9b" }
 
   # 宠物（技能槽见 pets.yaml）
-  pet_bite:     { name: 撕咬,   kind: target, range: 55,  cooldown: 0.9, damage: physical, ratio: 1.0, base: 3, fx: melee, color: "#e8c9a0",
+  pet_bite:     { weight: light, name: 撕咬,   kind: target, range: 55,  cooldown: 900, damage: physical, ratio: 10000, base: 3, fx: melee, color: "#e8c9a0",
                 desc: 宠物近战普攻 }
-  pet_howl:     { name: 嚎叫,   kind: self,   cooldown: 12, fx: buff, color: "#ffcf6e",
+  pet_howl:     { name: 嚎叫,   kind: self,   cooldown: 12000, fx: buff, color: "#ffcf6e",
                 desc: 6 秒内攻击 +30%，移速 +20%,
-                buff: { name: 嚎叫, duration: 6, atk_pct: 0.3, speed_pct: 0.2 } }
-  pet_firebolt: { name: 小火球, kind: target, range: 260, cooldown: 1.8, damage: magic, ratio: 1.2, base: 6, fx: projectile, color: "#ff7b39",
+                buff: { name: 嚎叫, duration: 6000, atk_pct: 3000, speed_pct: 2000 } }
+  pet_firebolt: { weight: light, name: 小火球, kind: target, range: 260, cooldown: 1800, damage: magic, ratio: 12000, base: 6, fx: projectile, color: "#ff7b39",
                 desc: 宠物远程法术 }
-  pet_flare:    { name: 爆燃,   kind: aoe,    radius: 90, cooldown: 6, damage: magic, ratio: 0.9, base: 4, fx: circle, color: "#ffb347",
+  pet_flare:    { weight: medium, name: 爆燃,   kind: aoe,    radius: 90, cooldown: 6000, damage: magic, ratio: 9000, base: 4, fx: circle, color: "#ffb347",
                 desc: 身边小范围爆炸 }
-  pet_thorn:    { name: 荆棘术, kind: target, range: 220, cooldown: 2.0, damage: magic, ratio: 0.6, base: 3, fx: projectile, color: "#8fe08f",
+  pet_thorn:    { weight: light, name: 荆棘术, kind: target, range: 220, cooldown: 2000, damage: magic, ratio: 6000, base: 3, fx: projectile, color: "#8fe08f",
                 desc: 弱攻击，骚扰敌人 }
-  pet_mend:     { name: 愈合,   kind: ally,   range: 170, cooldown: 6, heal: 0.25, fx: heal, color: "#7dff9b",
+  pet_mend:     { name: 愈合,   kind: ally,   range: 170, cooldown: 6000, heal: 2500, fx: heal, color: "#7dff9b",
                 desc: 给主人回复 25% 最大生命 }

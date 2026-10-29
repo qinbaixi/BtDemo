@@ -5,8 +5,13 @@
 // Glows use cached radial-gradient sprites blended with 'lighter' instead of
 // shadowBlur, which keeps a busy fight cheap.
 
+import type { Material, Tier } from '../audio/recipes';
+import { FLIP_MS, FLIP_PPU, FLIP_SIZE, flipbook } from './flipbook';
+import type { DecalRequest } from './pixi/decals';
+
 const TAU = Math.PI * 2;
 const MAX_PARTICLES = 900;
+const BURST_SCALE: Record<Tier, number> = { light: 1, medium: 1.25, heavy: 1.6 };   // 命中序列帧按档位放大
 
 const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
 const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
@@ -161,6 +166,8 @@ export class FX {
   density: number;   // 粒子密度 0..1
   lookEnts: LookEnt[] = [];               // 这一帧带外观的实体（looks() 记下，drawTrails 画光晕）
   lookSpawnAt = new Map<string, number>(); // "实体 id:外观" -> 上次冒粒子的时间
+  decals: DecalRequest[] = [];            // 这一帧新排的地面印记，world.ts 取走交给 pixi/decals.ts
+  decalReset = false;                     // clear() 过：地上已有的印记也要清掉
 
   // resolve(id) returns the live {x, y, r} of an entity, or null.
   auras: () => Aura[];   // 每帧要画护盾泡泡的实体
@@ -180,6 +187,31 @@ export class FX {
     this.scheduledShake.length = 0;
     this.parts.length = 0;
     this.shake = 0;
+    this.decals.length = 0;
+    this.decalReset = true;
+  }
+
+  // decal 在地上留一个印记（裂纹、焦痕、霜、拖痕），见 pixi/decals.ts。
+  decal(request: DecalRequest) {
+    this.decals.push(request);
+  }
+
+  // hitBurst 在受击点播一遍材质的命中序列帧（render/flipbook.ts）：火星、骨渣、血点……
+  // dir 是受击方向的横向分量（朝哪边喷），tier 和暴击决定大小。
+  hitBurst(id: number, material: Material, tier: Tier, crit: boolean, dir: number, now: number) {
+    const p = this.pos(id, null);
+    if (!p) return;
+    const r = p.r || 14;
+    const scale = (BURST_SCALE[tier] ?? 1) + (crit ? 0.3 : 0);
+    const book = flipbook(material);
+    const flip = dir < 0;
+    // 跟着受击者走（被击退时火花不留在原地）；打在朝向攻击者的那一侧
+    this.spawn({
+      kind: 'flip', book, flip, anchor: id,
+      ox: -(flip ? -1 : 1) * r * 0.35, oy: -(p.h || r * 2.6) * 0.55,
+      vx: 0, vy: 0,
+      size: (FLIP_SIZE / FLIP_PPU) * scale, life: FLIP_MS * (0.85 + 0.15 * scale), born: now,
+    });
   }
 
   pos(id, fallback) {
@@ -579,6 +611,53 @@ export class FX {
     }
   }
 
+  // perfectBlock 是完美格挡：盾前炸开一颗金白色的十字星和两圈冲击环，金色火花朝攻击者那边喷，
+  // 画面跟着震开一圈（后期冲击波）。attackerId 用来定火花的方向，不在视野里就朝盾的正面。
+  perfectBlock(id, attackerId, now) {
+    const p = this.pos(id, null);
+    if (!p) return;
+    const r = p.r || 14;
+    let dir = Math.cos(p.facing ?? 0) < 0 ? -1 : 1;
+    const attacker = attackerId ? this.pos(attackerId, null) : null;
+    if (attacker && Math.abs(attacker.x - p.x) > 2) dir = attacker.x < p.x ? -1 : 1;
+    const ox = dir * r * 1.05;
+    const oy = -(p.h || r * 2.6) * 0.6;
+    const x = p.x + ox;
+    const y = p.y + oy;
+    this.effects.push({ kind: 'perfect', anchor: id, ox, oy, x, y, dir, r, rgb: rgbOf('#ffe08a'), born: now, life: 520 });
+    for (let i = 0; i < 26; i++) {
+      const a = (dir > 0 ? 0 : Math.PI) + rand(-1.3, 1.3);
+      const sp = rand(0.25, 0.7);
+      this.spawn({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.15, grav: 0.0014,
+        life: rand(260, 520), size: rand(1.4, 3), color: i % 3 ? '#fff6d0' : '#ffd166', kind: 'spark', drag: 0.975, born: now });
+    }
+  }
+
+  // guardBreak 是破防：盾面裂成几块往后飞，带一蓬金属碎屑和一圈灰尘。
+  guardBreak(id, now) {
+    const p = this.pos(id, null);
+    if (!p) return;
+    const r = p.r || 14;
+    const dir = Math.cos(p.facing ?? 0) < 0 ? -1 : 1;
+    const x = p.x + dir * r * 0.95;
+    const y = p.y - (p.h || r * 2.6) * 0.6;
+    const pieces = [];
+    for (let i = 0; i < 5; i++) {
+      // 盾面上的一段弧，碎开后各自朝外、往上飞，边飞边转
+      const a0 = -1.2 + i * 0.48;
+      const out = a0 + 0.24;
+      pieces.push({ a0, a1: a0 + 0.42, vx: (Math.cos(out) * 0.12 + 0.06) * dir, vy: Math.sin(out) * 0.12 - 0.16, spin: rand(-0.012, 0.012) });
+    }
+    this.effects.push({ kind: 'shatter', x, y, dir, r, pieces, rgb: rgbOf('#cfe2f2'), born: now, life: 620 });
+    for (let i = 0; i < 18; i++) {
+      const a = (dir > 0 ? 0 : Math.PI) + rand(-1.4, 1.4);
+      const sp = rand(0.15, 0.45);
+      this.spawn({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.18, grav: 0.0016,
+        life: rand(300, 600), size: rand(1.6, 3.2), color: i % 2 ? '#dfe8ff' : '#ff9a5a', kind: 'spark', drag: 0.98, born: now });
+    }
+    this.footDust(p.x, p.y, -dir, now);
+  }
+
   // shieldHit 是护盾吸收了伤害：泡泡亮一下，受击处荡开一圈波纹。
   shieldHit(id, now) {
     const p = this.pos(id, null);
@@ -602,6 +681,71 @@ export class FX {
   }
 
   // footDust 是跑动时脚下扬起的一小团土（浅土黄，暗色地面上看得出来）。dir 是移动方向（-1 左，1 右）。
+  // telegraph 是怪物前摇的预警：武器上闪一下白光；重招在会打到的地方画一圈逐渐填满的红色预警
+  // （范围技能围着施法者，单体技能跟着目标），ms 后正好填满，也就是命中的那一刻。
+  telegraph(srcId: number, dstId: number, radius: number, heavy: boolean, ms: number, now: number) {
+    const src = this.pos(srcId, null);
+    if (src) {
+      for (let i = 0; i < 7; i++) {
+        const a = rand(0, TAU);
+        this.spawn({ anchor: srcId, ox: rand(-6, 6), oy: -(src.r || 14) * 1.7 + rand(-4, 4), vx: Math.cos(a) * 0.05, vy: Math.sin(a) * 0.05,
+          drag: 0.96, life: rand(220, 360), size: rand(1.6, 2.8), color: i % 2 ? '#ffffff' : '#ffd0a0', kind: 'spark', born: now });
+      }
+    }
+    if (!heavy || ms < 120) return;
+    this.effects.push({ kind: 'warn', src: srcId, dst: dstId, radius, born: now, life: ms + 80, fill: ms, rgb: rgbOf('#ff4a3a') });
+  }
+
+  // cancel 收掉 id 还没落下的出招：预警圈、等着出手时才放的刀光（前摇被打断时）。
+  cancel(id: number) {
+    this.effects = this.effects.filter((f) => !(f.kind === 'warn' && f.src === id));
+    this.scheduled = this.scheduled.filter((f) => f.src !== id);
+  }
+
+  // deflect 让 id 正在挥出的近战刀光很快收掉（这一下被完美格挡弹开了，刀光不该再糊在盾上）。
+  deflect(id: number, now: number) {
+    for (const f of this.effects) {
+      if (f.kind === 'slash' && f.src === id && now - f.born < f.life) f.life = Math.max(1, now - f.born + 30);
+    }
+  }
+
+  // warnPos 是预警圈当前的中心和半径：范围技能跟着施法者，单体技能跟着目标。
+  warnPos(f) {
+    const at = f.dst ? this.pos(f.dst, null) : this.pos(f.src, null);
+    if (!at) return null;
+    return { x: at.x, y: at.y, r: f.dst ? (at.r || 14) * 1.9 : f.radius };
+  }
+
+  // warnGround 画预警圈（在 drawShapes 里画，见里面的说明）。
+  warnGround(ctx, f, now) {
+    const at = this.warnPos(f);
+    if (!at) return;
+    const k = clamp01((now - f.born) / f.fill);
+    const after = clamp01((now - f.born - f.fill) / 80);   // 命中后一闪就收
+    ctx.save();
+    // 画在特效层（角色上面），不然会被广场这类平铺在地上的物件盖住；用普通混合，红色在亮地面上才看得见
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.translate(at.x, at.y);
+    ctx.scale(1, 0.5);
+    ctx.globalAlpha = 1 - after;
+    // 外圈：深色描边垫底，亮的地面上也看得清
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(40,6,4,0.55)';
+    ctx.beginPath();
+    ctx.arc(0, 0, at.r, 0, TAU);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = rgba(whiten(f.rgb, 0.3 * k), 0.7 + 0.3 * k);
+    ctx.stroke();
+    // 里面从中心往外填满，填满的那一刻就是命中；快满时闪起来
+    const pulse = k > 0.7 ? 0.5 + 0.5 * Math.sin(now * 0.05) : 0;
+    ctx.fillStyle = rgba(f.rgb, 0.16 + 0.2 * k + 0.1 * pulse);
+    ctx.beginPath();
+    ctx.arc(0, 0, at.r * easeOutCubic(k), 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
   footDust(x, y, dir, now) {
     for (let i = 0; i < 4; i++) {
       this.spawn({ x: x - dir * rand(0, 8), y: y - rand(0, 3), vx: -dir * rand(0.015, 0.05), vy: -rand(0.008, 0.025),
@@ -731,6 +875,12 @@ export class FX {
         case 'blink': {
           const k = clamp01(t / 0.5);
           if (k < 1) add(f.x1, f.y1 - 18, 10 + 70 * easeOut(k), 6 * (1 - k));
+          break;
+        }
+        case 'perfect': {
+          // 波从盾外一圈开始扩：从中心起扩的话前几帧会把人拧成一团
+          const k = clamp01(t / 0.6);
+          if (k < 1) add(f.x, f.y, f.r * 2.5 + 100 * easeOut(k), 4 * (1 - k));
           break;
         }
       }
@@ -926,10 +1076,13 @@ export class FX {
         case 'pillar': this.pillar(ctx, f, t); break;
         case 'buff': this.buffTop(ctx, f, t); break;
         case 'parry': this.parry(ctx, f, t); break;
+        case 'perfect': this.perfect(ctx, f, t); break;
+        case 'shatter': this.shatter(ctx, f, now - f.born, t); break;
         case 'shieldForm': this.shieldForm(ctx, f, t); break;
         case 'axe': this.axe(ctx, f, t, now); break;
         case 'bolt': this.bolt(ctx, f, now - f.born); break;
         case 'rain': this.rainArrows(ctx, f, now - f.born); break;
+        case 'warn': this.warnGround(ctx, f, now); break;
       }
     }
     this.shieldAuras(ctx, now);
@@ -948,6 +1101,7 @@ export class FX {
       const t = (now - f.born) / f.life;
       if (t < 0 || t >= 1) continue;
       switch (f.kind) {
+        case 'warn': { const at = this.warnPos(f); if (at) add(at.x, at.y, at.r + 4, at.r * 0.5 + 4, at.r * 0.5 + 4); break; }
         case 'arrow': {
           const sp = this.pos(f.src, { x: f.sx, y: f.sy });
           const dp = this.pos(f.dst, { x: f.dx, y: f.dy });
@@ -968,6 +1122,8 @@ export class FX {
           break;
         }
         case 'parry': add(f.x, f.y, f.r * 3 + 10, f.r * 3 + 10, f.r * 3 + 10); break;
+        case 'perfect': { const p = this.pos(f.anchor, null); add(p ? p.x + f.ox : f.x, p ? p.y + f.oy : f.y, f.r * 5 + 20, f.r * 5 + 20, f.r * 5 + 20); break; }
+        case 'shatter': add(f.x, f.y, 140, 140, 140); break;
         case 'axe': {
           const k = clamp01(t);
           add(f.x0 + (f.x1 - f.x0) * k, f.y0 + (f.y1 - f.y0) * k - 22, 30, 30, 30);
@@ -1646,6 +1802,85 @@ export class FX {
     blit(ctx, glow('#cfeeff'), x, y, 34 * fade + 8, fade);
   }
 
+  // perfect 画完美格挡的十字星和冲击环（跟着举盾的人走）。这一层平时是叠加混合，
+  // 但在亮的地面上叠加会连人一起冲成白色（再被泛光放大），所以这里用普通混合、实色描边。
+  perfect(ctx, f, t) {
+    const p = this.pos(f.anchor, null);
+    const x = p ? p.x + f.ox : f.x;
+    const y = p ? p.y + f.oy : f.y;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    // 两圈冲击环：先一圈亮的快速扩开，再一圈金的慢一点；外面一圈深色衬底，亮地面上也看得见
+    for (const [delay, speed, color] of [[0, 1, whiten(f.rgb, 0.55)], [0.12, 0.75, f.rgb]] as [number, number, RGB][]) {
+      const k = clamp01((t - delay) / (1 - delay));
+      if (k <= 0 || k >= 1) continue;
+      const radius = f.r * (0.8 + 3.6 * easeOutCubic(k) * speed);
+      const width = 3 * (1 - k) + 0.8;
+      ctx.strokeStyle = `rgba(40,22,6,${0.45 * (1 - k)})`;
+      ctx.lineWidth = width + 2;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = rgba(color, 0.95 * (1 - k));
+      ctx.lineWidth = width;
+      ctx.stroke();
+    }
+    // 十字星：一下张到最大，再收回去；长的那条横着，短的竖着
+    const pop = t < 0.15 ? easeOut(t / 0.15) : 1 - easeOut((t - 0.15) / 0.6);
+    if (pop > 0) {
+      const long = f.r * 3 * pop;
+      const short = f.r * 1.6 * pop;
+      const thick = 2.2 * pop + 0.4;
+      const ray = (dx: number, dy: number, length: number) => {
+        ctx.beginPath();
+        ctx.moveTo(x + dx * length, y + dy * length);
+        ctx.lineTo(x - dy * thick, y + dx * thick);
+        ctx.lineTo(x - dx * length, y - dy * length);
+        ctx.lineTo(x + dy * thick, y - dx * thick);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      };
+      ctx.fillStyle = rgba(whiten(f.rgb, 0.75), Math.min(1, pop * 1.3));
+      ctx.strokeStyle = `rgba(120,70,10,${0.6 * pop})`;
+      ctx.lineWidth = 0.8;
+      ray(1, 0, long);
+      ray(0, 1, short);
+      ray(Math.SQRT1_2, Math.SQRT1_2, short * 0.55);
+      ray(Math.SQRT1_2, -Math.SQRT1_2, short * 0.55);
+    }
+    ctx.restore();
+  }
+
+  // shatter 画破防时盾面裂开的几块：每块是一段粗弧，各自飞出去、转着、往下掉、淡掉。
+  shatter(ctx, f, ms, t) {
+    const fade = 1 - clamp01((t - 0.4) / 0.6);
+    ctx.save();
+    ctx.lineCap = 'butt';
+    for (const piece of f.pieces) {
+      const px = f.x + piece.vx * ms;
+      const py = f.y + piece.vy * ms + 0.0007 * ms * ms;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(piece.spin * ms);
+      ctx.scale(f.dir, 1);
+      // 深色描边再一层亮面，在亮暗地面上都看得清
+      ctx.strokeStyle = `rgba(20,24,32,${0.85 * fade})`;
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.arc(-f.r * 0.9, 0, f.r * 0.9, piece.a0, piece.a1);
+      ctx.stroke();
+      ctx.strokeStyle = rgba(f.rgb, fade);
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.arc(-f.r * 0.9, 0, f.r * 0.9, piece.a0, piece.a1);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+    if (t < 0.25) blit(ctx, glow('#ffb07a'), f.x, f.y, 40 * (1 - t * 4) + 8, 1 - t * 4);
+  }
+
   gash(ctx, f, t) {
     const grow = easeOutCubic(clamp01(t / 0.35));
     const fade = 1 - clamp01((t - 0.35) / 0.65);
@@ -1768,6 +2003,18 @@ export class FX {
       const k = age / p.life;
       const a = k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85;
       switch (p.kind) {
+        case 'flip': {
+          // 序列帧自己带淡出，不再乘 a
+          const frames = p.book.frames;
+          if (!frames.length) break;
+          const image = frames[Math.min(frames.length - 1, Math.floor(k * frames.length))];
+          ctx.save();
+          ctx.globalCompositeOperation = p.book.blend === 'add' ? 'lighter' : 'source-over';
+          ctx.globalAlpha = 1;
+          ctx.frame(image, x, y, p.size, p.size, p.flip);
+          ctx.restore();
+          break;
+        }
         case 'spark': {
           ctx.globalAlpha = a;
           ctx.streak(x, y, x - p.vx * 28, y - p.vy * 28, p.size, p.color);

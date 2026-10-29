@@ -27,8 +27,8 @@ import (
 // 第 7 步之前只有 Manager（拿着锁）会碰这个会话，所以两个 goroutine 不会同时动同一个角色。
 // 宠物在源场景收回，到了目标场景由宠物系统重新召唤。
 
-// combatCooldown 是最近一次挨打或出手之后多少秒内算“在战斗中”，这期间不能切线。
-const combatCooldown = 5.0
+// combatCooldown 是最近一次挨打或出手之后多少毫秒内算“在战斗中”，这期间不能切线。
+const combatCooldown config.Millis = 5000
 
 // 不能迁移的原因（以提示消息发给玩家）。
 const (
@@ -40,16 +40,21 @@ const (
 
 // travelPack 是角色离开源场景时记下的、要按目标场景的时钟还原的东西。
 type travelPack struct {
-	cooldowns map[string]float64 // 技能 ID -> 还要冷却几秒
-	petSwapIn float64            // 还要几秒才能换宠物
-	x, y      float64            // 离开时的位置（换线时落在同一个位置）
+	cooldowns map[string]config.Millis // 技能 ID -> 还要冷却多少毫秒
+	petSwapIn config.Millis            // 还要多少毫秒才能换宠物
+	x, y      float64                  // 离开时的位置（换线时落在同一个位置）
 }
 
 // packPlayer 清掉角色身上只属于源场景的状态，记下要带走的计时。
 // 切场景时 Buff 和减益全部清掉（和多数 MMO 一样）。
-func packPlayer(player *core.Entity, now float64) travelPack {
+func packPlayer(player *core.Entity, now config.Millis) travelPack {
+	// 前摇、击退和韧性是源场景里的事（击退路线还是源场景的坐标），不带过去
+	player.Windup, player.Knock = nil, nil
+	player.PoiseTaken, player.PoiseHitAt = 0, 0
+	player.StunUntil = 0
+	player.Guard = core.Guard{}
 	pack := travelPack{
-		cooldowns: map[string]float64{},
+		cooldowns: map[string]config.Millis{},
 		petSwapIn: max(0, player.PetSwapAt-now),
 		x:         player.X,
 		y:         player.Y,
@@ -71,8 +76,8 @@ func packPlayer(player *core.Entity, now float64) travelPack {
 }
 
 // unpackPlayer 按目标场景的时钟 now 还原冷却和换宠物的计时。
-func unpackPlayer(player *core.Entity, pack travelPack, now float64) {
-	player.Cooldowns = map[string]float64{}
+func unpackPlayer(player *core.Entity, pack travelPack, now config.Millis) {
+	player.Cooldowns = map[string]config.Millis{}
 	for skillID, left := range pack.cooldowns {
 		player.Cooldowns[skillID] = now + left
 	}
@@ -82,8 +87,8 @@ func unpackPlayer(player *core.Entity, pack travelPack, now float64) {
 	}
 }
 
-// inCombat 报告 player 最近 combatCooldown 秒内有没有挨打或出手。
-func inCombat(player *core.Entity, now float64) bool {
+// inCombat 报告 player 最近 combatCooldown 毫秒内有没有挨打或出手。
+func inCombat(player *core.Entity, now config.Millis) bool {
 	hitRecently := player.LastHitAt > 0 && now-player.LastHitAt < combatCooldown
 	dealtRecently := player.LastDealtAt > 0 && now-player.LastDealtAt < combatCooldown
 	return hitRecently || dealtRecently
@@ -199,9 +204,9 @@ func (scene *Scene) SceneInfo() *pb.SceneInfo {
 			}
 		}
 		info.Portals = append(info.Portals, &pb.PortalInfo{
-			X:      core.F32(portal.X),
-			Y:      core.F32(portal.Y),
-			R:      core.F32(portal.Radius),
+			X:      core.I32(portal.X),
+			Y:      core.I32(portal.Y),
+			R:      core.I32(portal.Radius),
 			To:     proto.String(portal.To),
 			ToName: proto.String(toName),
 		})

@@ -219,7 +219,7 @@ func (sys *System) roll(classID string) *config.Item {
 		}
 	}
 	byRarity := map[string][]*config.Item{}
-	totalWeight := 0.0
+	totalWeight := 0
 	for _, item := range candidates {
 		if len(byRarity[item.Rarity]) == 0 {
 			totalWeight += loot.Rarity[item.Rarity]
@@ -230,7 +230,7 @@ func (sys *System) roll(classID string) *config.Item {
 		return nil
 	}
 	// 按 config.Rarities 的固定顺序累加权重，结果不依赖 map 的遍历顺序
-	pick := sys.state.Luck.Float64() * totalWeight
+	pick := sys.state.Luck.Intn(totalWeight) // 0..totalWeight-1 的整数
 	var chosen []*config.Item
 	for _, rarity := range config.Rarities {
 		pool := byRarity[rarity]
@@ -238,7 +238,7 @@ func (sys *System) roll(classID string) *config.Item {
 		if len(pool) == 0 || weight <= 0 {
 			continue
 		}
-		chosen = pool // 浮点误差让 pick 没落进任何一段时，用最后一个有权重的稀有度
+		chosen = pool
 		if pick < weight {
 			break
 		}

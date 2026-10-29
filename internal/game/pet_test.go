@@ -1,6 +1,7 @@
 package game
 
 import (
+	"github.com/qinbaixi/BtDemo/internal/config"
 	"math"
 	"testing"
 
@@ -24,8 +25,8 @@ func stepNoFlush(world *World) {
 }
 
 // stepFor 推进世界 seconds 秒（不同步）。
-func stepFor(world *World, seconds float64) {
-	end := world.State.Now() + seconds
+func stepFor(world *World, duration config.Millis) {
+	end := world.State.Now() + duration
 	for world.State.Now() < end {
 		stepNoFlush(world)
 	}
@@ -145,7 +146,7 @@ func TestPetSwapAndCooldown(t *testing.T) {
 	}
 	status := lastPetStatus(msgs)
 	if status.GetPet() != "ember" || int(status.GetEntity()) != ember.ID ||
-		math.Abs(float64(status.GetCooldown())-5) > 0.01 {
+		status.GetCooldown() != 5000 {
 		t.Fatalf("status after swap = %v", status)
 	}
 
@@ -163,7 +164,7 @@ func TestPetSwapAndCooldown(t *testing.T) {
 	}
 
 	// 冷却过了可以换；选的就是现在这只不算换，不占冷却
-	world.State.Clock.Now += 5.1
+	world.State.Clock.Now += 5100
 	sendPet(world, session, "ember")
 	if got := toasts(readMessages(t, session)); len(got) != 0 {
 		t.Fatalf("toasts = %v", got)
@@ -173,14 +174,14 @@ func TestPetSwapAndCooldown(t *testing.T) {
 		t.Fatal("pet not dismissed")
 	}
 	status = lastPetStatus(readMessages(t, session))
-	if status.GetPet() != "" || status.GetEntity() != 0 || status.GetCooldown() < 4.9 {
+	if status.GetPet() != "" || status.GetEntity() != 0 || status.GetCooldown() < 4900 {
 		t.Fatalf("status after dismiss = %v", status)
 	}
 	sendPet(world, session, "sprout") // 收回也占了冷却
 	if got := toasts(readMessages(t, session)); len(got) != 1 || got[0] != pet.ReasonCooldown {
 		t.Fatalf("toasts = %v, want %q", got, pet.ReasonCooldown)
 	}
-	world.State.Clock.Now += 5.1
+	world.State.Clock.Now += 5100
 	sendPet(world, session, "sprout")
 	if sprout := petOf(world, owner); sprout == nil || sprout.PetCfg.ID != "sprout" {
 		t.Fatalf("pet after the second swap = %+v", sprout)
@@ -196,7 +197,7 @@ func TestPetFollowsOwnerAndTeleports(t *testing.T) {
 
 	owner.X = 1700
 	world.Grid.Moved(owner)
-	stepFor(world, 3)
+	stepFor(world, 3000)
 	if dist := core.Dist(pup, owner); dist > 70 {
 		t.Fatalf("pet is %.0f away after following", dist)
 	}
@@ -208,7 +209,7 @@ func TestPetFollowsOwnerAndTeleports(t *testing.T) {
 	owner.X, owner.Y = 500, 1200
 	world.Grid.Moved(owner)
 	from := core.Dist(pup, owner)
-	if from <= world.State.Cfg.World.Pet.Teleport {
+	if from <= float64(world.State.Cfg.World.Pet.Teleport) {
 		t.Fatalf("test setup: pet only %.0f away", from)
 	}
 	stepNoFlush(world)
@@ -217,7 +218,7 @@ func TestPetFollowsOwnerAndTeleports(t *testing.T) {
 	}
 	events := castEvents(world, core.FXPetTeleport)
 	if len(events) != 1 || events[0].GetSrc() != int32(pup.ID) ||
-		math.Abs(float64(events[0].GetTx())-pup.X) > 0.2 || events[0].GetX() > 1800 {
+		math.Abs(float64(events[0].GetTx())-pup.X) >= 1 || events[0].GetX() > 1800 {
 		t.Fatalf("teleport events = %v", events)
 	}
 }
@@ -231,11 +232,11 @@ func TestPetAttacksOwnersTarget(t *testing.T) {
 	slime := world.Spawn.Template(world.State.Cfg.Templates["slime"], 1600, 400)
 	owner.Target = slime.ID
 
-	stepFor(world, 0.5)
+	stepFor(world, 500)
 	if pup.Target != slime.ID {
 		t.Fatalf("pet target = %d, want the owner's target %d", pup.Target, slime.ID)
 	}
-	stepFor(world, 4)
+	stepFor(world, 4000)
 	if slime.HP >= slime.Attr.MaxHP && !slime.Dead {
 		t.Fatalf("slime untouched: hp %v/%v", slime.HP, slime.Attr.MaxHP)
 	}
@@ -263,7 +264,7 @@ func TestPetGuardsOwnerAndLeash(t *testing.T) {
 	attacker.X, attacker.Y = 1500+800, 400
 	world.Grid.Moved(attacker)
 	owner.Target = 0
-	stepFor(world, 1)
+	stepFor(world, 1000)
 	if pup.Target != 0 {
 		t.Fatalf("pet still targets %d beyond the leash", pup.Target)
 	}
@@ -280,14 +281,14 @@ func TestHealerHealsOwnerBelowSixtyPercent(t *testing.T) {
 		t.Fatalf("pet = %+v", sprout)
 	}
 
-	owner.HP = owner.Attr.MaxHP * 0.8
+	owner.HP = owner.Attr.MaxHP * 8 / 10
 	before := owner.HP
-	stepFor(world, 2)
+	stepFor(world, 2000)
 	if owner.HP != before {
 		t.Fatalf("healed at 80%%: %v -> %v", before, owner.HP)
 	}
 
-	owner.HP = owner.Attr.MaxHP * 0.4
+	owner.HP = owner.Attr.MaxHP * 4 / 10
 	before = owner.HP
 	world.State.Events.Clear()
 	for i := 0; i < 60 && owner.HP == before; i++ {
@@ -300,8 +301,8 @@ func TestHealerHealsOwnerBelowSixtyPercent(t *testing.T) {
 	if len(heals) == 0 || heals[0].GetDst() != int32(owner.ID) {
 		t.Fatalf("heal events = %v", heals)
 	}
-	want := math.Round(owner.Attr.MaxHP * 0.25)
-	if got := owner.HP - before; math.Abs(got-want) > 1 {
+	want := owner.Attr.MaxHP * 25 / 100
+	if got := owner.HP - before; got < want-1 || got > want+1 {
 		t.Fatalf("healed %v, want %v", got, want)
 	}
 }
@@ -314,7 +315,7 @@ func TestAllySkillRules(t *testing.T) {
 	sendPet(world, session, "sprout")
 	sprout := petOf(world, owner)
 	mend := world.State.Cfg.Skills["pet_mend"]
-	owner.HP = owner.Attr.MaxHP * 0.5
+	owner.HP = owner.Attr.MaxHP * 5 / 10
 
 	sprout.X, sprout.Y = owner.X+400, owner.Y
 	world.Grid.Moved(sprout)
@@ -330,7 +331,7 @@ func TestAllySkillRules(t *testing.T) {
 	if err := world.Combat.Cast(sprout, mend, owner.ID); err != nil {
 		t.Fatal(err)
 	}
-	if owner.HP <= owner.Attr.MaxHP*0.5 {
+	if owner.HP <= owner.Attr.MaxHP*5/10 {
 		t.Fatal("owner not healed")
 	}
 }
@@ -373,6 +374,7 @@ func TestPlayersCannotDamagePets(t *testing.T) {
 	if err := world.Combat.Cast(slime, slime.Skills[0], pup.ID); err != nil {
 		t.Fatal(err)
 	}
+	landWindup(world, slime)
 	if pup.HP >= pup.Attr.MaxHP {
 		t.Fatal("monster did not hurt the pet")
 	}
@@ -416,18 +418,18 @@ func TestPetRespawns(t *testing.T) {
 	world.Sessions.Flush()
 	status := lastPetStatus(readMessages(t, session))
 	if !pup.Dead || status == nil || int(status.GetEntity()) != pup.ID ||
-		status.GetRespawnIn() < 9 || status.GetRespawnIn() > 10 {
+		status.GetRespawnIn() < 9000 || status.GetRespawnIn() > 10000 {
 		t.Fatalf("dead %v, status after death = %v", pup.Dead, status)
 	}
 
-	stepFor(world, 9)
+	stepFor(world, 9000)
 	if !pup.Dead {
 		t.Fatal("pet respawned early")
 	}
 	owner.X, owner.Y = 1000, 900 // 主人走远了：复活在主人身边
 	world.Grid.Moved(owner)
 	world.State.Events.Clear()
-	stepFor(world, 1.2)
+	stepFor(world, 1200)
 	if pup.Dead || pup.HP != pup.Attr.MaxHP || core.Dist(pup, owner) > 100 {
 		t.Fatalf("after respawn dead %v hp %v dist %.0f", pup.Dead, pup.HP, core.Dist(pup, owner))
 	}
@@ -451,7 +453,7 @@ func TestPetFollowsOwnerLifecycle(t *testing.T) {
 	if world.State.Ents.Get(pup.ID) != nil || owner.PetEntity != 0 || owner.PetID != "wolf_pup" {
 		t.Fatal("pet not recalled when the owner died")
 	}
-	stepFor(world, world.State.Cfg.World.Player.Respawn+0.5)
+	stepFor(world, world.State.Cfg.World.Player.Respawn+500)
 	if owner.Dead {
 		t.Fatal("owner did not respawn")
 	}
@@ -487,7 +489,7 @@ func TestPetLevelFollowsOwner(t *testing.T) {
 	if pup.Level != 3 {
 		t.Fatalf("pet level %d, want 3", pup.Level)
 	}
-	if want := template.Attrs.Vit + template.Growth.Vit*2; pup.Base.Vit != want {
+	if want := template.Attrs.Grown(template.Growth, 2).Vit; pup.Base.Vit != want {
 		t.Fatalf("pet vit %v, want %v", pup.Base.Vit, want)
 	}
 	if pup.Attr.MaxHP <= oldMax {
@@ -506,7 +508,7 @@ func TestCasterKeepsDistance(t *testing.T) {
 	slime.Attr.Speed = 0 // 站着不动，只看火灵怎么走位
 	owner.Target = slime.ID
 
-	stepFor(world, 3)
+	stepFor(world, 3000)
 	dist := core.EdgeDist(ember, slime)
 	if dist < 115 || dist > 225 {
 		t.Fatalf("ember edge distance to the target is %.0f, want 120 ~ 220", dist)

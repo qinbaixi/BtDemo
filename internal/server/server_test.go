@@ -92,7 +92,7 @@ func TestWebSocketProtocol(t *testing.T) {
 
 	move, _ := proto.Marshal(
 		&pb.ClientMsg{
-			Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Float32(1), Dy: proto.Float32(0)}},
+			Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Int32(10000), Dy: proto.Int32(0)}},
 		},
 	)
 	if err := conn.WriteMessage(websocket.BinaryMessage, move); err != nil {
@@ -100,7 +100,7 @@ func TestWebSocketProtocol(t *testing.T) {
 	}
 
 	var sawSelf bool
-	var firstX, lastX float32
+	var firstX, lastX int32
 	for i := 0; i < 40; i++ {
 		msg := read()
 		if enter := msg.GetEnter(); enter != nil {
@@ -209,7 +209,7 @@ func TestFirstFrameMustBeHello(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	move, _ := proto.Marshal(&pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Float32(1), Dy: proto.Float32(0)}}})
+	move, _ := proto.Marshal(&pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Int32(10000), Dy: proto.Int32(0)}}})
 	conn.WriteMessage(websocket.BinaryMessage, move)
 	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	if _, _, err := conn.ReadMessage(); err == nil {

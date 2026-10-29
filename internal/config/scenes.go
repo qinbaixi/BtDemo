@@ -23,8 +23,8 @@ type LineRules struct {
 	Hard int `yaml:"hard"`
 	// Min 是常驻的线数：这几条线没人也不关
 	Min int `yaml:"min"`
-	// IdleClose 是多出来的线空了多少秒后关闭
-	IdleClose float64 `yaml:"idle_close"`
+	// IdleClose 是多出来的线空了多少毫秒后关闭
+	IdleClose Millis `yaml:"idle_close"`
 }
 
 // Scene 是一个场景模板（scenes.yaml 的一项）：一张地图和地图上的怪物、回血区、出生点。
@@ -158,7 +158,7 @@ func (scenes *Scenes) fillLineRules() error {
 		defaults.Min = 1
 	}
 	if defaults.IdleClose <= 0 {
-		defaults.IdleClose = 120
+		defaults.IdleClose = 120000
 	}
 	scenes.Lines = defaults
 	for _, scene := range scenes.List {

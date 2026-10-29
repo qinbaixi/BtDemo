@@ -490,10 +490,28 @@ function eyes(ctx, x, y, color = '#16101c', h = 1.8) {
 const KNIGHT_WOUND = 3.55;
 const KNIGHT_STRUCK = 1.25;
 
+// knightBrokenLean 是破防时身体的后仰：一下仰过去，晃一晃，最后站直。
+function knightBrokenLean(k) {
+  const back = k < 0.1 ? smooth(k / 0.1) : 1 - smooth(clamp01((k - 0.55) / 0.45));
+  return -0.32 * back + 0.05 * Math.sin(k * 14) * back;
+}
+
 function knightArms(q, g) {
   if (q.act) return [q.act.far, q.act.near];
   const ph = q.ph;
   if (!ph && q.dead >= 0) return [g.arms[0], [g.arms[1][0] * 0.6 + 0.5, -0.9 + g.arms[1][1] * 0.3]];
+  if (!ph && q.broken >= 0) {
+    // 破防：盾被砸得甩到身后、手臂张开，剑也垂下来；后三成慢慢收回站姿
+    const back = q.broken < 0.12 ? smooth(q.broken / 0.12) : 1 - smooth(clamp01((q.broken - 0.7) / 0.3));
+    const idle = [[0.9, 1.3], [0.35, 0.6]];
+    const open = [[0.25, 0.35], [-0.95, 0.25]];
+    return idle.map((joint, side) => joint.map((angle, i) => angle + (open[side][i] - angle) * back));
+  }
+  if (!ph && q.blocking && q.parry >= 0) {
+    // 完美格挡：盾猛地往前一顶（手臂几乎伸直），再收回格挡架势
+    const push = q.parry < 0.2 ? smooth(q.parry / 0.2) : 1 - smooth((q.parry - 0.2) / 0.8);
+    return [[-1.9 + 0.3 * push, -0.4], [0.8 + 0.6 * push, 2.1 - 1.4 * push]];
+  }
   if (!ph && q.blocking) {
     // 格挡：中世纪骑士的架势。近侧手把盾竖在身前护住胸口和下巴，
     // 远侧手把剑举过肩、剑尖斜向后上方，随时能劈下来（剑和盾分开，不会叠在一起）
@@ -919,7 +937,9 @@ function drawKnightBody(ctx, q) {
     legs: skin.legs, boots: skin.boots, body: steel, sleeve: cloth, forearm: steel, hand: skin.hand,
     skin: '#f0c8a0', shoulder: 9, waist: 6, headR: 7.4,
     lean: (q) => (act ? act.lean + (act.jitter ? Math.sin(q.time * 0.07) * act.jitter * 0.03 : 0)
-      : q.ph ? arc3(q.ph, 0, -0.22, 0.28) : q.blocking && !(q.dead >= 0) ? 0.14 : 0),
+      : q.ph ? arc3(q.ph, 0, -0.22, 0.28) : q.dead >= 0 ? 0
+        : q.broken >= 0 ? knightBrokenLean(q.broken)
+          : q.blocking ? 0.14 + (q.parry >= 0 ? 0.16 * Math.sin(Math.min(1, q.parry / 0.4) * Math.PI) : 0) : 0),
     arms: knightArms,
     adjust: knightStance,
     back(ctx, q, B) {

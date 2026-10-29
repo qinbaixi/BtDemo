@@ -7,6 +7,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/qinbaixi/BtDemo/internal/bt"
+	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
@@ -19,19 +20,22 @@ type Agent struct {
 
 // 移动任务使用的速度倍率和超时时间。
 const (
-	wanderSpeed      = 0.5
-	wanderTimeout    = 6.0 // 秒
-	returnHomeSpeed  = 1.5
-	fleeSpeed        = 1.2
-	fleeTimeout      = 4.0 // 秒
-	attackerWindow   = 5.0 // 受击后，攻击者保持为优先目标的秒数
-	lostTargetFactor = 2.0 // 距离超过 Range*lostTargetFactor 的目标会被丢弃
+	wanderSpeed                    = 0.5
+	wanderTimeout                  = 6.0 // 秒
+	returnHomeSpeed                = 1.5
+	fleeSpeed                      = 1.2
+	fleeTimeout                    = 4.0  // 秒
+	attackerWindow   config.Millis = 5000 // 受击后，攻击者保持为优先目标的毫秒数
+	lostTargetFactor               = 2.0  // 距离超过 Range*lostTargetFactor 的目标会被丢弃
 )
 
 // step 返回本 tick 内 agent 以给定速度倍率可以移动的距离。
 func (agent *Agent) step(mult float64) float64 {
-	return agent.Entity.Attr.Speed * mult * agent.sys.state.Clock.Dt
+	return float64(agent.Entity.Attr.Speed) * mult * agent.sys.state.Clock.DtSeconds()
 }
+
+// seconds 把游戏时钟的毫秒换成行为树用的秒（行为树运行时和编辑器里的参数都按秒算）。
+func seconds(at config.Millis) float64 { return float64(at) / 1000 }
 
 // target 在 agent 当前的目标仍然存活时返回该目标；否则清除目标并返回 nil。
 func (agent *Agent) target() *core.Entity {
@@ -263,7 +267,7 @@ func (sys *System) register() {
 			ctx.Explain("没被攻击过")
 			return false
 		}
-		ago, limit := ctx.Now-agent.Entity.LastHitAt, ctx.Node.Num("Seconds", 3)
+		ago, limit := ctx.Now-seconds(agent.Entity.LastHitAt), ctx.Node.Num("Seconds", 3)
 		ctx.Explain("%.1fs 前受击 %s %.0fs", ago, cmp(ago <= limit, "≤", ">"), limit)
 		return ago <= limit
 	})
@@ -280,7 +284,7 @@ func (sys *System) register() {
 		entity.SetTarget(0)
 		if attacker := sys.state.Ents.Get(entity.LastAttacker); attacker.Alive() &&
 			sys.state.Hostile(entity, attacker) &&
-			ctx.Now-entity.LastHitAt <= attackerWindow {
+			sys.state.Now()-entity.LastHitAt <= attackerWindow {
 			entity.SetTarget(attacker.ID)
 			ctx.Explain("改打攻击者 %s", who(attacker))
 			return

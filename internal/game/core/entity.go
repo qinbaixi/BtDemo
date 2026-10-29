@@ -35,6 +35,7 @@ type Entity struct {
 	Transform
 	Stats
 	Combat
+	Impact
 	Life
 	Control
 	Steering
@@ -64,6 +65,8 @@ type Identity struct {
 }
 
 // Transform 描述实体所在的位置（由 move 和 aoi 管理）。
+// 坐标在服务器内部用浮点做移动、碰撞和寻路的几何计算（亚像素的位移要能累积起来），
+// 下发给客户端时向下取整成整数像素（见 FloorI32）。
 type Transform struct {
 	X, Y         float64
 	HomeX, HomeY float64
@@ -74,54 +77,106 @@ type Transform struct {
 type Stats struct {
 	Level  int
 	Exp    int
-	Base   config.Attrs // 基础属性，包含等级成长
-	Growth config.Attrs // 每次升级时加到 Base 上
-	Speed  float64      // Buff 生效前的基础移动速度
+	Born   config.Attrs // 1 级时的基础属性
+	Base   config.Attrs // 基础属性，包含等级成长：Born.Grown(Growth, Level-1)
+	Growth config.Attrs // 每级的成长（万分之一点）
+	Speed  int          // Buff 生效前的基础移动速度（像素 / 秒）
 	Attr   Derived
-	HP     float64
+	HP     int
+	// RegenCarry 是持续回血还没攒够 1 点的零头（万分之一点），见 combat 的 regen
+	RegenCarry int
 }
 
-// Derived 是根据基础属性、等级和 Buff 计算得出的属性。
+// Derived 是根据基础属性、等级和 Buff 计算得出的属性，全部是整数（公式结果向下取整）。
 type Derived struct {
-	MaxHP   float64
-	Atk     float64 // 物理攻击
-	MAtk    float64 // 法术攻击
-	Def     float64 // 物理防御
-	MDef    float64 // 法术防御
-	Crit    float64 // 暴击率 0..1
-	CritDmg float64 // 暴击倍率
-	Speed   float64 // 每秒像素数
-	CDR     float64 // 冷却缩减 0..config.MaxCDR：技能冷却 ×(1-CDR)
+	MaxHP   int
+	Atk     int                // 物理攻击
+	MAtk    int                // 法术攻击
+	Def     int                // 物理防御
+	MDef    int                // 法术防御
+	Crit    config.BasisPoints // 暴击率，万分比
+	CritDmg config.BasisPoints // 暴击倍率，万分比（15000 = 1.5 倍）
+	Speed   int                // 每秒像素数
+	CDR     config.BasisPoints // 冷却缩减 0..config.MaxCDR（万分比）：技能冷却 ×(1-CDR)
 }
 
 // Combat 包含实体的技能、Buff，以及它与谁战斗（由 combat 管理）。
 type Combat struct {
 	Skills    []*config.Skill
-	Cooldowns map[string]float64 // 技能 ID -> 再次可用的时间
+	Cooldowns map[string]config.Millis // 技能 ID -> 再次可用的时刻（毫秒）
 	Buffs     []*Buff
 
-	Target       int     // 实体 ID，0 表示无
-	LastAttacker int     // 最近一次攻击者的实体 ID
-	LastHitAt    float64 // 最近一次受击的时间
-	LastDealtAt  float64 // 最近一次出手打人（造成伤害，含被免疫的）的时间，0 表示没打过
+	Target       int           // 实体 ID，0 表示无
+	LastAttacker int           // 最近一次攻击者的实体 ID
+	LastHitAt    config.Millis // 最近一次受击的时刻
+	LastDealtAt  config.Millis // 最近一次出手打人（造成伤害，含被免疫的）的时刻，0 表示没打过
 
 	// CanPick 为 true 时玩家可以重新挑技能：进游戏或死亡之后、放下一个技能之前（由 session、combat 管理）
 	CanPick bool
 	// AmbushUntil 之前的下一次伤害必定暴击（ambush 特效，位移技能后设置）
-	AmbushUntil float64
+	AmbushUntil config.Millis
 }
+
+// Impact 是挨打和出招的过程状态：前摇、击退、硬直、韧性（由 combat 管理，move 和 ai 读取）。
+type Impact struct {
+	// Windup 是正在前摇的技能；nil 表示没有在前摇
+	Windup *Windup
+	// Knock 是正在进行的击退位移；nil 表示没有
+	Knock *Knock
+	// StunUntil 之前处于硬直：不能移动、不能出招，行为树暂停
+	StunUntil config.Millis
+	// PoiseTaken 是最近被打掉的韧性，PoiseHitAt 是最近一次被打掉的时刻（过了 hit.poise_reset 毫秒清零）
+	PoiseTaken int
+	PoiseHitAt config.Millis
+	Guard
+}
+
+// Guard 是格挡的状态（只有能格挡的玩家用到，由 session 和 combat 管理）。
+type Guard struct {
+	// BlockFace 是举盾时盾朝着的一侧（-1 左，1 右）；选了目标时盾朝着目标，见 combat 的 blockFacing
+	BlockFace int
+	// ParryUntil 之前挡住的近战是完美格挡（举盾那一刻开窗口）
+	ParryUntil config.Millis
+	// BlockLoweredAt 是上一次放下盾的时刻：放下不够久再举起没有完美格挡窗口
+	BlockLoweredAt config.Millis
+	// GuardSpent 是已经扣掉的架势（万分比），0 = 满，10000 = 扣空（破防）；用 SetGuardSpent 改
+	GuardSpent config.BasisPoints
+	// GuardCarry 是架势回复还没攒够 1 个万分比的零头，见 combat 的 regenGuard
+	GuardCarry int64
+	// GuardHitAt 是最近一次挡住东西的时刻，过一会儿架势才开始回复
+	GuardHitAt config.Millis
+	// GuardBroken 为 true 表示被破防了、架势还没回到能再举盾的程度
+	GuardBroken bool
+}
+
+// Windup 是一次还没结算的出招：到 HitAt 才判定命中。
+type Windup struct {
+	Skill  *config.Skill
+	Target int // target 技能的目标；aoe 为 0
+	HitAt  config.Millis
+}
+
+// Knock 是一段击退位移：从 From 在 Start 开始，Duration 毫秒内缓出地走到 To。
+type Knock struct {
+	From, To nav.Vec
+	Start    config.Millis
+	Duration config.Millis
+}
+
+// Stunned 报告 entity 在 now 时是否处于硬直。
+func (impact *Impact) Stunned(now config.Millis) bool { return now < impact.StunUntil }
 
 // Buff 是一个生效中的限时修饰效果。
 type Buff struct {
 	Cfg    *config.Buff
-	Until  float64
-	Absorb float64 // 护盾还能吸收的伤害（Cfg.ShieldPct > 0 时）
+	Until  config.Millis
+	Absorb int // 护盾还能吸收的伤害（Cfg.ShieldPct > 0 时）
 }
 
 // Life 表示实体是否死亡，以及何时重生（由 spawn 管理）。
 type Life struct {
 	Dead      bool
-	RespawnAt float64
+	RespawnAt config.Millis
 }
 
 // Control 是玩家的输入（由 session 管理，由 move 读取）。
@@ -136,8 +191,8 @@ type Steering struct {
 	Goal     nav.Vec   // 规划路径时所指向的目标位置
 	Reaches  bool      // 路径是否终止于目标（false：停在最近的可达位置）
 	Planned  bool
-	RepathAt float64 // 即使目标没有移动，也在此时间重新规划路径
-	StuckFor float64 // 沿路径行走时几乎没有移动的秒数
+	RepathAt config.Millis // 即使目标没有移动，也在此时刻重新规划路径
+	StuckFor config.Millis // 沿路径行走时几乎没有移动的毫秒数
 }
 
 // Brain 是怪物或 NPC 的行为树（由 ai 管理）。
@@ -166,7 +221,7 @@ type Companion struct {
 	// PetEntity 是宠物实体的 ID；0 = 现在场上没有（收回了，或主人死亡期间）
 	PetEntity int
 	// PetSwapAt 之前不能再换宠物
-	PetSwapAt float64
+	PetSwapAt config.Millis
 	// PetDeadSeen 为 true 表示宠物这次死亡已经通知过主人
 	PetDeadSeen bool
 	// PetDirty 为 true 表示宠物的状态变了（召唤、收回、死亡、复活、换宠物），
@@ -248,12 +303,12 @@ func (entity *Entity) HomeDist() float64 {
 	return math.Hypot(entity.X-entity.HomeX, entity.Y-entity.HomeY)
 }
 
-// HPRatio 为 HP / MaxHP。
+// HPRatio 为 HP / MaxHP（只给行为树做判断用，不下发）。
 func (entity *Entity) HPRatio() float64 {
 	if entity.Attr.MaxHP <= 0 {
 		return 0
 	}
-	return entity.HP / entity.Attr.MaxHP
+	return float64(entity.HP) / float64(entity.Attr.MaxHP)
 }
 
 // Invulnerable 报告 entity 身上有没有无敌的 Buff。
@@ -276,8 +331,8 @@ func (entity *Entity) Looks() int32 {
 }
 
 // Shield 是 entity 身上所有护盾还能吸收的伤害之和。
-func (entity *Entity) Shield() float64 {
-	sum := 0.0
+func (entity *Entity) Shield() int {
+	sum := 0
 	for _, buff := range entity.Buffs {
 		sum += buff.Absorb
 	}

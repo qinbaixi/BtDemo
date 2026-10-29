@@ -137,7 +137,7 @@ func TestPortalMovesPlayerToAnotherScene(t *testing.T) {
 	}
 	oldPet := player.PetEntity
 	player.Level, player.Exp = 3, 7
-	player.Cooldowns["fireball"] = village.State.Now() + 4
+	player.Cooldowns["fireball"] = village.State.Now() + 4000
 	player.Buffs = append(player.Buffs, &core.Buff{
 		Cfg:   village.State.Cfg.Skills["warcry"].Buff,
 		Until: village.State.Now() + 30,
@@ -145,9 +145,9 @@ func TestPortalMovesPlayerToAnotherScene(t *testing.T) {
 	items := len(player.Items)
 
 	portal := village.Portals.List()[0]
-	watcher.Player.X, watcher.Player.Y = portal.X-60, portal.Y
+	watcher.Player.X, watcher.Player.Y = float64(portal.X-60), float64(portal.Y)
 	village.Grid.Moved(watcher.Player)
-	player.X, player.Y = portal.X, portal.Y
+	player.X, player.Y = float64(portal.X), float64(portal.Y)
 	village.Grid.Moved(player)
 	pump(manager, 10)
 	sentMessages(t, watcher)
@@ -166,11 +166,11 @@ func TestPortalMovesPlayerToAnotherScene(t *testing.T) {
 		t.Fatal("buffs should be cleared on travel")
 	}
 	left := player.Cooldowns["fireball"] - graveyard.State.Now()
-	if left < 2 || left > 3 { // 设的时候还剩 4 秒，之后过了 1.5 秒（30 个 tick）
-		t.Fatalf("fireball cooldown left %.2fs, want about 2.5s", left)
+	if left < 2000 || left > 3000 { // 设的时候还剩 4 秒，之后过了 1.5 秒（30 个 tick）
+		t.Fatalf("fireball cooldown left %dms, want about 2500ms", left)
 	}
 	back := graveyard.Portals.List()[0]
-	if distance := math.Hypot(player.X-back.X, player.Y-back.Y); distance <= back.Radius || distance > 200 {
+	if distance := math.Hypot(player.X-float64(back.X), player.Y-float64(back.Y)); distance <= float64(back.Radius) || distance > 200 {
 		t.Fatalf("arrived %.0fpx from the return portal, want just outside it", distance)
 	}
 	msgs := sentMessages(t, client)

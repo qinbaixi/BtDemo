@@ -4,6 +4,7 @@
 
 import { Container, Graphics, Sprite, Texture, type RenderLayer } from 'pixi.js';
 import { MODEL_SCALE, modelBox } from '../../game/config';
+import { SETTINGS } from '../../game/settings';
 import { art, type LoadedCharacter } from '../art';
 import { drawModel } from '../models';
 import { CanvasSprite } from './canvasSprite';
@@ -21,6 +22,8 @@ export interface Pose {
   x: number; y: number; r: number; color: string; facing: number; walk: number;
   moving: boolean; attack: number; hit: number; dead: number; time: number; isSelf: boolean;
   blocking?: boolean;   // 正在格挡（举盾）
+  parry?: number;       // 完美格挡动作的进度 0..1（-1 = 没有）
+  broken?: number;      // 被破防动作的进度 0..1（-1 = 没有）
   action?: string;      // 攻击时做的是哪个动作（玩家技能的 fx 名，空表示普通攻击）
   knockX?: number;      // 受击被推开的显示偏移（像素，服务端位置不变）
   knockY?: number;
@@ -132,7 +135,8 @@ export class ActorView {
       this.drawnRes = res;
     }
 
-    const flash = !dead && pose.hit >= 0 && pose.hit < HIT_FLASH ? 1 - pose.hit / HIT_FLASH : 0;
+    // 设置里关了闪白时不闪（受击还有形变和火花）
+    const flash = SETTINGS.flash && !dead && pose.hit >= 0 && pose.hit < HIT_FLASH ? 1 - pose.hit / HIT_FLASH : 0;
     if (hq) {
       this.ink ??= new InkFilter(this.rim);
       this.ink.set(dead, flash);
@@ -186,7 +190,8 @@ export class ActorView {
   }
 
   private isIdle(pose: Pose): boolean {
-    return !pose.moving && pose.attack < 0 && pose.hit < 0 && pose.dead < 0 && !pose.blocking;
+    return !pose.moving && pose.attack < 0 && pose.hit < 0 && pose.dead < 0 && !pose.blocking
+      && !((pose.parry ?? -1) >= 0) && !((pose.broken ?? -1) >= 0);
   }
 
   // updateXray 显示或隐藏剪影：和身体用同一张图、同样的变换，画在剪影层里。

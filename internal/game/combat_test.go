@@ -5,7 +5,6 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/combat"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
-	"math"
 	"testing"
 
 	"github.com/qinbaixi/BtDemo/internal/config"
@@ -42,6 +41,14 @@ func testWorld(obstacles ...nav.Shape) *World {
 	return world
 }
 
+// landWindup 让 entity 正在前摇的那一下马上落下（测试里不用等几个 tick）。
+func landWindup(world *World, entity *core.Entity) {
+	if entity.Windup != nil {
+		entity.Windup.HitAt = world.State.Now()
+		world.Combat.Tick()
+	}
+}
+
 // addTestEntity 在 world 中放入一个半径为 16 的存活实体。"player" 的 Kind 为 core.KindPlayer，其余为 core.KindMonster。
 func addTestEntity(
 	world *World,
@@ -53,8 +60,8 @@ func addTestEntity(
 	entity := &core.Entity{
 		Identity:  core.Identity{ID: id, Kind: core.KindMonster, Faction: faction},
 		Transform: core.Transform{X: x, Y: y, HomeX: x, HomeY: y, Radius: 16},
-		Stats:     core.Stats{Level: 1, Base: base, Speed: 100},
-		Combat:    core.Combat{Cooldowns: map[string]float64{}},
+		Stats:     core.Stats{Level: 1, Born: base, Base: base, Speed: 100},
+		Combat:    core.Combat{Cooldowns: map[string]config.Millis{}},
 	}
 	if faction == "player" {
 		entity.Kind = core.KindPlayer
@@ -71,9 +78,9 @@ func slashSkill() *config.Skill {
 		Name:     "斩击",
 		Kind:     "target",
 		Range:    70,
-		Cooldown: 0.7,
+		Cooldown: 700,
 		Damage:   "physical",
-		Ratio:    1,
+		Ratio:    10000,
 		Base:     4,
 		FX:       "melee",
 	}
@@ -83,14 +90,14 @@ func checkDerived(t *testing.T, got, want core.Derived) {
 	t.Helper()
 	fields := []struct {
 		name      string
-		got, want float64
+		got, want int
 	}{
 		{"MaxHP", got.MaxHP, want.MaxHP}, {"Atk", got.Atk, want.Atk}, {"MAtk", got.MAtk, want.MAtk},
 		{"Def", got.Def, want.Def}, {"MDef", got.MDef, want.MDef}, {"Crit", got.Crit, want.Crit},
 		{"CritDmg", got.CritDmg, want.CritDmg}, {"Speed", got.Speed, want.Speed},
 	}
 	for _, field := range fields {
-		if math.Abs(field.got-field.want) > 1e-9 {
+		if field.got != field.want {
 			t.Errorf("%s = %v, want %v", field.name, field.got, field.want)
 		}
 	}
@@ -99,16 +106,16 @@ func checkDerived(t *testing.T, got, want core.Derived) {
 func TestComputeDerived(t *testing.T) {
 	base := config.Attrs{Str: 10, Agi: 10, Int: 10, Vit: 10}
 	checkDerived(t, attr.Compute(base, 100, nil), core.Derived{
-		MaxHP: 220, Atk: 33, MAtk: 33, Def: 19, MDef: 19, Crit: 0.09, CritDmg: 1.55, Speed: 100,
+		MaxHP: 220, Atk: 33, MAtk: 33, Def: 19, MDef: 19, Crit: 900, CritDmg: 15500, Speed: 100,
 	})
 
-	// 两个 Buff：Atk/MAtk 乘以 1.5，Def/MDef 乘以 1.1，Speed 乘以 1.25。
+	// 两个 Buff：Atk/MAtk 乘以 1.5，Def/MDef 乘以 1.1，Speed 乘以 1.25（向下取整）。
 	buffs := []*core.Buff{
-		{Cfg: &config.Buff{AtkPct: 0.4, DefPct: 0.1, SpeedPct: 0.25}, Until: 10},
-		{Cfg: &config.Buff{AtkPct: 0.1}, Until: 10},
+		{Cfg: &config.Buff{AtkPct: 4000, DefPct: 1000, SpeedPct: 2500}, Until: 10000},
+		{Cfg: &config.Buff{AtkPct: 1000}, Until: 10000},
 	}
 	checkDerived(t, attr.Compute(base, 100, buffs), core.Derived{
-		MaxHP: 220, Atk: 49.5, MAtk: 49.5, Def: 20.9, MDef: 20.9, Crit: 0.09, CritDmg: 1.55, Speed: 125,
+		MaxHP: 220, Atk: 49, MAtk: 49, Def: 20, MDef: 20, Crit: 900, CritDmg: 15500, Speed: 125,
 	})
 }
 
@@ -121,7 +128,7 @@ func TestRecalcKeepsHPRatio(t *testing.T) {
 	if player.Attr.MaxHP != 280 {
 		t.Fatalf("MaxHP = %v, want 280", player.Attr.MaxHP)
 	}
-	if math.Abs(player.HP-140) > 1e-9 {
+	if player.HP != 140 {
 		t.Errorf("HP = %v, want 140 (half of the new MaxHP)", player.HP)
 	}
 }
@@ -159,12 +166,11 @@ func TestDamageSetsLastAttacker(t *testing.T) {
 	world := testWorld()
 	player := addTestEntity(world, 1, "player", 0, 0, playerBase)
 	monster := addTestEntity(world, 2, "monster", 60, 0, monsterBase)
-	world.State.Clock.Now = 3
+	world.State.Clock.Now = 3000
 
 	skill := slashSkill()
-	if dmg, _ := world.Combat.CalcDamage(player, monster, skill); dmg < 1 ||
-		dmg != math.Round(dmg) {
-		t.Fatalf("CalcDamage = %v, want a whole number >= 1", dmg)
+	if dmg, _ := world.Combat.CalcDamage(player, monster, skill); dmg < 1 {
+		t.Fatalf("CalcDamage = %v, want >= 1", dmg)
 	}
 	if err := world.Combat.Cast(player, skill, monster.ID); err != nil {
 		t.Fatalf("cast: %v", err)
@@ -172,9 +178,9 @@ func TestDamageSetsLastAttacker(t *testing.T) {
 	if monster.HP >= monster.Attr.MaxHP {
 		t.Errorf("HP = %v, want less than MaxHP %v", monster.HP, monster.Attr.MaxHP)
 	}
-	if monster.LastAttacker != player.ID || monster.LastHitAt != 3 {
+	if monster.LastAttacker != player.ID || monster.LastHitAt != 3000 {
 		t.Errorf(
-			"LastAttacker = %d, LastHitAt = %v; want %d, 3",
+			"LastAttacker = %d, LastHitAt = %v; want %d, 3000",
 			monster.LastAttacker,
 			monster.LastHitAt,
 			player.ID,
@@ -199,9 +205,9 @@ func TestAOEHitsOnlyHostileInRadius(t *testing.T) {
 		Name:     "旋风斩",
 		Kind:     "aoe",
 		Radius:   110,
-		Cooldown: 5,
+		Cooldown: 5000,
 		Damage:   "physical",
-		Ratio:    1.2,
+		Ratio:    12000,
 		Base:     6,
 		FX:       "circle",
 	}
@@ -227,23 +233,23 @@ func TestAOESucceedsWithoutTargets(t *testing.T) {
 		ID:       "whirlwind",
 		Kind:     "aoe",
 		Radius:   110,
-		Cooldown: 5,
+		Cooldown: 5000,
 		Damage:   "physical",
-		Ratio:    1.2,
+		Ratio:    12000,
 		Base:     6,
 	}
 	if err := world.Combat.Cast(player, whirl, 0); err != nil {
 		t.Errorf("aoe with no targets: %v", err)
 	}
-	if player.Cooldowns["whirlwind"] != 5 {
-		t.Errorf("cooldown = %v, want 5", player.Cooldowns["whirlwind"])
+	if player.Cooldowns["whirlwind"] != 5000 {
+		t.Errorf("cooldown = %v, want 5000", player.Cooldowns["whirlwind"])
 	}
 }
 
 func TestHealClampsToMaxHP(t *testing.T) {
 	world := testWorld()
 	player := addTestEntity(world, 1, "player", 0, 0, playerBase)
-	heal := &config.Skill{ID: "heal", Kind: "self", Cooldown: 8, Heal: 0.35, FX: "heal"}
+	heal := &config.Skill{ID: "heal", Kind: "self", Cooldown: 8000, Heal: 3500, FX: "heal"}
 	player.HP = player.Attr.MaxHP - 5
 	if err := world.Combat.Cast(player, heal, 0); err != nil {
 		t.Fatalf("cast: %v", err)
@@ -256,27 +262,27 @@ func TestHealClampsToMaxHP(t *testing.T) {
 func TestBuffAppliesAndExpires(t *testing.T) {
 	world := testWorld()
 	player := addTestEntity(world, 1, "player", 0, 0, playerBase)
-	warcry := &config.Skill{ID: "warcry", Kind: "self", Cooldown: 15, FX: "buff",
-		Buff: &config.Buff{Name: "战吼", Duration: 6, AtkPct: 0.4, SpeedPct: 0.25}}
+	warcry := &config.Skill{ID: "warcry", Kind: "self", Cooldown: 15000, FX: "buff",
+		Buff: &config.Buff{Name: "战吼", Duration: 6000, AtkPct: 4000, SpeedPct: 2500}}
 	baseAtk := player.Attr.Atk
 
 	if err := world.Combat.Cast(player, warcry, 0); err != nil {
 		t.Fatalf("cast: %v", err)
 	}
-	if len(player.Buffs) != 1 || math.Abs(player.Attr.Atk-baseAtk*1.4) > 1e-9 {
+	if len(player.Buffs) != 1 || player.Attr.Atk != baseAtk*14/10 {
 		t.Fatalf(
 			"after cast: %d buffs, Atk = %v; want 1 buff, Atk = %v",
 			len(player.Buffs),
 			player.Attr.Atk,
-			baseAtk*1.4,
+			baseAtk*14/10,
 		)
 	}
-	world.State.Clock.Now = 5
+	world.State.Clock.Now = 5000
 	world.Combat.UpdateBuffs(player)
 	if len(player.Buffs) != 1 {
 		t.Errorf("buff expired early at t=5")
 	}
-	world.State.Clock.Now = 6
+	world.State.Clock.Now = 6000
 	world.Combat.UpdateBuffs(player)
 	if len(player.Buffs) != 0 || player.Attr.Atk != baseAtk {
 		t.Errorf(
@@ -291,18 +297,18 @@ func TestBuffAppliesAndExpires(t *testing.T) {
 func TestBuffRecastRefreshes(t *testing.T) {
 	world := testWorld()
 	player := addTestEntity(world, 1, "player", 0, 0, playerBase)
-	warcry := &config.Skill{ID: "warcry", Kind: "self", Cooldown: 15, FX: "buff",
-		Buff: &config.Buff{Name: "战吼", Duration: 6, AtkPct: 0.4}}
+	warcry := &config.Skill{ID: "warcry", Kind: "self", Cooldown: 15000, FX: "buff",
+		Buff: &config.Buff{Name: "战吼", Duration: 6000, AtkPct: 4000}}
 	if err := world.Combat.Cast(player, warcry, 0); err != nil {
 		t.Fatalf("first cast: %v", err)
 	}
-	world.State.Clock.Now = 15
+	world.State.Clock.Now = 15000
 	if err := world.Combat.Cast(player, warcry, 0); err != nil {
 		t.Fatalf("recast: %v", err)
 	}
-	if len(player.Buffs) != 1 || player.Buffs[0].Until != 21 {
+	if len(player.Buffs) != 1 || player.Buffs[0].Until != 21000 {
 		t.Errorf(
-			"buffs = %d (Until %v), want 1 buff refreshed to Until 21",
+			"buffs = %d (Until %v), want 1 buff refreshed to Until 21000",
 			len(player.Buffs),
 			player.Buffs[0].Until,
 		)
@@ -312,7 +318,7 @@ func TestBuffRecastRefreshes(t *testing.T) {
 func TestGainExpLevelsUp(t *testing.T) {
 	world := testWorld()
 	player := addTestEntity(world, 1, "player", 0, 0, playerBase)
-	player.Growth = config.Attrs{Str: 2, Agi: 1.5, Int: 1.5, Vit: 2}
+	player.Growth = config.Attrs{Str: 20000, Agi: 15000, Int: 15000, Vit: 20000}
 
 	world.Attr.GainExp(player, 100) // 恰好够升到 2 级
 	if player.Level != 2 || player.Exp != 0 || player.Base.Str != 12 {
@@ -344,7 +350,7 @@ func TestKillGrantsExpAndRespawns(t *testing.T) {
 	world := testWorld()
 	player := addTestEntity(world, 1, "player", 500, 500, playerBase)
 	monster := addTestEntity(world, 2, "monster", 540, 500, monsterBase)
-	monster.Tmpl = &config.Template{Respawn: 2, Exp: 30}
+	monster.Tmpl = &config.Template{Respawn: 2000, Exp: 30}
 	world.Combat.Kill(monster, player)
 	if !monster.Dead || monster.HP != 0 || player.Exp != 30 {
 		t.Fatalf("dead %v hp %v exp %v", monster.Dead, monster.HP, player.Exp)
@@ -353,13 +359,13 @@ func TestKillGrantsExpAndRespawns(t *testing.T) {
 	if player.Exp != 30 {
 		t.Fatalf("exp granted twice: %v", player.Exp)
 	}
-	for world.State.Clock.Now < 1.9 {
+	for world.State.Clock.Now < 1900 {
 		world.Step()
 	}
 	if !monster.Dead {
 		t.Fatal("respawned early")
 	}
-	for world.State.Clock.Now < 2.1 {
+	for world.State.Clock.Now < 2100 {
 		world.Step()
 	}
 	if monster.Dead || monster.HP != monster.Attr.MaxHP || monster.X != monster.HomeX ||
@@ -380,7 +386,7 @@ func TestMonsterKillerGetsNoExp(t *testing.T) {
 	world := testWorld()
 	first := addTestEntity(world, 1, "monster", 500, 500, monsterBase)
 	second := addTestEntity(world, 2, "monster", 540, 500, monsterBase)
-	second.Tmpl = &config.Template{Respawn: 2, Exp: 30}
+	second.Tmpl = &config.Template{Respawn: 2000, Exp: 30}
 	world.Combat.Kill(second, first)
 	if first.Exp != 0 {
 		t.Fatalf("monster got exp %v", first.Exp)
@@ -400,7 +406,7 @@ func lastDamage(world *World) *pb.Event {
 
 func TestBlockReducesDamage(t *testing.T) {
 	world := testWorld()
-	world.State.Cfg.World.Player.Block = config.Block{Reduce: 0.8, Speed: 0.5}
+	world.State.Cfg.World.Player.Block = config.Block{Reduce: 8000, Speed: 5000}
 	player := addTestEntity(world, 1, "player", 0, 0, playerBase)
 	monster := addTestEntity(world, 2, "monster", 60, 0, monsterBase)
 	big := &config.Skill{ID: "big", Kind: "target", Range: 70, Damage: "physical", Base: 1000}
@@ -409,9 +415,9 @@ func TestBlockReducesDamage(t *testing.T) {
 		t.Fatalf("cast: %v", err)
 	}
 	event := lastDamage(world)
-	total := float64(event.GetValue() + event.GetBlocked())
-	if math.Abs(float64(event.GetBlocked())-math.Round(total*0.8)) > 0.5 ||
-		player.HP != player.Attr.MaxHP-float64(event.GetValue()) {
+	total := int(event.GetValue() + event.GetBlocked())
+	if int(event.GetValue()) != total*2/10 || // 挨到的伤害向下取整
+		player.HP != player.Attr.MaxHP-int(event.GetValue()) {
 		t.Fatalf(
 			"blocked %v of %v, HP %v/%v",
 			event.GetBlocked(),
@@ -430,12 +436,12 @@ func TestShieldAbsorbsThenBreaks(t *testing.T) {
 	world := testWorld()
 	player := addTestEntity(world, 1, "player", 0, 0, playerBase)
 	monster := addTestEntity(world, 2, "monster", 60, 0, monsterBase)
-	shield := &config.Skill{ID: "shield", Kind: "self", Cooldown: 14, FX: "shield",
-		Buff: &config.Buff{Name: "护盾", Duration: 8, ShieldPct: 0.3}}
+	shield := &config.Skill{ID: "shield", Kind: "self", Cooldown: 14000, FX: "shield",
+		Buff: &config.Buff{Name: "护盾", Duration: 8000, ShieldPct: 3000}}
 	if err := world.Combat.Cast(player, shield, 0); err != nil {
 		t.Fatalf("cast: %v", err)
 	}
-	want := math.Round(player.Attr.MaxHP * 0.3)
+	want := player.Attr.MaxHP * 3 / 10
 	if player.Shield() != want {
 		t.Fatalf("shield = %v, want %v", player.Shield(), want)
 	}
@@ -445,7 +451,7 @@ func TestShieldAbsorbsThenBreaks(t *testing.T) {
 		t.Fatalf("cast: %v", err)
 	}
 	if event := lastDamage(world); event.GetValue() != 0 || player.HP != player.Attr.MaxHP ||
-		player.Shield() != want-float64(event.GetAbsorbed()) {
+		player.Shield() != want-int(event.GetAbsorbed()) {
 		t.Fatalf(
 			"after small hit: value %v absorbed %v HP %v shield %v",
 			event.GetValue(),
@@ -461,7 +467,7 @@ func TestShieldAbsorbsThenBreaks(t *testing.T) {
 		t.Fatalf("cast: %v", err)
 	}
 	event := lastDamage(world)
-	if float64(event.GetAbsorbed()) != left || player.Shield() != 0 || len(player.Buffs) != 0 {
+	if int(event.GetAbsorbed()) != left || player.Shield() != 0 || len(player.Buffs) != 0 {
 		t.Fatalf(
 			"after big hit: absorbed %v (want %v), shield %v, buffs %d",
 			event.GetAbsorbed(),

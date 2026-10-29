@@ -107,10 +107,12 @@ func runBot(url string, seed int64, stats *botStats, stop <-chan struct{}) {
 			return
 		case <-time.After(wait):
 		}
-		move := &pb.Move{Dx: proto.Float32(0), Dy: proto.Float32(0)}
+		move := &pb.Move{Dx: proto.Int32(0), Dy: proto.Int32(0)}
 		if random.Intn(5) != 0 {
+			// 方向是单位向量 × 10000（协议里没有浮点数）
 			angle := random.Float64() * 2 * math.Pi
-			move.Dx, move.Dy = proto.Float32(float32(math.Cos(angle))), proto.Float32(float32(math.Sin(angle)))
+			move.Dx = proto.Int32(int32(math.Cos(angle) * 10000))
+			move.Dy = proto.Int32(int32(math.Sin(angle) * 10000))
 		}
 		if !send(&pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: move}}) {
 			stats.failed.Store(true)

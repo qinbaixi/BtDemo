@@ -144,6 +144,11 @@ func TestUnreachableGoalDoesNotReplanEveryTick(t *testing.T) {
 	if monster.X > 600-monster.Radius+0.5 || monster.X < 560 {
 		t.Fatalf("stopped at (%.0f, %.0f), want just outside the west wall", monster.X, monster.Y)
 	}
+	// 刚好到了定时重新规划的时刻就先让它规划完这一次（时钟是整数毫秒，可能正好对上）
+	if monster.Steering.RepathAt <= world.State.Clock.Now+world.State.Clock.Dt {
+		world.State.Clock.Now += world.State.Clock.Dt
+		world.Move.Toward(monster, 700, 500, 6)
+	}
 	planAt := monster.Steering.RepathAt
 	world.State.Clock.Now += world.State.Clock.Dt
 	if !world.Move.Toward(monster, 700, 500, 6) || monster.Steering.RepathAt != planAt {

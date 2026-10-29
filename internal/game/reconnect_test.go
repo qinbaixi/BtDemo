@@ -14,10 +14,10 @@ func TestReconnectSendsFullState(t *testing.T) {
 	world := shippedWorld(t)
 	client := world.Join()
 	oldLink := client.Link()
-	stepSeconds(world, 1)
+	stepMillis(world, 1000)
 	sentFrames(client)
 	world.Detach(client, oldLink)
-	stepSeconds(world, 2)
+	stepMillis(world, 2000)
 	if world.Get(client.Player.ID) == nil {
 		t.Fatal("character removed right after disconnect")
 	}
@@ -25,7 +25,7 @@ func TestReconnectSendsFullState(t *testing.T) {
 	if back := world.Attach(session.NewLink(), client.Token()); back != client {
 		t.Fatal("reconnect with the token should return the same character")
 	}
-	stepSeconds(world, 0.2)
+	stepMillis(world, 200)
 	msgs := sentMessages(t, client)
 	welcome := msgs[0].GetWelcome()
 	if welcome == nil || !welcome.GetResumed() || welcome.GetId() != int32(client.Player.ID) {
@@ -67,11 +67,11 @@ func TestDetachedCharacterExpires(t *testing.T) {
 		t.Fatal("a disconnected character should stop moving")
 	}
 	keep := world.State.Cfg.World.Session.Keep
-	stepSeconds(world, keep-1)
+	stepMillis(world, keep-1000)
 	if world.Get(client.Player.ID) == nil {
 		t.Fatal("removed before session.keep")
 	}
-	stepSeconds(world, 2)
+	stepMillis(world, 2000)
 	if world.Get(client.Player.ID) != nil {
 		t.Fatal("still there after session.keep")
 	}
@@ -86,11 +86,11 @@ func TestLaggingClientGetsFullState(t *testing.T) {
 	client := world.Join()
 	sentFrames(client)
 	client.Link().Push(make([]byte, session.LinkByteLimit-10)) // 写协程卡住了，积压快满
-	stepSeconds(world, 0.2)
+	stepMillis(world, 200)
 	if world.Get(client.Player.ID) == nil || client.Link() == nil {
 		t.Fatal("a lagging client should keep its character and connection")
 	}
-	stepSeconds(world, 0.2)
+	stepMillis(world, 200)
 	msgs := sentMessages(t, client)
 	if len(msgs) == 0 || !msgs[0].GetWelcome().GetResumed() {
 		t.Fatal("after falling behind the client should get a resumed welcome first")
@@ -101,7 +101,7 @@ func TestLaggingClientGetsFullState(t *testing.T) {
 func TestOneFramePerSync(t *testing.T) {
 	world := shippedWorld(t)
 	client := world.Join()
-	stepSeconds(world, 0.2)
+	stepMillis(world, 200)
 	sentFrames(client)
 	syncEvery := world.State.Cfg.World.TickRate / world.State.Cfg.World.SyncRate
 	for range syncEvery {
@@ -116,7 +116,7 @@ func TestOneFramePerSync(t *testing.T) {
 func TestInputAfterDetachIsDropped(t *testing.T) {
 	world := shippedWorld(t)
 	client := world.Join()
-	move := &pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Float32(1), Dy: proto.Float32(0)}}}
+	move := &pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Int32(10000), Dy: proto.Int32(0)}}}
 	client.Inbox.Push(move)
 	world.Detach(client, client.Link())
 	world.Sessions.DrainInputs()

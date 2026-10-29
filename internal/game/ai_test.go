@@ -28,7 +28,7 @@ func aiInstance(
 // tickAI 将世界时钟推进一个 tick，并对 inst 执行一次 tick。
 func tickAI(world *World, inst *bt.Instance) bt.Status {
 	world.State.Clock.Now += world.State.Clock.Dt
-	return inst.Tick(world.State.Clock.Now)
+	return inst.Tick(float64(world.State.Clock.Now) / 1000)
 }
 
 // condHolds 报告条件 sub（带属性 props）对 entity 是否通过。它把该条件挂在 selector 下的
@@ -166,7 +166,7 @@ func TestHpBelowCondition(t *testing.T) {
 	if condHolds(t, world, monster, "hp_below", props) {
 		t.Error("full HP: hp_below 50 should not hold")
 	}
-	monster.HP = monster.Attr.MaxHP * 0.4
+	monster.HP = monster.Attr.MaxHP * 4 / 10
 	if !condHolds(t, world, monster, "hp_below", props) {
 		t.Error("40% HP: hp_below 50 should hold")
 	}
@@ -306,7 +306,7 @@ func TestUpdateTargetPrefersRecentAttacker(t *testing.T) {
 	}
 
 	monster.Target = 0
-	monster.LastHitAt = -100 // 受击已久，因此最近的敌对目标获胜
+	monster.LastHitAt = -100000 // 受击已久，因此最近的敌对目标获胜
 	tickAI(world, inst)
 	if monster.Target != near.ID {
 		t.Errorf("after an old hit: target %d, want nearest %d", monster.Target, near.ID)

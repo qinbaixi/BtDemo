@@ -16,7 +16,7 @@ func itemsConfig() *Config {
 			Slot:   "weapon",
 			Class:  "knight",
 			Rarity: "common",
-			Stats:  map[string]float64{"atk": 4, "str": 2, "cdr": 0.1},
+			Stats:  map[string]int{"atk": 4, "str": 2, "cdr": 1000},
 		},
 		{
 			ID:     "frost_bow",
@@ -24,23 +24,23 @@ func itemsConfig() *Config {
 			Slot:   "weapon",
 			Class:  "ranger",
 			Rarity: "epic",
-			Effect: &ItemEffect{Kind: EffectChill, Chance: 0.35, Dur: 2, Speed: -0.3},
+			Effect: &ItemEffect{Kind: EffectChill, Chance: 3500, Dur: 2000, Speed: -3000},
 		},
 		{
 			ID:     "life_charm",
 			Name:   "生命护符",
 			Slot:   "trinket",
 			Rarity: "common",
-			Effect: &ItemEffect{Kind: EffectRegen, Pct: 0.01},
+			Effect: &ItemEffect{Kind: EffectRegen, Pct: 100},
 		},
 	}
 	cfg.World.Player.Starter = []string{"life_charm"}
 	cfg.World.Player.Classes[0].Starter = []string{"recruit_sword"}
 	cfg.World.Loot = Loot{
-		Chance:    0.3,
-		Bosses:    map[string]float64{"ogre_chief": 1},
-		Rarity:    map[string]float64{"common": 6, "rare": 3, "epic": 1},
-		ClassBias: 0.7,
+		Chance:    3000,
+		Bosses:    map[string]BasisPoints{"ogre_chief": 10000},
+		Rarity:    map[string]int{"common": 6, "rare": 3, "epic": 1},
+		ClassBias: 7000,
 	}
 	return cfg
 }
@@ -51,20 +51,20 @@ func TestItemsValid(t *testing.T) {
 		t.Fatal(err)
 	}
 	sword := cfg.Item("recruit_sword")
-	if sword == nil || sword.Bonus.Atk != 4 || sword.Bonus.Attrs.Str != 2 || sword.Bonus.CDR != 0.1 {
+	if sword == nil || sword.Bonus.Atk != 4 || sword.Bonus.Attrs.Str != 2 || sword.Bonus.CDR != 1000 {
 		t.Fatalf("sword bonus = %+v", sword)
 	}
 	if !sword.UsableBy("knight") || sword.UsableBy("ranger") || !cfg.Item("life_charm").UsableBy("ranger") {
 		t.Fatal("UsableBy wrong")
 	}
 	chill := cfg.Item("frost_bow").Effect.Debuff
-	if chill == nil || chill.Name != ChillBuffName || chill.SpeedPct != -0.3 || chill.Look != "frost" {
+	if chill == nil || chill.Name != ChillBuffName || chill.SpeedPct != -3000 || chill.Look != "frost" {
 		t.Fatalf("chill debuff = %+v", chill)
 	}
 	if cfg.World.Player.Bag != DefaultBagSize {
 		t.Fatalf("bag = %d, want default %d", cfg.World.Player.Bag, DefaultBagSize)
 	}
-	if cfg.World.Loot.ChanceFor("ogre_chief") != 1 || cfg.World.Loot.ChanceFor("slime") != 0.3 {
+	if cfg.World.Loot.ChanceFor("ogre_chief") != 10000 || cfg.World.Loot.ChanceFor("slime") != 3000 {
 		t.Fatal("loot chance wrong")
 	}
 	knight := cfg.World.Player.Classes[0]
@@ -108,14 +108,14 @@ func TestItemsInvalid(t *testing.T) {
 		},
 		"chill without chance": {
 			func(cfg *Config) { cfg.Items[1].Effect.Chance = 0 },
-			"chance in (0, 1]",
+			"chance in (0, 10000]",
 		},
 		"chill speeds up": {
-			func(cfg *Config) { cfg.Items[1].Effect.Speed = 0.3 },
-			"speed between -1 and 0",
+			func(cfg *Config) { cfg.Items[1].Effect.Speed = 3000 },
+			"speed between -10000 and 0",
 		},
 		"ignite without ratio": {
-			func(cfg *Config) { cfg.Items[1].Effect = &ItemEffect{Kind: EffectIgnite, Chance: 0.2} },
+			func(cfg *Config) { cfg.Items[1].Effect = &ItemEffect{Kind: EffectIgnite, Chance: 2000} },
 			"positive ratio",
 		},
 		"ambush without dur": {
@@ -143,7 +143,7 @@ func TestItemsInvalid(t *testing.T) {
 			"positive weight",
 		},
 		"loot bad chance": {
-			func(cfg *Config) { cfg.World.Loot.Chance = 1.5 },
+			func(cfg *Config) { cfg.World.Loot.Chance = 15000 },
 			"loot.chance",
 		},
 		"no skins": {
@@ -190,7 +190,7 @@ func TestShippedItems(t *testing.T) {
 	if len(cfg.Items) != 13 {
 		t.Fatalf("%d items, want 13", len(cfg.Items))
 	}
-	if cfg.World.Player.Bag != 24 || cfg.World.Loot.ChanceFor("ogre_chief") != 1 {
+	if cfg.World.Player.Bag != 24 || cfg.World.Loot.ChanceFor("ogre_chief") != 10000 {
 		t.Fatal("bag or boss loot wrong")
 	}
 	for _, class := range cfg.World.Player.Classes {

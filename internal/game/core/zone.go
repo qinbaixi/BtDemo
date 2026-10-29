@@ -7,10 +7,10 @@ type Zone struct {
 	ID        int
 	Cfg       *config.Zone
 	X, Y      float64
-	Faction   string  // 给哪个阵营（以及和它互不敌对的阵营）回血
-	Owner     int     // 放下它的实体；0 表示地图自带
-	Until     float64 // 消失的时间；0 表示常驻
-	NextPulse float64 // 下一次回血的时间
+	Faction   string        // 给哪个阵营（以及和它互不敌对的阵营）回血
+	Owner     int           // 放下它的实体；0 表示地图自带
+	Until     config.Millis // 消失的时刻；0 表示常驻
+	NextPulse config.Millis // 下一次回血的时刻
 }
 
 // Zones 是世界里所有的回血区。区域很少，变化时整份重发给客户端，

@@ -9,8 +9,8 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
-func moveMsg(dx float32) *pb.ClientMsg {
-	return &pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Float32(dx), Dy: proto.Float32(0)}}}
+func moveMsg(dx int32) *pb.ClientMsg {
+	return &pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Int32(dx), Dy: proto.Int32(0)}}}
 }
 
 func targetMsg(id int32) *pb.ClientMsg {

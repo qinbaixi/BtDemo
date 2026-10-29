@@ -67,7 +67,7 @@ func TestRunAppliesInputsAndStopsCleanly(t *testing.T) {
 	}
 	client := <-joined
 	link := client.Link()
-	move := &pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Float32(1), Dy: proto.Float32(0)}}}
+	move := &pb.ClientMsg{Msg: &pb.ClientMsg_Move{Move: &pb.Move{Dx: proto.Int32(10000), Dy: proto.Int32(0)}}}
 	if err := client.Inbox.Push(move); err != nil {
 		t.Fatal(err)
 	}

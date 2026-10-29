@@ -6,6 +6,7 @@
 // 外观下面是宠物一栏：一排宠物卡加一张「不带」，点了发 pet；换宠物有冷却，冷却中的卡变暗、显示剩余秒数。
 // 面板只显示服务端发来的 Inventory，换装后等服务端回新的 Inventory 再刷新（见 game/sync.ts）。
 
+import { gameNow } from '../game/clock';
 import { DERIVED_ATTRS, RARITY_COLOR, SKILL_KEY_LABELS } from '../game/config';
 import { state } from '../game/state';
 import type { ClientMessage, ItemInfo, ItemSlotted, PetInfo } from '../net/types';
@@ -257,7 +258,7 @@ function renderSkins(): void {
 function renderPets(): void {
   petRow.hidden = state.pets.length === 0;
   if (!state.pets.length) return;
-  const cooling = Math.max(0, Math.ceil((state.petCooldownUntil - performance.now()) / 1000));
+  const cooling = Math.max(0, Math.ceil((state.petCooldownUntil - gameNow()) / 1000));
   const choices: PetInfo[] = [...state.pets, { id: '', name: '不带', desc: '收回宠物', color: NO_PET_COLOR, model: '' }];
   const key = `${state.myPet}|${cooling}|${choices.map((pet) => pet.id).join(',')}`;
   if (key === petKey) return;
@@ -281,7 +282,7 @@ function renderPets(): void {
 // pickPet 点了一张宠物卡：冷却中只提示；否则发 pet 并记住。
 function pickPet(petId: string): void {
   if (petId === state.myPet) return;
-  const remaining = Math.ceil((state.petCooldownUntil - performance.now()) / 1000);
+  const remaining = Math.ceil((state.petCooldownUntil - gameNow()) / 1000);
   if (remaining > 0) {
     showToast(`换宠物冷却中，还有 ${remaining} 秒`);
     return;

@@ -159,6 +159,33 @@ function drawTargetLink(tgt: ClientEntity, mp: Point, now: number): void {
   ctx.restore();
 }
 
+const GUARD_FADE_MS = 700;   // 架势回满后，架势条再留这么久才淡掉
+
+// drawGuard 在 (x, y) 画格挡架势条：举盾或者架势没满时才出现，快空了闪橙色，回满后淡出。
+// 返回画了没有（画了的话名字要往上让一让）。
+function drawGuard(e: ClientEntity, x: number, y: number, w: number, now: number): boolean {
+  if (e.kind !== 'player') return false;
+  const showing = e.blocking || e.guard < 1;
+  const alpha = showing ? 1 : 1 - clamp((now - e.guardAt) / GUARD_FADE_MS, 0, 1);
+  if (alpha <= 0) return false;
+  const h = 3;
+  const frac = clamp(e.guard, 0, 1);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#07040a';
+  ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+  const low = frac < 0.3;
+  // 快破防时一闪一闪的橙色，平时是盾的冷蓝色
+  const pulse = low ? 0.65 + 0.35 * Math.sin(now / 70) : 1;
+  ctx.fillStyle = low ? `rgba(255,138,69,${pulse})` : '#9ad7ff';
+  ctx.fillRect(x, y, w * frac, h);
+  // 刻度：每 25% 一道，一眼看出还能挡几下
+  ctx.fillStyle = 'rgba(7,4,10,0.8)';
+  for (let i = 1; i < 4; i++) ctx.fillRect(x + (w * i) / 4 - 0.5, y, 1, h);
+  ctx.restore();
+  return true;
+}
+
 // drawLabels draws name, level, HP bar, behaviour and aggro mark over a head.
 function drawLabels(e: ClientEntity, p: Point, now: number): void {
   const dead = e.dead;
@@ -197,7 +224,8 @@ function drawLabels(e: ClientEntity, p: Point, now: number): void {
       ctx.fillStyle = 'rgba(255,255,255,0.3)';
       ctx.fillRect(bx + 2, by + 0.5, Math.max(0, bw * frac - 3), 1.3);
     }
-    y = by - 4;
+    // 架势条在血条上面一点（血条下面紧挨着头）
+    y = drawGuard(e, bx + 3, by - 7, bw - 6, now) ? by - 11 : by - 4;
   }
 
   ctx.font = `bold 12px ${DISPLAY}`;

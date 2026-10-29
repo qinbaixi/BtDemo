@@ -18,7 +18,7 @@ const maxTraceTicks = 8
 // recordTrace 将被追踪实体最近一次的 tick 复制到其缓冲区中。
 func (sys *System) recordTrace(entity *core.Entity) {
 	// 时间保留两位小数：一帧 0.05 秒，保留一位会让相邻两帧时间相同
-	tick := &pb.AiTick{Time: core.F32(math.Round(sys.state.Now()*100) / 100)}
+	tick := &pb.AiTick{Time: core.I64(sys.state.Now())}
 	for _, step := range entity.AI.Trace {
 		tick.Nodes = append(tick.Nodes, &pb.AiNode{
 			Node:   core.I32(step.Node.ID),
@@ -81,9 +81,9 @@ func (sys *System) Trace(entity *core.Entity, defSent string) *pb.AiTrace {
 		trace.Def = sys.treeDef(entity.AI.Tree)
 	}
 	if len(entity.Path) > 0 {
-		trace.Path = append(trace.Path, float32(entity.X), float32(entity.Y))
+		trace.Path = append(trace.Path, core.Floor(entity.X), core.Floor(entity.Y))
 		for _, point := range entity.Path {
-			trace.Path = append(trace.Path, float32(point.X), float32(point.Y))
+			trace.Path = append(trace.Path, core.Floor(point.X), core.Floor(point.Y))
 		}
 	}
 	kv := func(k, v string) {
@@ -102,7 +102,7 @@ func (sys *System) Trace(entity *core.Entity, defSent string) *pb.AiTrace {
 		)
 	}
 	kv("目标", target)
-	kv("生命", fmt.Sprintf("%.0f / %.0f", entity.HP, entity.Attr.MaxHP))
+	kv("生命", fmt.Sprintf("%d / %d", entity.HP, entity.Attr.MaxHP))
 	kv("离家", fmt.Sprintf("%.0f", entity.HomeDist()))
 	keys := make([]string, 0, len(entity.AI.Blackboard))
 	for k := range entity.AI.Blackboard {
@@ -162,7 +162,7 @@ func (sys *System) treeDef(tree *bt.Tree) *pb.AiTreeDef {
 			treeNode.Inverse = proto.Bool(node.Inverse)
 			treeNode.Periodic = proto.Bool(node.Periodic)
 		case bt.KindService:
-			treeNode.Interval = core.F32(node.Interval)
+			treeNode.Interval = core.I32(int(math.Round(node.Interval * 1000))) // 行为树里按秒，下发毫秒
 		}
 		def.Nodes = append(def.Nodes, treeNode)
 	}

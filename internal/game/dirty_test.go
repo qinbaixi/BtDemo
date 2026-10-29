@@ -1,6 +1,7 @@
 package game
 
 import (
+	"github.com/qinbaixi/BtDemo/internal/config"
 	"testing"
 
 	"github.com/qinbaixi/BtDemo/internal/pb"
@@ -27,7 +28,7 @@ func TestDirtyDeltasAreSent(t *testing.T) {
 	startX := player.X
 
 	player.MoveX = 1
-	stepSeconds(world, 2)
+	stepMillis(world, 2000)
 	player.MoveX = 0
 	movedSent := false
 	for _, state := range selfStates(t, session, player.ID) {
@@ -46,7 +47,7 @@ func TestDirtyDeltasAreSent(t *testing.T) {
 	}
 	monster.SetPos(player.X+30, player.Y)
 	world.Grid.Moved(monster)
-	monster.Cooldowns = map[string]float64{}
+	monster.Cooldowns = map[string]config.Millis{}
 	sentMessages(t, session)
 	hpBefore := player.HP
 	if err := world.Combat.Cast(monster, slashSkill(), player.ID); err != nil {
@@ -58,7 +59,7 @@ func TestDirtyDeltasAreSent(t *testing.T) {
 	world.Sessions.Flush()
 	hpSent := false
 	for _, state := range selfStates(t, session, player.ID) {
-		if state.Hp != nil && state.GetHp() == float32(player.HP) {
+		if state.Hp != nil && int(state.GetHp()) == player.HP {
 			hpSent = true
 		}
 	}

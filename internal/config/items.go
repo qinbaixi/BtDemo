@@ -28,20 +28,20 @@ var StatNames = []string{
 	"cdr",
 }
 
-// MaxCDR 是冷却缩减的上限：所有技能冷却最多缩短 40%。
-const MaxCDR = 0.4
+// MaxCDR 是冷却缩减的上限（万分比）：所有技能冷却最多缩短 40%。
+const MaxCDR BasisPoints = 4000
 
 // Item 对应 config/items.yaml 中的一件装备。
 type Item struct {
-	ID     string             `yaml:"id"`
-	Name   string             `yaml:"name"`
-	Slot   string             `yaml:"slot"`   // weapon | armor | trinket
-	Class  string             `yaml:"class"`  // 能用的职业 id；空 = 所有职业都能用
-	Rarity string             `yaml:"rarity"` // common | rare | epic
-	Desc   string             `yaml:"desc"`   // 背包面板上的一句话说明
-	Stats  map[string]float64 `yaml:"stats"`  // 属性加成，属性名见 StatNames
-	Effect *ItemEffect        `yaml:"effect"` // 特效；没有就是 nil
-	Look   string             `yaml:"look"`   // 装备武器时客户端画的武器外观；空 = 职业默认武器
+	ID     string         `yaml:"id"`
+	Name   string         `yaml:"name"`
+	Slot   string         `yaml:"slot"`   // weapon | armor | trinket
+	Class  string         `yaml:"class"`  // 能用的职业 id；空 = 所有职业都能用
+	Rarity string         `yaml:"rarity"` // common | rare | epic
+	Desc   string         `yaml:"desc"`   // 背包面板上的一句话说明
+	Stats  map[string]int `yaml:"stats"`  // 属性加成，属性名见 StatNames（crit、crit_dmg、cdr 是万分比）
+	Effect *ItemEffect    `yaml:"effect"` // 特效；没有就是 nil
+	Look   string         `yaml:"look"`   // 装备武器时客户端画的武器外观；空 = 职业默认武器
 	// Bonus 是 Stats 换算成的加成，由 validate 填写，attr 直接读它。
 	Bonus StatBonus `yaml:"-"`
 }
@@ -52,18 +52,18 @@ func (item *Item) UsableBy(classID string) bool {
 }
 
 // StatBonus 是装备提供的属性加成：Attrs 加在基础属性上（再算派生属性），
-// 其余直接加在派生属性的结果上。Crit、CritDmg、CDR 是小数（0.05 = 5%）。
+// 其余直接加在派生属性的结果上。Crit、CritDmg、CDR 是万分比（500 = 5%）。
 type StatBonus struct {
 	Attrs   Attrs
-	MaxHP   float64
-	Atk     float64
-	MAtk    float64
-	Def     float64
-	MDef    float64
-	Crit    float64
-	CritDmg float64
-	Speed   float64
-	CDR     float64
+	MaxHP   int
+	Atk     int
+	MAtk    int
+	Def     int
+	MDef    int
+	Crit    BasisPoints
+	CritDmg BasisPoints
+	Speed   int
+	CDR     BasisPoints
 }
 
 // Add 把 other 累加到 bonus 上。
@@ -84,8 +84,8 @@ func (bonus *StatBonus) Add(other StatBonus) {
 }
 
 // statField 返回属性名 name 在 StatBonus 里对应的字段，名字不认识时返回 nil。
-func (bonus *StatBonus) statField(name string) *float64 {
-	fields := map[string]*float64{
+func (bonus *StatBonus) statField(name string) *int {
+	fields := map[string]*int{
 		"str":      &bonus.Attrs.Str,
 		"agi":      &bonus.Attrs.Agi,
 		"int":      &bonus.Attrs.Int,
@@ -110,8 +110,8 @@ const (
 	EffectIgnite    = "ignite"     // 造成伤害时 chance 概率追加 atk × ratio 的魔法伤害
 	EffectBlockHeal = "block_heal" // 格挡住一次攻击时回复 最大生命 × pct
 	EffectMultishot = "multishot"  // 普攻命中后 chance 概率再射一箭
-	EffectChill     = "chill"      // 命中时 chance 概率挂 dur 秒的减速（speed 为负）
-	EffectAmbush    = "ambush"     // 位移技能后 dur 秒内的下一次伤害必定暴击
+	EffectChill     = "chill"      // 命中时 chance 概率挂 dur 毫秒的减速（speed 为负）
+	EffectAmbush    = "ambush"     // 位移技能后 dur 毫秒内的下一次伤害必定暴击
 	EffectRegen     = "regen"      // 活着时每秒回复 最大生命 × pct
 )
 
@@ -122,13 +122,14 @@ const ThornsRange = 120
 const ChillBuffName = "冰冻"
 
 // ItemEffect 是物品的特效。用到哪些参数由 Kind 决定（见上面的常量）。
+// Pct、Chance、Ratio、Speed 是万分比，Dur 是毫秒。
 type ItemEffect struct {
-	Kind   string  `yaml:"kind"`
-	Pct    float64 `yaml:"pct"`
-	Chance float64 `yaml:"chance"`
-	Ratio  float64 `yaml:"ratio"`
-	Dur    float64 `yaml:"dur"`
-	Speed  float64 `yaml:"speed"`
+	Kind   string      `yaml:"kind"`
+	Pct    BasisPoints `yaml:"pct"`
+	Chance BasisPoints `yaml:"chance"`
+	Ratio  BasisPoints `yaml:"ratio"`
+	Dur    Millis      `yaml:"dur"`
+	Speed  BasisPoints `yaml:"speed"`
 	// Debuff 是 chill 挂在目标身上的减速，由 validate 生成。
 	Debuff *Buff `yaml:"-"`
 }
@@ -161,17 +162,17 @@ func (class *Class) Skin(id string) *Skin {
 
 // Loot 是 world.yaml 的掉落配置：怪物死亡时按概率给击杀者一件装备。
 type Loot struct {
-	Chance float64 `yaml:"chance"` // 普通怪掉落的概率
-	// Bosses 是单独配置掉落概率的怪物：模板 id -> 概率（比如首领必掉）。
-	Bosses map[string]float64 `yaml:"bosses"`
-	// Rarity 是各稀有度的抽取权重。
-	Rarity map[string]float64 `yaml:"rarity"`
-	// ClassBias 是只从击杀者职业能用的物品（本职业或通用）里抽的概率，其余时候从所有物品里抽。
-	ClassBias float64 `yaml:"class_bias"`
+	Chance BasisPoints `yaml:"chance"` // 普通怪掉落的概率（万分比）
+	// Bosses 是单独配置掉落概率的怪物：模板 id -> 概率（万分比，比如首领必掉 10000）。
+	Bosses map[string]BasisPoints `yaml:"bosses"`
+	// Rarity 是各稀有度的抽取权重（整数）。
+	Rarity map[string]int `yaml:"rarity"`
+	// ClassBias 是只从击杀者职业能用的物品（本职业或通用）里抽的概率（万分比），其余时候从所有物品里抽。
+	ClassBias BasisPoints `yaml:"class_bias"`
 }
 
-// ChanceFor 是模板 templateID 的怪物死亡时掉落的概率。
-func (loot *Loot) ChanceFor(templateID string) float64 {
+// ChanceFor 是模板 templateID 的怪物死亡时掉落的概率（万分比）。
+func (loot *Loot) ChanceFor(templateID string) BasisPoints {
 	if chance, ok := loot.Bosses[templateID]; ok {
 		return chance
 	}
@@ -227,26 +228,26 @@ func (cfg *Config) validateItems() error {
 
 // checkEffect 检查特效的种类和参数，并给 chill 生成减速 Buff。
 func checkEffect(owner string, effect *ItemEffect) error {
-	positive := func(name string, value float64) error {
+	positive := func(name string, value int64) error {
 		if value <= 0 {
 			return fmt.Errorf("%s: effect %s needs a positive %s", owner, effect.Kind, name)
 		}
 		return nil
 	}
 	chance := func() error {
-		if effect.Chance <= 0 || effect.Chance > 1 {
-			return fmt.Errorf("%s: effect %s needs a chance in (0, 1]", owner, effect.Kind)
+		if effect.Chance <= 0 || effect.Chance > OneHundredPercent {
+			return fmt.Errorf("%s: effect %s needs a chance in (0, 10000]", owner, effect.Kind)
 		}
 		return nil
 	}
 	switch effect.Kind {
 	case EffectLifesteal, EffectThorns, EffectBlockHeal, EffectRegen:
-		return positive("pct", effect.Pct)
+		return positive("pct", int64(effect.Pct))
 	case EffectIgnite:
 		if err := chance(); err != nil {
 			return err
 		}
-		return positive("ratio", effect.Ratio)
+		return positive("ratio", int64(effect.Ratio))
 	case EffectMultishot:
 		return chance()
 	case EffectChill:
@@ -256,8 +257,8 @@ func checkEffect(owner string, effect *ItemEffect) error {
 		if err := positive("dur", effect.Dur); err != nil {
 			return err
 		}
-		if effect.Speed >= 0 || effect.Speed <= -1 {
-			return fmt.Errorf("%s: effect chill needs a speed between -1 and 0", owner)
+		if effect.Speed >= 0 || effect.Speed <= -OneHundredPercent {
+			return fmt.Errorf("%s: effect chill needs a speed between -10000 and 0", owner)
 		}
 		effect.Debuff = &Buff{
 			Name:     ChillBuffName,
@@ -322,18 +323,18 @@ func (cfg *Config) validateGear() error {
 		}
 	}
 	loot := &cfg.World.Loot
-	if loot.Chance < 0 || loot.Chance > 1 {
-		return fmt.Errorf("world.yaml: loot.chance must be 0..1")
+	if loot.Chance < 0 || loot.Chance > OneHundredPercent {
+		return fmt.Errorf("world.yaml: loot.chance must be 0..10000")
 	}
 	for templateID, chance := range loot.Bosses {
 		if cfg.Templates[templateID] == nil {
 			return fmt.Errorf("world.yaml: loot.bosses has unknown template %q", templateID)
 		}
-		if chance < 0 || chance > 1 {
-			return fmt.Errorf("world.yaml: loot.bosses.%s must be 0..1", templateID)
+		if chance < 0 || chance > OneHundredPercent {
+			return fmt.Errorf("world.yaml: loot.bosses.%s must be 0..10000", templateID)
 		}
 	}
-	totalWeight := 0.0
+	totalWeight := 0
 	for rarity, weight := range loot.Rarity {
 		if !slices.Contains(Rarities, rarity) {
 			return fmt.Errorf("world.yaml: loot.rarity has unknown rarity %q", rarity)
@@ -346,8 +347,8 @@ func (cfg *Config) validateGear() error {
 	if len(cfg.Items) > 0 && totalWeight <= 0 {
 		return fmt.Errorf("world.yaml: loot.rarity needs at least one positive weight")
 	}
-	if loot.ClassBias < 0 || loot.ClassBias > 1 {
-		return fmt.Errorf("world.yaml: loot.class_bias must be 0..1")
+	if loot.ClassBias < 0 || loot.ClassBias > OneHundredPercent {
+		return fmt.Errorf("world.yaml: loot.class_bias must be 0..10000")
 	}
 	return nil
 }

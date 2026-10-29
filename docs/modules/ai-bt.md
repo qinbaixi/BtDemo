@@ -54,7 +54,11 @@ var All = map[string]Exported{
 
 ### 执行语义（runner.go）
 
-每个实体有自己的 `bt.Instance`（同一棵树共享 `Tree`，各自的运行状态分开）。每帧调用一次 `Instance.Tick(now)`，**从根节点重新开始评估**：
+每个实体有自己的 `bt.Instance`（同一棵树共享 `Tree`，各自的运行状态分开）。每帧调用一次 `Instance.Tick(now)`，**从根节点重新开始评估**。行为树里的时间（`Seconds`、`time_between_ticks`）仍按秒，和编辑器里一样；`game/ai` 用 `seconds(ms)` 把游戏时钟换成秒，再传给 `Instance.Tick`。
+
+例外：被击退、硬直中、前摇中（见 [attr 和 combat](attr-combat.md) 的“命中的分量”）这一帧不跑行为树（`ai.pauseReason`），动作设成 `stagger` 或 `windup`；前摇的那一下由 combat 到点结算。调试面板上这一帧只显示根节点和暂停原因。
+
+节点语义：
 
 | 节点 | 行为 |
 | --- | --- |
@@ -139,7 +143,7 @@ selector（根）   服务：update_target Range=220，每 0.5 秒
 
 ## 调试追踪（trace.go）
 
-前端调试面板选中一个实体后，客户端发 `Watch{id}`。`session.Watched()` 收集所有被观察的实体，`AI.Tick` 只给它们打开 Tracing，`recordTrace` 把每帧的执行记录转成 `pb.AiTick` 缓存起来，下次同步时由 `Trace(entity, defSent)` 打包成 `AiTrace`（执行记录、目标、血量、离家距离、黑板、当前路径）发给观察者，然后清空。没人观察时这部分没有任何开销。
+前端调试面板选中一个实体后，客户端发 `Watch{id}`。`session.Watched()` 收集所有被观察的实体，`AI.Tick` 只给它们打开 Tracing，`recordTrace` 把每帧的执行记录转成 `pb.AiTick` 缓存起来，下次同步时由 `Trace(entity, defSent)` 打包成 `AiTrace`（执行记录、目标、血量、离家距离、黑板、当前路径）发给观察者，然后清空。没人观察时这部分没有任何开销。下发给调试面板的 `AiTick.time` 是毫秒（游戏时钟），`AiTreeNode.interval` 也是毫秒（`trace.go` 把树里的秒换算过来），`AiTrace.path` 是交错排列的整数像素 x、y。
 
 每个访问过的节点记录：
 

@@ -4,15 +4,16 @@
 package move
 
 import (
+	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/game/aoi"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
 )
 
 const (
-	repathEvery  = 0.75 // 沿路径移动时两次重新规划之间的间隔（秒）
-	goalMoved    = 24.0 // 目标离开规划时位置超过此距离则重新规划
-	stuckSeconds = 0.4  // 几乎不动持续这么久（秒）后重新规划
+	repathEvery config.Millis = 750 // 沿路径移动时两次重新规划之间的间隔（毫秒）
+	goalMoved                 = 24  // 目标离开规划时位置超过此距离（像素）则重新规划
+	stuckTime   config.Millis = 400 // 几乎不动持续这么久（毫秒）后重新规划
 )
 
 // System 移动实体，并同步更新 AOI 网格。
@@ -62,7 +63,7 @@ func (sys *System) Toward(entity *core.Entity, x, y, step float64) bool {
 	now := sys.state.Now()
 	from := pos(entity)
 	if !steering.Planned || steering.Goal.Dist(goal) > goalMoved || now >= steering.RepathAt ||
-		steering.StuckFor >= stuckSeconds {
+		steering.StuckFor >= stuckTime {
 		steering.Path = sys.nav.FindPath(from, goal, entity.Radius)
 		steering.Goal, steering.Planned = goal, true
 		steering.Reaches = len(steering.Path) > 0 && steering.Path[len(steering.Path)-1] == goal
@@ -112,16 +113,25 @@ func (sys *System) Toward(entity *core.Entity, x, y, step float64) bool {
 // Stop 清除 entity 的路径。
 func (sys *System) Stop(entity *core.Entity) { entity.Steering = core.Steering{} }
 
-// Tick 让每个存活的玩家按其输入方向行走。
+// Tick 推进所有实体的击退位移，并让每个存活的玩家按其输入方向行走（硬直和被击退时不走）。
 func (sys *System) Tick() {
-	dt := sys.state.Clock.Dt
+	dt := sys.state.Clock.DtSeconds()
+	now := sys.state.Now()
 	sys.state.Ents.Each(func(entity *core.Entity) {
+		if entity.Knock != nil {
+			sys.knock(entity, now)
+		}
 		if entity.Kind != core.KindPlayer || entity.Dead {
 			return
 		}
-		speed := entity.Attr.Speed
+		if entity.Knock != nil || entity.Stunned(now) {
+			entity.SetAction("stagger")
+			return
+		}
+		speed := float64(entity.Attr.Speed)
 		if entity.Blocking {
-			speed *= sys.state.Cfg.World.Player.Block.Speed // 格挡时走得慢
+			// 格挡时走得慢（万分比倍率）
+			speed = speed * float64(sys.state.Cfg.World.Player.Block.Speed) / config.OneHundredPercent
 		}
 		switch {
 		case entity.MoveX != 0 || entity.MoveY != 0:
@@ -133,4 +143,24 @@ func (sys *System) Tick() {
 			entity.SetAction("")
 		}
 	})
+}
+
+// knock 把 entity 沿击退路线推到 now 时的位置（先快后慢），走完就结束击退。
+// 路线在击退开始时已经用 nav.Reach 避开了障碍物，所以这里直接放上去。
+func (sys *System) knock(entity *core.Entity, now config.Millis) {
+	knock := entity.Knock
+	progress := 1.0
+	if knock.Duration > 0 {
+		progress = max(0, float64(now-knock.Start)/float64(knock.Duration))
+	}
+	if progress >= 1 {
+		progress = 1
+		entity.Knock = nil
+	}
+	eased := 1 - (1-progress)*(1-progress)
+	entity.SetPos(
+		knock.From.X+(knock.To.X-knock.From.X)*eased,
+		knock.From.Y+(knock.To.Y-knock.From.Y)*eased,
+	)
+	sys.grid.Moved(entity)
 }

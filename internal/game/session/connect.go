@@ -7,26 +7,27 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
 // 连接与重连。
 //
 // WebSocket 跑在 TCP 上，传输途中不会丢；会丢的只有两头的队列和断线。协议里不带序号，规则很简单：
-//   - 断线时角色不删，只把 link 置空（原地站着，照样会被打会死），world.yaml session.keep 秒内
+//   - 断线时角色不删，只把 link 置空（原地站着，照样会被打会死），world.yaml session.keep 毫秒内
 //     带着 token 重连就接回来，并且把这个玩家需要的东西全部重新发一遍（sendFull）。
 //   - 客户端跟不上（Link 积压超过 LinkByteLimit）时不踢人也不悄悄丢帧：清掉积压、下一帧发全量；
-//     lagLimit 秒内第 lagStrikes 次才断开连接，客户端重连后同样拿到全量。
+//     lagLimit 毫秒内第 lagStrikes 次才断开连接，客户端重连后同样拿到全量。
 
-// 客户端跟不上的判定：lagLimit 秒内触发 lagStrikes 次积压溢出就断开连接。
+// 客户端跟不上的判定：lagLimit 毫秒内触发 lagStrikes 次积压溢出就断开连接。
 const (
-	lagStrikes = 3
-	lagLimit   = 10.0
+	lagStrikes               = 3
+	lagLimit   config.Millis = 10000
 )
 
 // lagMeter 记录最近一段时间里客户端跟不上的次数。
 type lagMeter struct {
-	since   float64 // 这一轮计数开始的时刻
+	since   config.Millis // 这一轮计数开始的时刻
 	strikes int
 }
 
@@ -40,7 +41,7 @@ func newToken() string {
 }
 
 // lagging 处理跟不上的客户端：清掉连接里的积压和这一帧没发的消息，下次 Flush 前发全量；
-// lagLimit 秒内第 lagStrikes 次就断开连接（角色保留，客户端重连后接着玩）。
+// lagLimit 毫秒内第 lagStrikes 次就断开连接（角色保留，客户端重连后接着玩）。
 func (sys *System) lagging(session *Session) {
 	now := sys.state.Now()
 	if now-session.lag.since > lagLimit {
@@ -87,7 +88,7 @@ func (sys *System) Attach(link *Link, token string) *Session {
 }
 
 // Detach 处理连接断开：link 还是会话当前的连接时，角色进入断线保留状态，
-// world.yaml session.keep 秒内没重连就删除。link 已经被新连接替换时什么都不做。
+// world.yaml session.keep 毫秒内没重连就删除。link 已经被新连接替换时什么都不做。
 func (sys *System) Detach(session *Session, link *Link) {
 	if !sys.sessions[session] || session.link != link {
 		return
@@ -112,7 +113,7 @@ func (sys *System) ExpireDetached() {
 	now := sys.state.Now()
 	for session := range sys.sessions {
 		if session.link == nil && now-session.detachedAt > keep {
-			log.Printf("player %d: did not reconnect within %.0fs, removing", session.Player.ID, keep)
+			log.Printf("player %d: did not reconnect within %dms, removing", session.Player.ID, keep)
 			sys.Leave(session)
 		}
 	}

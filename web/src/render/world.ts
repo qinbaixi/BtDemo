@@ -9,8 +9,9 @@
 //                （pixi/spriteCtx.ts），护盾泡泡等有形状的特效画在只覆盖特效范围的小画布上
 //   overlay      另一块 2D 画布：头顶文字、调试线条、暗角（不参与泛光和调色，保持清晰）
 
+import { SETTINGS } from '../game/settings';
 import { Application, Container, Graphics, RenderLayer, type TextureSource } from 'pixi.js';
-import { DEATH_MS, FEEL, HIT_MS, LOOK_FROST, LOOK_HOLY, MODEL_SCALE, RIM, ZONE_ASPECT } from '../game/config';
+import { ATTACK_HOLD, DEATH_MS, FEEL, HIT_MS, LOOK_FROST, LOOK_HOLY, MODEL_SCALE, RIM, ZONE_ASPECT } from '../game/config';
 import { clamp, hypot } from '../game/math';
 import { headY, posOf, state, type ClientEntity, type Point, type Quality, type Scenery } from '../game/state';
 import { rainCenter } from '../input';
@@ -24,6 +25,7 @@ import { CanvasSprite } from './pixi/canvasSprite';
 import { PostFilter, type Distort } from './pixi/postFilter';
 import { SceneView, type Mover } from './pixi/sceneView';
 import { SpriteCtx } from './pixi/spriteCtx';
+import { DecalLayer } from './pixi/decals';
 import { RibbonPool } from './pixi/trail';
 import { PortalLayer, portalLights } from './portals';
 import { pruneZones, ZoneLayer, zoneLights } from './zones';
@@ -45,6 +47,7 @@ let marks: Graphics;           // 地面标记
 let targetRing: Container;     // 目标脚下的旋转圈
 let targetRingArcs: Graphics;
 let underFx: CanvasSprite;     // 地面特效（暂时用 Canvas 2D 画）
+let decals: DecalLayer;        // 地面印记：裂纹、焦痕、霜、拖痕
 let depth: Container;          // 角色和物件，按 zIndex（脚底 y）排序
 let xrayLayer: RenderLayer;    // 角色剪影：被高物件挡住时画在所有物件上面
 let lighting: Lighting;
@@ -93,7 +96,9 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
   const zoneContainer = new Container();
   zoneLayer = new ZoneLayer(zoneContainer);
   portalLayer = new PortalLayer(zoneContainer);
-  world.addChild(groundLayer, zoneContainer, marks, targetRing, underFx, depth);
+  const decalContainer = new Container();
+  decals = new DecalLayer(decalContainer);
+  world.addChild(groundLayer, zoneContainer, decalContainer, marks, targetRing, underFx, depth);
 
   const darkness = new Container();
   glowWorld = new Container();
@@ -240,6 +245,15 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
   drawOverlay(now, shake, zoom, mp, ents, debugOpen);
 }
 
+const STUN_HOLD = 0.3;   // 硬直时受击动画停在这一帧（占受击动画时长的比例）
+// progress 是一段 ms 长的动作在 elapsed 毫秒时的进度 0..1，不在动作中返回 -1。
+function progress(elapsed: number, ms: number): number {
+  return elapsed >= 0 && elapsed < ms ? elapsed / ms : -1;
+}
+
+const PARRY_MS = 360;    // 完美格挡时盾往前一顶的动作
+const BREAK_MS = 900;    // 被破防时盾被打开、踉跄再收回来的动作（和服务端的 break_stun 差不多长）
+
 // 溶解边缘的火光：怪物是暗红的余烬，NPC 是幽蓝的魂火
 const BURN: Record<string, string> = { monster: '#ff5a1e', npc: '#5fd8ff', player: '#ffcf6a' };
 
@@ -271,7 +285,18 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
   e.shownFacing = e.facing;
   const turnT = (now - e.turnAt) / 140;
   const turn = turnT >= 0 && turnT < 1 ? Math.sin(turnT * Math.PI) : 0;
-  const atk = (now - e.attackAt) / e.attackMs;
+  // 前摇：动作停在武器举到最高的那一帧，身体微微发抖，等命中前一刻再砸下去（见 events.ts 的 windup）
+  let atk = (now - e.attackAt) / e.attackMs;
+  let tremble = 0;
+  const holdEnd = e.attackAt + ATTACK_HOLD * e.attackMs;
+  if (e.windupFrom > 0 && now >= e.windupFrom && now < holdEnd && !e.dead) {
+    atk = ATTACK_HOLD * Math.min(1, (now - e.windupFrom) / Math.max(60, (holdEnd - e.windupFrom) * 0.5));
+    tremble = Math.sin(now * 0.09) * Math.min(1.2, (now - e.windupFrom) / 300);
+  }
+  // 硬直：受击姿势停在被打得最狠的那一下，直到硬直结束
+  if (now < e.stunUntil && !e.dead && now - e.hitAt > STUN_HOLD * HIT_MS && now - e.hitAt < HIT_MS) {
+    e.hitAt = now - STUN_HOLD * HIT_MS;
+  }
   const hit = (now - e.hitAt) / HIT_MS;
   const hitting = hit >= 0 && hit < 1;
   const dead = e.dead ? clamp((now - (e.deadAt < 0 ? now - DEATH_MS : e.deadAt)) / DEATH_MS, 0, 1) : -1;
@@ -281,7 +306,7 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
   if (dead >= 0) knock = e.knockAmp * (1 - (1 - dead) * (1 - dead));
   else if (hitting) knock = e.knockAmp * (hit < 0.18 ? 1 - Math.pow(1 - hit / 0.18, 2) : 1 - smooth((hit - 0.18) / 0.82));
   // 形变：一下压扁再弹两下回原样
-  const squash = hitting && dead < 0 ? FEEL.squash * Math.exp(-hit * 5) * Math.cos(hit * Math.PI * 3) : 0;
+  const squash = hitting && dead < 0 ? e.squashAmp * Math.exp(-hit * 5) * Math.cos(hit * Math.PI * 3) : 0;
 
   // 溶解：怪物和 NPC 倒地一会儿后烧掉（玩家的尸体留着等复活）
   let dissolve = -1;
@@ -291,7 +316,7 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
   }
 
   return {
-    x: p.x,
+    x: p.x + tremble,
     y: p.y,
     r: (e.r || 14) * MODEL_SCALE,
     color: e.color,
@@ -305,6 +330,8 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
     time: now + e.id * 397,
     isSelf: e.id === state.myId,
     blocking: e.blocking && !e.dead,
+    parry: progress(now - e.parryAt, PARRY_MS),
+    broken: e.dead ? -1 : progress(now - e.breakAt, BREAK_MS),
     looks: e.dead ? 0 : e.looks,
     skin: e.skin,
     gear: e.gear,
@@ -411,6 +438,14 @@ function dashArc(g: Graphics, x: number, y: number, r: number, on: number, off: 
 
 // drawUnderFx 把地面特效（旋风斩地裂、治疗法阵、光环……）画到一块只覆盖特效范围的小画布上。
 function drawUnderFx(now: number): void {
+  const fx = state.fx;
+  if (fx.decalReset) {
+    decals.clear();
+    fx.decalReset = false;
+  }
+  for (const request of fx.decals) decals.add(request);
+  fx.decals.length = 0;
+  decals.update(now);
   let box = state.fx.underBounds(now);
   // 只画镜头里的部分：特效分散在地图两头时画布也不会变大
   if (box) {
@@ -457,7 +492,8 @@ function updatePost(now: number, dt: number, mp: Point | null, shake: Point, zoo
   const waves: Distort[] = [];
   if (distort) state.fx.waves((x: number, y: number, radius: number, strength: number) => {
     const p = toScreen(x, y);
-    waves.push({ x: p.x, y: p.y, radius: radius * zoom, strength: strength * FEEL.distort });
+    // 冲击波也算画面晃动：跟着设置里的震屏强度
+    waves.push({ x: p.x, y: p.y, radius: radius * zoom, strength: strength * FEEL.distort * SETTINGS.shake });
   }, now);
   const heat: Distort[] = [];
   if (distort) state.scenery?.heat((x: number, y: number, radius: number, strength: number) => {

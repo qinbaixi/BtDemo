@@ -24,7 +24,7 @@ func TestShippedPets(t *testing.T) {
 		t.Fatalf("pets = %v", cfg.Pets)
 	}
 	rules := cfg.World.Pet
-	if rules.Respawn != 10 || rules.SwapCooldown != 5 || rules.Teleport != 600 {
+	if rules.Respawn != 10000 || rules.SwapCooldown != 5000 || rules.Teleport != 600 {
 		t.Fatalf("pet rules = %+v", rules)
 	}
 	if mend := cfg.Skills["pet_mend"]; mend.Kind != "ally" || mend.Heal <= 0 {

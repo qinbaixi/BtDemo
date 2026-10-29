@@ -123,7 +123,7 @@ func (manager *Manager) openLine(template *config.Scene) (*line, error) {
 		template.Cfg,
 		manager.seed+int64(manager.opened)*7919,
 		manager.ids,
-		time.Since(manager.start).Seconds(),
+		time.Since(manager.start).Milliseconds(),
 	)
 	scene, err := newScene(
 		state,
@@ -166,7 +166,7 @@ func (manager *Manager) closeIdle(now time.Time) {
 		rules := template.Lines
 		for i := len(lines) - 1; i >= 0 && len(lines) > rules.Min; i-- {
 			idle := lines[i]
-			if idle.residents > 0 || now.Sub(idle.emptySince).Seconds() < rules.IdleClose {
+			if idle.residents > 0 || now.Sub(idle.emptySince).Milliseconds() < rules.IdleClose {
 				continue
 			}
 			lines = slices.Delete(lines, i, i+1)
