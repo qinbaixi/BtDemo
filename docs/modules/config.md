@@ -70,9 +70,18 @@ cfg, err := config.Load("config", game.TreeNames())
 - `kind`：`target` 单体、`aoe` 范围、`self` 自身、`dash` 位移（用 `distance`）、`line` 直线投掷（用 `range`；`pierce: true` 时穿透，命中直线上所有敌人）、`rain` 箭雨（用 `range`、`radius`、`distance`）、`zone` 在脚下放回血区（用 `zone`，见 [zone](zone.md)）。
 - `desc`：选技能面板上的一句话说明。
 - `debuff`：命中时加在目标身上的效果，格式同 `buff`。没被免疫、也没被打死才会加上。
+- `weight`：命中分量 `light` / `medium` / `heavy`（默认 light），效果在 `world.yaml` 的 `hit.weights`。`knock`、`stun`、`poise_dmg` 可以单独覆盖这一档的击退距离、硬直秒数和打掉的韧性。
+- `windup`：前摇秒数，只能给 `target` 和 `aoe` 技能（启动时检查）。出招后过这么久才结算，期间可以被打断、可以被躲开。
 - `buff` 的新字段：`invulnerable`（期间不受任何伤害）、`bonus_magic`（物理技能每次命中额外造成法术伤害）、`look`（客户端外观）。`look` 只能是 `haste`、`holy`、`fire`、`frost`，对应 `config.Looks` 里的位。
 
 这些字段的作用见 [attr 和 combat](attr-combat.md)。
+
+## 命中、韧性和格挡（world.yaml 的 hit 和 player.block）
+
+- `hit.weights`：每档的 `knock`（击退像素）、`stun`（硬直秒）、`poise`（打掉的韧性）、`guard`（被挡住时扣的架势）。少写的档、或者老配置没写 `guard`，用代码里的默认值（`internal/config/hit.go`）。
+- `hit.knock_time`（击退用时，默认 0.18）、`hit.wall_stun`（撞墙额外硬直）、`hit.poise_reset`（多少秒没挨打韧性回满，默认 2）、`hit.reach`（前摇结束时目标比射程多跑出多远仍算命中）。
+- 韧性和重量：monsters.yaml 模板、pets.yaml 和 `player` 的 `poise`、`mass`（重量默认 1，击退距离除以它）。
+- `player.block`：格挡 2.0 的参数（减伤、移速、正面角度、架势上限和回复、破防、完美格挡窗口等），不写或写 0 的用默认值（`internal/config/block.go`）。含义见 [attr 和 combat](attr-combat.md) 的格挡。
 
 ## 默认值和约定
 

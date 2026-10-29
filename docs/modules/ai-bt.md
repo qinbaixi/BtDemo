@@ -54,7 +54,11 @@ var All = map[string]Exported{
 
 ### 执行语义（runner.go）
 
-每个实体有自己的 `bt.Instance`（同一棵树共享 `Tree`，各自的运行状态分开）。每帧调用一次 `Instance.Tick(now)`，**从根节点重新开始评估**：
+每个实体有自己的 `bt.Instance`（同一棵树共享 `Tree`，各自的运行状态分开）。每帧调用一次 `Instance.Tick(now)`，**从根节点重新开始评估**。
+
+例外：被击退、硬直中、前摇中（见 [attr 和 combat](attr-combat.md) 的“命中的分量”）这一帧不跑行为树（`ai.pauseReason`），动作设成 `stagger` 或 `windup`；前摇的那一下由 combat 到点结算。调试面板上这一帧只显示根节点和暂停原因。
+
+节点语义：
 
 | 节点 | 行为 |
 | --- | --- |

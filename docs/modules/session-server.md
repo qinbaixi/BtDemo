@@ -51,7 +51,7 @@
 | `SetTarget{id}` | 选中目标 |
 | `Cast{slot, target, dx, dy}` | 释放第 slot 个技能；`dx`、`dy` 是瞄准方向，给 dash（闪现往哪）和 line（飞斧往哪）用，服务端归一化 |
 | `Watch{id}` | 调试面板要观察这个实体的行为树（0 表示不看） |
-| `Block{on}` | 按下 / 松开右键格挡 |
+| `Block{on, face}` | 按下 / 松开右键格挡；`face` 是没选目标时盾朝哪边（-1 左、1 右） |
 | `Loadout{skills, class}` | 挑技能：按顺序放到第 2 格起的技能 id 列表；`class` 不空时同时换职业，技能从新职业的池里挑（见下面 Input） |
 | `Equip{uid}` | 装上背包里的一件物品（`ItemSlotted.uid`），原来槽位里的回到背包 |
 | `Unequip{slot}` | 卸下 weapon / armor / trinket 槽位里的物品 |
@@ -67,7 +67,7 @@
 | `Welcome` | 连接时一次；重连、客户端跟不上时再发一次（`resumed = true`） | 自己的 id、`token`（断线重连用）、地图尺寸、AOI 格子、技能栏、碰撞体 `obstacles`（调试显示用；场景物件前端从 `scene.map` 的地址读）、所在场景 `scene`（id、名字、线号、地图地址、传送门）、当前职业的技能池 `pool`（slot 为 0）和要挑几个 `pick`、当前职业 `class`、所有职业 `classes`（`ClassInfo`：id、名字、说明、模型、颜色、默认技能栏 `skills`、技能池 `pool`、`pick`、`can_block`、皮肤 `skins`；第一个是默认职业）、装备图鉴 `items`（`ItemInfo`，属性按 str agi int vit max_hp atk matk def mdef crit crit_dmg speed cdr 的顺序，只列不为 0 的）、宠物图鉴 `pets`。`resumed`：还是同一个角色，客户端丢掉所有实体、等待重发的 `Enter`，保留自己的选择（不弹挑技能界面） |
 | `Enter` | 实体进入视野；换职业、皮肤、武器外观后重发 | `EntityInfo` 列表：静态信息（名字、种类、模型、半径、颜色、皮肤 `skin`、武器外观 `gear`、宠物的主人 `owner`）加上**完整的** `EntityState`（所有字段都设置）。已见过的实体再收到 `Enter` 就是更新外观 |
 | `Leave` | 实体离开视野（走远、被删除） | id 列表 |
-| `EntityState` | 视野内某个实体的字段变了（同步帧） | **增量**：只设置变了的字段（x、y、hp、max_hp、lv、act、tg、dead、shield、blocking、looks），设置了的字段可以是 0 / false / 空串，没设置的客户端保持原值。proto2 的 presence 就是用来区分这两种情况的 |
+| `EntityState` | 视野内某个实体的字段变了（同步帧） | **增量**：只设置变了的字段（x、y、hp、max_hp、lv、act、tg、dead、shield、blocking、looks，玩家还有架势 guard），设置了的字段可以是 0 / false / 空串，没设置的客户端保持原值。proto2 的 presence 就是用来区分这两种情况的 |
 | `Event` | 视野内发生了事件 | 施法、伤害、治疗、Buff、死亡、复活、说话、升级、掉落，见下 |
 | `SelfInfo` | 自己的属性变了 | 只发给自己，只发变了的字段（`base`、`attr` 整块发；`cds`、`buffs` 在 `cds_set`、`buffs_set` 为真时是完整的新列表）。`Enter` 之后第一条是完整的 |
 | `ZoneList` | 回血区增减时 | 整份回血区列表（不做 AOI 过滤，区域很少） |
@@ -89,6 +89,8 @@
 - `proc`：装备特效造成的 `DAMAGE` / `HEAL`（还有多重射击的 `CAST`、冰冻的 `BUFF`）带特效名，见 [item](items.md)。
 
 - `DAMAGE` 的 `immune`：目标无敌，没受伤（`value` 为 0）；`blocked`、`absorbed` 分别是格挡和护盾吸收的量，都不计入 `value`。
+- 命中的分量（见 [attr 和 combat](attr-combat.md)）：`CAST` / `DAMAGE` 的 `weight` 是档位；`DAMAGE` 的 `kx`、`ky`、`knock_time` 是击退落点和用时，`stun` 是硬直秒数，`wall` 表示撞墙，`result` 是 `HitResult`（`HIT` 不写、`BLOCK`、`PARRY`、`GUARD_BREAK`、`IMMUNE`；`PARRY` 时击退和硬直说的是攻击者 `src`）。有前摇的 `CAST` 带 `hit_at`（命中的服务端时间）；前摇被打断发 `INTERRUPT`（`id` 是被打断的实体）。
+- `act` 新增 `windup`（前摇中）和 `stagger`（硬直、被击退）。
 - `CAST` 的 `tx`、`ty`：闪现、飞斧、穿云箭的终点（`x`、`y` 是起点）。穿透的 `line`（fx `pierce`）终点是射程尽头或墙前，不因命中停下，`dst` 是第一个命中的（可空），之后按沿线顺序给每个命中的敌人发 `DAMAGE`。
 - `rain` 的 `CAST`：`x`、`y` 是落点，`radius` 是范围，`src` 是施法者，`dst` 是目标（没有目标则空），之后给落点范围内的每个敌人发 `DAMAGE`。
 

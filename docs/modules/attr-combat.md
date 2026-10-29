@@ -77,10 +77,11 @@ Buff 的字段（`config.Buff`）：
 
 ```text
 CastAimed(e, skill, targetID, aimX, aimY)
-  ├─ 死了 → ErrDead；格挡中 → ErrBlocking；冷却中 → ErrCooldown
+  ├─ 死了 → ErrDead；格挡中 → ErrBlocking；硬直或被击退中 → ErrStunned；前摇中 → ErrBusy；冷却中 → ErrCooldown
   ├─ target：目标无效或不敌对 → ErrNoTarget；太远 → ErrTooFar
-  │          发 CAST 事件 → CalcDamage → applyDamage（可能挂上 debuff）
-  ├─ aoe：   发 CAST 事件（带半径）→ 先收集半径内的敌人，再逐个结算
+  │          发 CAST 事件 → 有 windup：开始前摇（CAST 带 hit_at），到点再结算（见下面“命中的分量”）
+  │                          没有：马上 strike → CalcDamage → applyDamage（可能挂上 debuff）
+  ├─ aoe：   发 CAST 事件（带半径）→ 有 windup 同上；结算时先收集半径内的敌人，再逐个结算
   ├─ dash：  没有方向 → ErrNoAim；nav.Reach 沿方向走到最远（最多 distance，撞墙停住）；
   │          一步都走不了 → ErrNoRoom；移动到终点，发 CAST（x、y 是起点，tx、ty 是终点）；不伤害
   ├─ line：  没有方向 → ErrNoAim；从身体边缘出发，nav.Reach 算出飞行距离（最多 range + 自身半径，
@@ -97,6 +98,16 @@ CastAimed(e, skill, targetID, aimX, aimY)
 返回的 error 是给玩家看的中文提示，session 会把它作为 `Toast` 发给客户端；行为树里失败就让节点返回 Failure。
 
 AOE 先收集目标再结算，是因为结算可能杀死目标，而遍历 AOI 格子时不能修改它。
+
+### 命中的分量：前摇、韧性、击退、硬直（combat/impact.go）
+
+每个技能有一个分量档位 `weight`（`light` / `medium` / `heavy`，skills.yaml，默认 light），每档的效果在 `world.yaml` 的 `hit.weights`：击退距离 `knock`、硬直秒数 `stun`、打掉的韧性 `poise`、被挡住时扣的架势 `guard`。技能也可以用自己的 `knock`、`stun`、`poise_dmg` 覆盖档位的值（`HitRules.Hit`）。DAMAGE 事件带上 `weight`，前端按它选顿帧、震屏和音效（`web/src/feel/profiles.ts`）。
+
+- **前摇**（`windup`，只有 `target` 和 `aoe` 技能能有）：出招时发 CAST（带 `hit_at`，命中的服务端时间），实体身上记 `Impact.Windup`，过 `windup` 秒后由 `resolveWindups` 结算（每个 tick 先收集到点的再结算）。结算时目标可以比射程多跑出 `hit.reach`，再远就打空。前摇期间被打出硬直（或者举盾）会被打断（`CancelWindup`），发 `INTERRUPT` 事件，这一下不结算。前摇中不能再出招（`ErrBusy`），怪物的行为树暂停。现在所有怪物技能都有前摇，玩家只有旋风斩有一点。
+- **韧性**（`poise`，monsters.yaml 的模板、pets.yaml、`world.yaml` 的 `player.poise`）：每次命中扣掉档位的 `poise`，扣空了才会被击退和硬直，然后重新算；`hit.poise_reset` 秒没挨打韧性回满。没扣空就是霸体，这一下不退不停（首领食人魔韧性 120，普通怪 0～10）。
+- **击退**：距离 = 档位的 `knock` ÷ 目标的重量 `mass`。`push` 用 `nav.Reach` 沿“攻击者 → 目标”的方向算出能推到哪（被墙和物件挡住就停在跟前），实体身上记 `Impact.Knock`，由 move 在 `hit.knock_time` 秒内先快后慢地推过去（见 [nav 和 move](nav-move.md)）。没推满就是撞墙：事件带 `wall`，硬直再加 `hit.wall_stun`。DAMAGE 事件里 `kx`、`ky` 是落点，`knock_time` 是用时。
+- **硬直**：`Impact.StunUntil` 之前不能移动、不能出招，行为树暂停，同时打断前摇。DAMAGE 事件带 `stun` 秒数。尸体只被打飞，不硬直。
+- 被普通格挡挡住的命中只推开 30%，不硬直、不扣韧性；完美格挡和破防见下面的格挡。
 
 ### 伤害公式
 
