@@ -12,3 +12,6 @@ func F32(v float64) *float32 { return proto.Float32(float32(v)) }
 
 // Round1 四舍五入到一位小数，客户端只需要这个精度。
 func Round1(v float64) float64 { return math.Round(v*10) / 10 }
+
+// Round2 把 v 保留两位小数。
+func Round2(v float64) float64 { return math.Round(v*100) / 100 }

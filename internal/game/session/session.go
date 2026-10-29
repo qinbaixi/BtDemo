@@ -326,10 +326,7 @@ func (sys *System) apply(session *Session, msg *pb.ClientMsg) {
 	case *pb.ClientMsg_Block:
 		// 不能格挡的职业（游侠）忽略格挡消息；松开总是允许的
 		if on := body.Block.GetOn(); !on || sys.canBlock(entity) {
-			if on {
-				sys.combat.CancelWindup(entity) // 举盾就收招：前摇中的那一下不再落下
-			}
-			entity.SetBlocking(on)
+			sys.combat.RaiseBlock(entity, on, float64(body.Block.GetFace()))
 		}
 	case *pb.ClientMsg_Target:
 		entity.SetTarget(int(body.Target.GetId()))

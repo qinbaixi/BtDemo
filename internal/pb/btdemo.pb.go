@@ -228,6 +228,72 @@ func (EventKind) EnumDescriptor() ([]byte, []int) {
 	return file_btdemo_proto_rawDescGZIP(), []int{2}
 }
 
+// HitResult is how a hit was received.
+type HitResult int32
+
+const (
+	HitResult_HIT         HitResult = 0
+	HitResult_BLOCK       HitResult = 1 // stopped by a raised shield (blocked = how much)
+	HitResult_PARRY       HitResult = 2 // perfect block: no damage; kx/ky/knock_time/stun apply to the attacker (src), not dst
+	HitResult_GUARD_BREAK HitResult = 3 // blocked, but the guard meter ran out: the shield drops, dst is knocked back and staggered
+	HitResult_IMMUNE      HitResult = 4 // the target was invulnerable
+)
+
+// Enum value maps for HitResult.
+var (
+	HitResult_name = map[int32]string{
+		0: "HIT",
+		1: "BLOCK",
+		2: "PARRY",
+		3: "GUARD_BREAK",
+		4: "IMMUNE",
+	}
+	HitResult_value = map[string]int32{
+		"HIT":         0,
+		"BLOCK":       1,
+		"PARRY":       2,
+		"GUARD_BREAK": 3,
+		"IMMUNE":      4,
+	}
+)
+
+func (x HitResult) Enum() *HitResult {
+	p := new(HitResult)
+	*p = x
+	return p
+}
+
+func (x HitResult) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (HitResult) Descriptor() protoreflect.EnumDescriptor {
+	return file_btdemo_proto_enumTypes[3].Descriptor()
+}
+
+func (HitResult) Type() protoreflect.EnumType {
+	return &file_btdemo_proto_enumTypes[3]
+}
+
+func (x HitResult) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Do not use.
+func (x *HitResult) UnmarshalJSON(b []byte) error {
+	num, err := protoimpl.X.UnmarshalJSONEnum(x.Descriptor(), b)
+	if err != nil {
+		return err
+	}
+	*x = HitResult(num)
+	return nil
+}
+
+// Deprecated: Use HitResult.Descriptor instead.
+func (HitResult) EnumDescriptor() ([]byte, []int) {
+	return file_btdemo_proto_rawDescGZIP(), []int{3}
+}
+
 type AiStatus int32
 
 const (
@@ -261,11 +327,11 @@ func (x AiStatus) String() string {
 }
 
 func (AiStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_btdemo_proto_enumTypes[3].Descriptor()
+	return file_btdemo_proto_enumTypes[4].Descriptor()
 }
 
 func (AiStatus) Type() protoreflect.EnumType {
-	return &file_btdemo_proto_enumTypes[3]
+	return &file_btdemo_proto_enumTypes[4]
 }
 
 func (x AiStatus) Number() protoreflect.EnumNumber {
@@ -284,7 +350,7 @@ func (x *AiStatus) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use AiStatus.Descriptor instead.
 func (AiStatus) EnumDescriptor() ([]byte, []int) {
-	return file_btdemo_proto_rawDescGZIP(), []int{3}
+	return file_btdemo_proto_rawDescGZIP(), []int{4}
 }
 
 // The first frame of every connection is Hello.
@@ -924,6 +990,7 @@ func (x *Loadout) GetClass() string {
 type Block struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	On            *bool                  `protobuf:"varint,1,req,name=on" json:"on,omitempty"`
+	Face          *float32               `protobuf:"fixed32,2,opt,name=face" json:"face,omitempty"` // raising: the side the shield faces, -1 left / 1 right (used when no target is selected)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -963,6 +1030,13 @@ func (x *Block) GetOn() bool {
 		return *x.On
 	}
 	return false
+}
+
+func (x *Block) GetFace() float32 {
+	if x != nil && x.Face != nil {
+		return *x.Face
+	}
+	return 0
 }
 
 // Move sets the held movement direction; the server normalizes it. 0,0 stops.
@@ -3093,6 +3167,7 @@ type EntityState struct {
 	Shield        *float32               `protobuf:"fixed32,10,opt,name=shield" json:"shield,omitempty"`    // damage the active shield can still absorb
 	Blocking      *bool                  `protobuf:"varint,11,opt,name=blocking" json:"blocking,omitempty"` // guard raised
 	Looks         *int32                 `protobuf:"varint,12,opt,name=looks" json:"looks,omitempty"`       // buff looks, bit set: 1 haste, 2 holy (invulnerable), 4 fire (enchanted weapon), 8 frost (slowed)
+	Guard         *float32               `protobuf:"fixed32,13,opt,name=guard" json:"guard,omitempty"`      // players: guard meter left for blocking, 0..1
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3211,6 +3286,13 @@ func (x *EntityState) GetLooks() int32 {
 	return 0
 }
 
+func (x *EntityState) GetGuard() float32 {
+	if x != nil && x.Guard != nil {
+		return *x.Guard
+	}
+	return 0
+}
+
 // Event is a one-off thing that happened inside the AOI. Which fields are set
 // depends on kind.
 type Event struct {
@@ -3243,9 +3325,10 @@ type Event struct {
 	Kx            *float32               `protobuf:"fixed32,26,opt,name=kx" json:"kx,omitempty"`       // DAMAGE: the target is knocked back to (kx, ky) over knock_time seconds
 	Ky            *float32               `protobuf:"fixed32,27,opt,name=ky" json:"ky,omitempty"`
 	KnockTime     *float32               `protobuf:"fixed32,28,opt,name=knock_time,json=knockTime" json:"knock_time,omitempty"`
-	Stun          *float32               `protobuf:"fixed32,29,opt,name=stun" json:"stun,omitempty"`                // DAMAGE: the target is staggered (cannot move or act) for this many seconds
-	Wall          *bool                  `protobuf:"varint,30,opt,name=wall" json:"wall,omitempty"`                 // DAMAGE: the knockback slammed the target into an obstacle
-	HitAt         *float32               `protobuf:"fixed32,31,opt,name=hit_at,json=hitAt" json:"hit_at,omitempty"` // CAST with a windup: Frame.time when the hit lands
+	Stun          *float32               `protobuf:"fixed32,29,opt,name=stun" json:"stun,omitempty"`                          // DAMAGE: the target is staggered (cannot move or act) for this many seconds
+	Wall          *bool                  `protobuf:"varint,30,opt,name=wall" json:"wall,omitempty"`                           // DAMAGE: the knockback slammed the target into an obstacle
+	HitAt         *float32               `protobuf:"fixed32,31,opt,name=hit_at,json=hitAt" json:"hit_at,omitempty"`           // CAST with a windup: Frame.time when the hit lands
+	Result        *HitResult             `protobuf:"varint,32,opt,name=result,enum=btdemo.HitResult" json:"result,omitempty"` // DAMAGE: how the hit was received (absent = HIT)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3495,6 +3578,13 @@ func (x *Event) GetHitAt() float32 {
 		return *x.HitAt
 	}
 	return 0
+}
+
+func (x *Event) GetResult() HitResult {
+	if x != nil && x.Result != nil {
+		return *x.Result
+	}
+	return HitResult_HIT
 }
 
 type Attrs struct {
@@ -4704,9 +4794,10 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x04skin\x18\x01 \x02(\tR\x04skin\"7\n" +
 	"\aLoadout\x12\x16\n" +
 	"\x06skills\x18\x01 \x03(\tR\x06skills\x12\x14\n" +
-	"\x05class\x18\x02 \x01(\tR\x05class\"\x17\n" +
+	"\x05class\x18\x02 \x01(\tR\x05class\"+\n" +
 	"\x05Block\x12\x0e\n" +
-	"\x02on\x18\x01 \x02(\bR\x02on\"&\n" +
+	"\x02on\x18\x01 \x02(\bR\x02on\x12\x12\n" +
+	"\x04face\x18\x02 \x01(\x02R\x04face\"&\n" +
 	"\x04Move\x12\x0e\n" +
 	"\x02dx\x18\x01 \x02(\x02R\x02dx\x12\x0e\n" +
 	"\x02dy\x18\x02 \x02(\x02R\x02dy\"\x1b\n" +
@@ -4868,7 +4959,7 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x05Enter\x12&\n" +
 	"\x04ents\x18\x01 \x03(\v2\x12.btdemo.EntityInfoR\x04ents\"\x1d\n" +
 	"\x05Leave\x12\x14\n" +
-	"\x03ids\x18\x01 \x03(\x05B\x02\x10\x01R\x03ids\"\xf0\x01\n" +
+	"\x03ids\x18\x01 \x03(\x05B\x02\x10\x01R\x03ids\"\x86\x02\n" +
 	"\vEntityState\x12\x0e\n" +
 	"\x02id\x18\x01 \x02(\x05R\x02id\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x02R\x01x\x12\f\n" +
@@ -4882,7 +4973,8 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x06shield\x18\n" +
 	" \x01(\x02R\x06shield\x12\x1a\n" +
 	"\bblocking\x18\v \x01(\bR\bblocking\x12\x14\n" +
-	"\x05looks\x18\f \x01(\x05R\x05looks\"\x86\x05\n" +
+	"\x05looks\x18\f \x01(\x05R\x05looks\x12\x14\n" +
+	"\x05guard\x18\r \x01(\x02R\x05guard\"\xb1\x05\n" +
 	"\x05Event\x12%\n" +
 	"\x04kind\x18\x01 \x02(\x0e2\x11.btdemo.EventKindR\x04kind\x12\x10\n" +
 	"\x03src\x18\x02 \x01(\x05R\x03src\x12\x10\n" +
@@ -4916,7 +5008,8 @@ const file_btdemo_proto_rawDesc = "" +
 	"knock_time\x18\x1c \x01(\x02R\tknockTime\x12\x12\n" +
 	"\x04stun\x18\x1d \x01(\x02R\x04stun\x12\x12\n" +
 	"\x04wall\x18\x1e \x01(\bR\x04wall\x12\x15\n" +
-	"\x06hit_at\x18\x1f \x01(\x02R\x05hitAt\"O\n" +
+	"\x06hit_at\x18\x1f \x01(\x02R\x05hitAt\x12)\n" +
+	"\x06result\x18  \x01(\x0e2\x11.btdemo.HitResultR\x06result\"O\n" +
 	"\x05Attrs\x12\x10\n" +
 	"\x03str\x18\x01 \x01(\x02R\x03str\x12\x10\n" +
 	"\x03agi\x18\x02 \x01(\x02R\x03agi\x12\x10\n" +
@@ -5042,7 +5135,14 @@ const file_btdemo_proto_rawDesc = "" +
 	"\bLEVEL_UP\x10\b\x12\b\n" +
 	"\x04LOOT\x10\t\x12\r\n" +
 	"\tINTERRUPT\x10\n" +
-	"*1\n" +
+	"*G\n" +
+	"\tHitResult\x12\a\n" +
+	"\x03HIT\x10\x00\x12\t\n" +
+	"\x05BLOCK\x10\x01\x12\t\n" +
+	"\x05PARRY\x10\x02\x12\x0f\n" +
+	"\vGUARD_BREAK\x10\x03\x12\n" +
+	"\n" +
+	"\x06IMMUNE\x10\x04*1\n" +
 	"\bAiStatus\x12\v\n" +
 	"\aFAILURE\x10\x00\x12\v\n" +
 	"\aSUCCESS\x10\x01\x12\v\n" +
@@ -5060,134 +5160,136 @@ func file_btdemo_proto_rawDescGZIP() []byte {
 	return file_btdemo_proto_rawDescData
 }
 
-var file_btdemo_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_btdemo_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_btdemo_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
 var file_btdemo_proto_goTypes = []any{
 	(ObstacleShape)(0),    // 0: btdemo.ObstacleShape
 	(EntityKind)(0),       // 1: btdemo.EntityKind
 	(EventKind)(0),        // 2: btdemo.EventKind
-	(AiStatus)(0),         // 3: btdemo.AiStatus
-	(*ClientMsg)(nil),     // 4: btdemo.ClientMsg
-	(*Lines)(nil),         // 5: btdemo.Lines
-	(*SwitchLine)(nil),    // 6: btdemo.SwitchLine
-	(*Hello)(nil),         // 7: btdemo.Hello
-	(*SetPet)(nil),        // 8: btdemo.SetPet
-	(*Equip)(nil),         // 9: btdemo.Equip
-	(*Unequip)(nil),       // 10: btdemo.Unequip
-	(*SetSkin)(nil),       // 11: btdemo.SetSkin
-	(*Loadout)(nil),       // 12: btdemo.Loadout
-	(*Block)(nil),         // 13: btdemo.Block
-	(*Move)(nil),          // 14: btdemo.Move
-	(*SetTarget)(nil),     // 15: btdemo.SetTarget
-	(*Cast)(nil),          // 16: btdemo.Cast
-	(*Watch)(nil),         // 17: btdemo.Watch
-	(*Frame)(nil),         // 18: btdemo.Frame
-	(*ServerMsg)(nil),     // 19: btdemo.ServerMsg
-	(*LineList)(nil),      // 20: btdemo.LineList
-	(*LineInfo)(nil),      // 21: btdemo.LineInfo
-	(*Travel)(nil),        // 22: btdemo.Travel
-	(*PetStatus)(nil),     // 23: btdemo.PetStatus
-	(*PetInfo)(nil),       // 24: btdemo.PetInfo
-	(*ItemInfo)(nil),      // 25: btdemo.ItemInfo
-	(*ItemStat)(nil),      // 26: btdemo.ItemStat
-	(*ItemSlotted)(nil),   // 27: btdemo.ItemSlotted
-	(*Inventory)(nil),     // 28: btdemo.Inventory
-	(*SkillBar)(nil),      // 29: btdemo.SkillBar
-	(*SkillInfo)(nil),     // 30: btdemo.SkillInfo
-	(*ClassInfo)(nil),     // 31: btdemo.ClassInfo
-	(*SkinInfo)(nil),      // 32: btdemo.SkinInfo
-	(*Welcome)(nil),       // 33: btdemo.Welcome
-	(*SceneInfo)(nil),     // 34: btdemo.SceneInfo
-	(*PortalInfo)(nil),    // 35: btdemo.PortalInfo
-	(*Obstacle)(nil),      // 36: btdemo.Obstacle
-	(*EntityInfo)(nil),    // 37: btdemo.EntityInfo
-	(*Enter)(nil),         // 38: btdemo.Enter
-	(*Leave)(nil),         // 39: btdemo.Leave
-	(*EntityState)(nil),   // 40: btdemo.EntityState
-	(*Event)(nil),         // 41: btdemo.Event
-	(*Attrs)(nil),         // 42: btdemo.Attrs
-	(*Derived)(nil),       // 43: btdemo.Derived
-	(*SkillCooldown)(nil), // 44: btdemo.SkillCooldown
-	(*BuffInfo)(nil),      // 45: btdemo.BuffInfo
-	(*SelfInfo)(nil),      // 46: btdemo.SelfInfo
-	(*ZoneList)(nil),      // 47: btdemo.ZoneList
-	(*Zone)(nil),          // 48: btdemo.Zone
-	(*AiNode)(nil),        // 49: btdemo.AiNode
-	(*AiCheck)(nil),       // 50: btdemo.AiCheck
-	(*AiTreeDef)(nil),     // 51: btdemo.AiTreeDef
-	(*AiTreeNode)(nil),    // 52: btdemo.AiTreeNode
-	(*AiTick)(nil),        // 53: btdemo.AiTick
-	(*KeyValue)(nil),      // 54: btdemo.KeyValue
-	(*AiTrace)(nil),       // 55: btdemo.AiTrace
-	(*Toast)(nil),         // 56: btdemo.Toast
+	(HitResult)(0),        // 3: btdemo.HitResult
+	(AiStatus)(0),         // 4: btdemo.AiStatus
+	(*ClientMsg)(nil),     // 5: btdemo.ClientMsg
+	(*Lines)(nil),         // 6: btdemo.Lines
+	(*SwitchLine)(nil),    // 7: btdemo.SwitchLine
+	(*Hello)(nil),         // 8: btdemo.Hello
+	(*SetPet)(nil),        // 9: btdemo.SetPet
+	(*Equip)(nil),         // 10: btdemo.Equip
+	(*Unequip)(nil),       // 11: btdemo.Unequip
+	(*SetSkin)(nil),       // 12: btdemo.SetSkin
+	(*Loadout)(nil),       // 13: btdemo.Loadout
+	(*Block)(nil),         // 14: btdemo.Block
+	(*Move)(nil),          // 15: btdemo.Move
+	(*SetTarget)(nil),     // 16: btdemo.SetTarget
+	(*Cast)(nil),          // 17: btdemo.Cast
+	(*Watch)(nil),         // 18: btdemo.Watch
+	(*Frame)(nil),         // 19: btdemo.Frame
+	(*ServerMsg)(nil),     // 20: btdemo.ServerMsg
+	(*LineList)(nil),      // 21: btdemo.LineList
+	(*LineInfo)(nil),      // 22: btdemo.LineInfo
+	(*Travel)(nil),        // 23: btdemo.Travel
+	(*PetStatus)(nil),     // 24: btdemo.PetStatus
+	(*PetInfo)(nil),       // 25: btdemo.PetInfo
+	(*ItemInfo)(nil),      // 26: btdemo.ItemInfo
+	(*ItemStat)(nil),      // 27: btdemo.ItemStat
+	(*ItemSlotted)(nil),   // 28: btdemo.ItemSlotted
+	(*Inventory)(nil),     // 29: btdemo.Inventory
+	(*SkillBar)(nil),      // 30: btdemo.SkillBar
+	(*SkillInfo)(nil),     // 31: btdemo.SkillInfo
+	(*ClassInfo)(nil),     // 32: btdemo.ClassInfo
+	(*SkinInfo)(nil),      // 33: btdemo.SkinInfo
+	(*Welcome)(nil),       // 34: btdemo.Welcome
+	(*SceneInfo)(nil),     // 35: btdemo.SceneInfo
+	(*PortalInfo)(nil),    // 36: btdemo.PortalInfo
+	(*Obstacle)(nil),      // 37: btdemo.Obstacle
+	(*EntityInfo)(nil),    // 38: btdemo.EntityInfo
+	(*Enter)(nil),         // 39: btdemo.Enter
+	(*Leave)(nil),         // 40: btdemo.Leave
+	(*EntityState)(nil),   // 41: btdemo.EntityState
+	(*Event)(nil),         // 42: btdemo.Event
+	(*Attrs)(nil),         // 43: btdemo.Attrs
+	(*Derived)(nil),       // 44: btdemo.Derived
+	(*SkillCooldown)(nil), // 45: btdemo.SkillCooldown
+	(*BuffInfo)(nil),      // 46: btdemo.BuffInfo
+	(*SelfInfo)(nil),      // 47: btdemo.SelfInfo
+	(*ZoneList)(nil),      // 48: btdemo.ZoneList
+	(*Zone)(nil),          // 49: btdemo.Zone
+	(*AiNode)(nil),        // 50: btdemo.AiNode
+	(*AiCheck)(nil),       // 51: btdemo.AiCheck
+	(*AiTreeDef)(nil),     // 52: btdemo.AiTreeDef
+	(*AiTreeNode)(nil),    // 53: btdemo.AiTreeNode
+	(*AiTick)(nil),        // 54: btdemo.AiTick
+	(*KeyValue)(nil),      // 55: btdemo.KeyValue
+	(*AiTrace)(nil),       // 56: btdemo.AiTrace
+	(*Toast)(nil),         // 57: btdemo.Toast
 }
 var file_btdemo_proto_depIdxs = []int32{
-	14, // 0: btdemo.ClientMsg.move:type_name -> btdemo.Move
-	15, // 1: btdemo.ClientMsg.target:type_name -> btdemo.SetTarget
-	16, // 2: btdemo.ClientMsg.cast:type_name -> btdemo.Cast
-	17, // 3: btdemo.ClientMsg.watch:type_name -> btdemo.Watch
-	13, // 4: btdemo.ClientMsg.block:type_name -> btdemo.Block
-	12, // 5: btdemo.ClientMsg.loadout:type_name -> btdemo.Loadout
-	9,  // 6: btdemo.ClientMsg.equip:type_name -> btdemo.Equip
-	10, // 7: btdemo.ClientMsg.unequip:type_name -> btdemo.Unequip
-	11, // 8: btdemo.ClientMsg.skin:type_name -> btdemo.SetSkin
-	8,  // 9: btdemo.ClientMsg.pet:type_name -> btdemo.SetPet
-	7,  // 10: btdemo.ClientMsg.hello:type_name -> btdemo.Hello
-	5,  // 11: btdemo.ClientMsg.lines:type_name -> btdemo.Lines
-	6,  // 12: btdemo.ClientMsg.switch_line:type_name -> btdemo.SwitchLine
-	19, // 13: btdemo.Frame.msgs:type_name -> btdemo.ServerMsg
-	33, // 14: btdemo.ServerMsg.welcome:type_name -> btdemo.Welcome
-	38, // 15: btdemo.ServerMsg.enter:type_name -> btdemo.Enter
-	39, // 16: btdemo.ServerMsg.leave:type_name -> btdemo.Leave
-	40, // 17: btdemo.ServerMsg.state:type_name -> btdemo.EntityState
-	41, // 18: btdemo.ServerMsg.event:type_name -> btdemo.Event
-	46, // 19: btdemo.ServerMsg.self:type_name -> btdemo.SelfInfo
-	47, // 20: btdemo.ServerMsg.zones:type_name -> btdemo.ZoneList
-	55, // 21: btdemo.ServerMsg.ai:type_name -> btdemo.AiTrace
-	56, // 22: btdemo.ServerMsg.toast:type_name -> btdemo.Toast
-	29, // 23: btdemo.ServerMsg.skill_bar:type_name -> btdemo.SkillBar
-	28, // 24: btdemo.ServerMsg.inventory:type_name -> btdemo.Inventory
-	23, // 25: btdemo.ServerMsg.pet_status:type_name -> btdemo.PetStatus
-	20, // 26: btdemo.ServerMsg.lines:type_name -> btdemo.LineList
-	22, // 27: btdemo.ServerMsg.travel:type_name -> btdemo.Travel
-	21, // 28: btdemo.LineList.lines:type_name -> btdemo.LineInfo
-	26, // 29: btdemo.ItemInfo.stats:type_name -> btdemo.ItemStat
-	27, // 30: btdemo.Inventory.items:type_name -> btdemo.ItemSlotted
-	30, // 31: btdemo.SkillBar.skills:type_name -> btdemo.SkillInfo
-	30, // 32: btdemo.ClassInfo.skills:type_name -> btdemo.SkillInfo
-	30, // 33: btdemo.ClassInfo.pool:type_name -> btdemo.SkillInfo
-	32, // 34: btdemo.ClassInfo.skins:type_name -> btdemo.SkinInfo
-	30, // 35: btdemo.Welcome.skills:type_name -> btdemo.SkillInfo
-	36, // 36: btdemo.Welcome.obstacles:type_name -> btdemo.Obstacle
-	30, // 37: btdemo.Welcome.pool:type_name -> btdemo.SkillInfo
-	31, // 38: btdemo.Welcome.classes:type_name -> btdemo.ClassInfo
-	25, // 39: btdemo.Welcome.items:type_name -> btdemo.ItemInfo
-	24, // 40: btdemo.Welcome.pets:type_name -> btdemo.PetInfo
-	34, // 41: btdemo.Welcome.scene:type_name -> btdemo.SceneInfo
-	35, // 42: btdemo.SceneInfo.portals:type_name -> btdemo.PortalInfo
+	15, // 0: btdemo.ClientMsg.move:type_name -> btdemo.Move
+	16, // 1: btdemo.ClientMsg.target:type_name -> btdemo.SetTarget
+	17, // 2: btdemo.ClientMsg.cast:type_name -> btdemo.Cast
+	18, // 3: btdemo.ClientMsg.watch:type_name -> btdemo.Watch
+	14, // 4: btdemo.ClientMsg.block:type_name -> btdemo.Block
+	13, // 5: btdemo.ClientMsg.loadout:type_name -> btdemo.Loadout
+	10, // 6: btdemo.ClientMsg.equip:type_name -> btdemo.Equip
+	11, // 7: btdemo.ClientMsg.unequip:type_name -> btdemo.Unequip
+	12, // 8: btdemo.ClientMsg.skin:type_name -> btdemo.SetSkin
+	9,  // 9: btdemo.ClientMsg.pet:type_name -> btdemo.SetPet
+	8,  // 10: btdemo.ClientMsg.hello:type_name -> btdemo.Hello
+	6,  // 11: btdemo.ClientMsg.lines:type_name -> btdemo.Lines
+	7,  // 12: btdemo.ClientMsg.switch_line:type_name -> btdemo.SwitchLine
+	20, // 13: btdemo.Frame.msgs:type_name -> btdemo.ServerMsg
+	34, // 14: btdemo.ServerMsg.welcome:type_name -> btdemo.Welcome
+	39, // 15: btdemo.ServerMsg.enter:type_name -> btdemo.Enter
+	40, // 16: btdemo.ServerMsg.leave:type_name -> btdemo.Leave
+	41, // 17: btdemo.ServerMsg.state:type_name -> btdemo.EntityState
+	42, // 18: btdemo.ServerMsg.event:type_name -> btdemo.Event
+	47, // 19: btdemo.ServerMsg.self:type_name -> btdemo.SelfInfo
+	48, // 20: btdemo.ServerMsg.zones:type_name -> btdemo.ZoneList
+	56, // 21: btdemo.ServerMsg.ai:type_name -> btdemo.AiTrace
+	57, // 22: btdemo.ServerMsg.toast:type_name -> btdemo.Toast
+	30, // 23: btdemo.ServerMsg.skill_bar:type_name -> btdemo.SkillBar
+	29, // 24: btdemo.ServerMsg.inventory:type_name -> btdemo.Inventory
+	24, // 25: btdemo.ServerMsg.pet_status:type_name -> btdemo.PetStatus
+	21, // 26: btdemo.ServerMsg.lines:type_name -> btdemo.LineList
+	23, // 27: btdemo.ServerMsg.travel:type_name -> btdemo.Travel
+	22, // 28: btdemo.LineList.lines:type_name -> btdemo.LineInfo
+	27, // 29: btdemo.ItemInfo.stats:type_name -> btdemo.ItemStat
+	28, // 30: btdemo.Inventory.items:type_name -> btdemo.ItemSlotted
+	31, // 31: btdemo.SkillBar.skills:type_name -> btdemo.SkillInfo
+	31, // 32: btdemo.ClassInfo.skills:type_name -> btdemo.SkillInfo
+	31, // 33: btdemo.ClassInfo.pool:type_name -> btdemo.SkillInfo
+	33, // 34: btdemo.ClassInfo.skins:type_name -> btdemo.SkinInfo
+	31, // 35: btdemo.Welcome.skills:type_name -> btdemo.SkillInfo
+	37, // 36: btdemo.Welcome.obstacles:type_name -> btdemo.Obstacle
+	31, // 37: btdemo.Welcome.pool:type_name -> btdemo.SkillInfo
+	32, // 38: btdemo.Welcome.classes:type_name -> btdemo.ClassInfo
+	26, // 39: btdemo.Welcome.items:type_name -> btdemo.ItemInfo
+	25, // 40: btdemo.Welcome.pets:type_name -> btdemo.PetInfo
+	35, // 41: btdemo.Welcome.scene:type_name -> btdemo.SceneInfo
+	36, // 42: btdemo.SceneInfo.portals:type_name -> btdemo.PortalInfo
 	0,  // 43: btdemo.Obstacle.shape:type_name -> btdemo.ObstacleShape
 	1,  // 44: btdemo.EntityInfo.kind:type_name -> btdemo.EntityKind
-	40, // 45: btdemo.EntityInfo.state:type_name -> btdemo.EntityState
-	37, // 46: btdemo.Enter.ents:type_name -> btdemo.EntityInfo
+	41, // 45: btdemo.EntityInfo.state:type_name -> btdemo.EntityState
+	38, // 46: btdemo.Enter.ents:type_name -> btdemo.EntityInfo
 	2,  // 47: btdemo.Event.kind:type_name -> btdemo.EventKind
-	42, // 48: btdemo.SelfInfo.base:type_name -> btdemo.Attrs
-	43, // 49: btdemo.SelfInfo.attr:type_name -> btdemo.Derived
-	44, // 50: btdemo.SelfInfo.cds:type_name -> btdemo.SkillCooldown
-	45, // 51: btdemo.SelfInfo.buffs:type_name -> btdemo.BuffInfo
-	48, // 52: btdemo.ZoneList.zones:type_name -> btdemo.Zone
-	3,  // 53: btdemo.AiNode.status:type_name -> btdemo.AiStatus
-	50, // 54: btdemo.AiNode.checks:type_name -> btdemo.AiCheck
-	52, // 55: btdemo.AiTreeDef.nodes:type_name -> btdemo.AiTreeNode
-	54, // 56: btdemo.AiTreeNode.props:type_name -> btdemo.KeyValue
-	49, // 57: btdemo.AiTick.nodes:type_name -> btdemo.AiNode
-	53, // 58: btdemo.AiTrace.ticks:type_name -> btdemo.AiTick
-	54, // 59: btdemo.AiTrace.blackboard:type_name -> btdemo.KeyValue
-	51, // 60: btdemo.AiTrace.def:type_name -> btdemo.AiTreeDef
-	61, // [61:61] is the sub-list for method output_type
-	61, // [61:61] is the sub-list for method input_type
-	61, // [61:61] is the sub-list for extension type_name
-	61, // [61:61] is the sub-list for extension extendee
-	0,  // [0:61] is the sub-list for field type_name
+	3,  // 48: btdemo.Event.result:type_name -> btdemo.HitResult
+	43, // 49: btdemo.SelfInfo.base:type_name -> btdemo.Attrs
+	44, // 50: btdemo.SelfInfo.attr:type_name -> btdemo.Derived
+	45, // 51: btdemo.SelfInfo.cds:type_name -> btdemo.SkillCooldown
+	46, // 52: btdemo.SelfInfo.buffs:type_name -> btdemo.BuffInfo
+	49, // 53: btdemo.ZoneList.zones:type_name -> btdemo.Zone
+	4,  // 54: btdemo.AiNode.status:type_name -> btdemo.AiStatus
+	51, // 55: btdemo.AiNode.checks:type_name -> btdemo.AiCheck
+	53, // 56: btdemo.AiTreeDef.nodes:type_name -> btdemo.AiTreeNode
+	55, // 57: btdemo.AiTreeNode.props:type_name -> btdemo.KeyValue
+	50, // 58: btdemo.AiTick.nodes:type_name -> btdemo.AiNode
+	54, // 59: btdemo.AiTrace.ticks:type_name -> btdemo.AiTick
+	55, // 60: btdemo.AiTrace.blackboard:type_name -> btdemo.KeyValue
+	52, // 61: btdemo.AiTrace.def:type_name -> btdemo.AiTreeDef
+	62, // [62:62] is the sub-list for method output_type
+	62, // [62:62] is the sub-list for method input_type
+	62, // [62:62] is the sub-list for extension type_name
+	62, // [62:62] is the sub-list for extension extendee
+	0,  // [0:62] is the sub-list for field type_name
 }
 
 func init() { file_btdemo_proto_init() }
@@ -5231,7 +5333,7 @@ func file_btdemo_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_btdemo_proto_rawDesc), len(file_btdemo_proto_rawDesc)),
-			NumEnums:      4,
+			NumEnums:      5,
 			NumMessages:   53,
 			NumExtensions: 0,
 			NumServices:   0,

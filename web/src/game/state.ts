@@ -35,6 +35,10 @@ export interface ClientEntity {
   shield: number;     // 护盾还能吸收的伤害
   shieldMax: number;  // 这层护盾刚加上时的量，用来算剩余比例
   blocking: boolean;  // 正在格挡
+  guard: number;      // 格挡架势剩余比例 0..1（只有玩家有，1 = 满）
+  guardAt: number;    // 架势最近一次变化的时间（架势条满了以后过一会儿淡出）
+  parryAt: number;    // 最近一次完美格挡的时间（盾往前一顶的动作）
+  breakAt: number;    // 最近一次被破防的时间（盾被打开的动作）
   looks: number;      // 身上 Buff 的外观（LOOK_* 位）
   blinkFrom: { x: number; y: number; at: number } | null;   // 最近一次闪现的起点（画残影）
   // 翻滚和被击退：从起点滑到终点（knock 为 true 是击退，途中服务端发来的位置先不管，终点就是服务端的落点）
@@ -244,6 +248,10 @@ export function makeEntity(d: Partial<Omit<EntityInfo, 'state'>> & Partial<Entit
     shield: 0,
     shieldMax: 0,
     blocking: false,
+    guard: 1,
+    guardAt: -1e9,
+    parryAt: -1e9,
+    breakAt: -1e9,
     looks: 0,
     blinkFrom: null,
     slide: null,

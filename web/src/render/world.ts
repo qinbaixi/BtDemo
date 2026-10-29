@@ -241,6 +241,13 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
 }
 
 const STUN_HOLD = 0.3;   // 硬直时受击动画停在这一帧（占受击动画时长的比例）
+// progress 是一段 ms 长的动作在 elapsed 毫秒时的进度 0..1，不在动作中返回 -1。
+function progress(elapsed: number, ms: number): number {
+  return elapsed >= 0 && elapsed < ms ? elapsed / ms : -1;
+}
+
+const PARRY_MS = 360;    // 完美格挡时盾往前一顶的动作
+const BREAK_MS = 900;    // 被破防时盾被打开、踉跄再收回来的动作（和服务端的 break_stun 差不多长）
 
 // 溶解边缘的火光：怪物是暗红的余烬，NPC 是幽蓝的魂火
 const BURN: Record<string, string> = { monster: '#ff5a1e', npc: '#5fd8ff', player: '#ffcf6a' };
@@ -318,6 +325,8 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
     time: now + e.id * 397,
     isSelf: e.id === state.myId,
     blocking: e.blocking && !e.dead,
+    parry: progress(now - e.parryAt, PARRY_MS),
+    broken: e.dead ? -1 : progress(now - e.breakAt, BREAK_MS),
     looks: e.dead ? 0 : e.looks,
     skin: e.skin,
     gear: e.gear,

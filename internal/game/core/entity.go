@@ -123,6 +123,21 @@ type Impact struct {
 	// PoiseTaken 是最近被打掉的韧性，PoiseHitAt 是最近一次被打掉的时间（过了 hit.poise_reset 秒清零）
 	PoiseTaken float64
 	PoiseHitAt float64
+	Guard
+}
+
+// Guard 是格挡的状态（只有能格挡的玩家用到，由 session 和 combat 管理）。
+type Guard struct {
+	// BlockFace 是举盾时盾朝着的一侧（-1 左，1 右）；选了目标时盾朝着目标，见 combat 的 blockFacing
+	BlockFace float64
+	// ParryUntil 之前挡住的近战是完美格挡（举盾那一刻开窗口）
+	ParryUntil float64
+	// BlockLoweredAt 是上一次放下盾的时间：放下不够久再举起没有完美格挡窗口
+	BlockLoweredAt float64
+	// GuardSpent 是已经扣掉的架势比例，0 = 满，1 = 扣空（破防）；用 SetGuardSpent 改
+	GuardSpent float64
+	// GuardHitAt 是最近一次挡住东西的时间，过一会儿架势才开始回复
+	GuardHitAt float64
 }
 
 // Windup 是一次还没结算的出招：到 HitAt 才判定命中。

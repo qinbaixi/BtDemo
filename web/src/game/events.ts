@@ -2,6 +2,7 @@
 
 import type { GameEvent, SkillInfo } from '../net/types';
 import { buildHit, isMine, onCast, onDeath, playHit, sfxAt } from '../feel/director';
+import { forgetBlock } from '../input';
 import { ACTIONS, muzzleOffset } from '../render/knightActions';
 import { ATTACK_IMPACT, ATTACK_MS, LOOK_FIRE, MODEL_SCALE, RARITY_COLOR } from './config';
 import { hypot } from './math';
@@ -112,7 +113,21 @@ export function onEvent(ev: GameEvent, now: number): void {
           addFloat(t, ev.dst, '免疫', '#ffe9a0', 18, 900, { pop: true, rise: 46 });
           return;
         }
-        if (ev.blocked) {
+        if (ev.result === 'parry') {
+          // 完美格挡：盾前一圈亮金色的冲击环，一个字都不掉；被弹开的攻击者头上冒“失衡”
+          if (ev.src) fx.deflect(ev.src, t);
+          fx.perfectBlock(ev.dst, ev.src || 0, t);
+          addFloat(t, ev.dst, '完美格挡', '#ffe9a0', 19, 1100, { pop: true, rise: 54 });
+          if (ev.src && ev.stun) addFloat(t, ev.src, '失衡', '#ffd166', 15, 900, { rise: 40 });
+          return;
+        }
+        if (ev.result === 'guard_break') {
+          // 破防：盾被砸开，碎片四溅，盾放下（自己的话右键要重新按）
+          fx.guardBreak(ev.dst, t);
+          addFloat(t, ev.dst, '破防', '#ff7a45', 20, 1100, { pop: true, rise: 54 });
+          if (e) e.blocking = false;
+          if (ev.dst === state.myId) forgetBlock();
+        } else if (ev.blocked) {
           // 格挡：盾上迸出火花，伤害数字小一号
           fx.block(ev.dst, t);
           addFloat(t, ev.dst, '格挡', '#9ad7ff', 18, 900, { pop: true, rise: 46 });

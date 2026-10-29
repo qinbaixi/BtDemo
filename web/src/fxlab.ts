@@ -198,6 +198,48 @@ function ogreSmash(blocked: boolean): void {
   });
 }
 
+// guardDemo 是格挡 2.0 的几种结果：parry 在重锤落下前一刻才举盾（完美格挡，食人魔被弹开），
+// guard_break 是架势只剩一点时硬挡（盾被砸开、人被推开），back 是盾朝着反方向、从背后挨了一锤。
+function guardDemo(kind: 'parry' | 'guard_break' | 'back'): void {
+  const ogre = state.ents.get(3)!;
+  const me = state.ents.get(ME)!;
+  const windup = 600;
+  const mp = posOf(me, performance.now());
+  moveTo(ogre, mp.x + 74, mp.y - 6, performance.now());
+  ogre.facing = Math.PI;
+  me.facing = kind === 'back' ? Math.PI : 0;
+  emit({ k: 'cast', src: ogre.id, dst: ME, fx: 'melee', skill: 'smash', weight: 'heavy', color: '#ff9f43',
+    hitAt: (performance.now() + windup) / 1000 });
+  // 完美格挡：命中前 0.1 秒才举盾；其它两种一开始就举着
+  const raiseAt = kind === 'parry' ? windup - 100 : 0;
+  later(raiseAt, () => {
+    me.blocking = true;
+    if (kind === 'guard_break') { me.guard = 0.25; me.guardAt = performance.now(); }
+  });
+  later(windup, () => {
+    const now = performance.now();
+    if (kind === 'parry') {
+      const knock = knockAway(ogre, me, 18 / 2.5);
+      emit({ k: 'dmg', src: ogre.id, dst: ME, v: 0, skill: 'smash', weight: 'heavy', blocked: 60, result: 'parry',
+        ...knock, knockTime: 0.18, stun: 0.6 });
+    } else if (kind === 'guard_break') {
+      const knock = knockAway(me, ogre, 30 / 1.2);
+      me.guard = 0; me.guardAt = now;
+      emit({ k: 'dmg', src: ogre.id, dst: ME, v: 12, skill: 'smash', weight: 'heavy', blocked: 48, result: 'guard_break',
+        ...knock, knockTime: 0.18, stun: 0.8 });
+      damage(me, 12);
+      // 架势过一会儿开始回
+      for (let i = 1; i <= 20; i++) later(1000 + i * 125, () => { me.guard = i / 20; me.guardAt = performance.now(); });
+    } else {
+      // 盾还举着，但朝着另一边：照样挨了整整一锤
+      const knock = knockAway(me, ogre, 50 / 1.2);
+      emit({ k: 'dmg', src: ogre.id, dst: ME, v: 70, skill: 'smash', weight: 'heavy', ...knock, knockTime: 0.18, stun: 0.45 });
+      damage(me, 70);
+    }
+    later(700, () => { me.blocking = false; });
+  });
+}
+
 // heavySweep 是自己的旋风斩：重击，按每只怪的重量把它们推开，食人魔首领韧性高推不动。
 function heavySweep(): void {
   const me = state.ents.get(ME)!;
@@ -258,6 +300,9 @@ const ACTIONS: [string, () => void][] = [
   ['被重锤', () => { const me = state.ents.get(ME)!; emit({ k: 'cast', src: 3, dst: ME, fx: 'melee', skill: 'smash', color: '#ff9f43' }); emit({ k: 'dmg', src: 3, dst: ME, v: 70, skill: 'smash' }); damage(me, 70); }],
   ['怪物重锤', () => ogreSmash(false)],
   ['重锤被格挡', () => ogreSmash(true)],
+  ['完美格挡', () => guardDemo('parry')],
+  ['破防', () => guardDemo('guard_break')],
+  ['背后挨锤', () => guardDemo('back')],
   ['重击击退', () => heavySweep()],
   ['打断前摇', () => interruptWolf()],
   ['格挡', () => { const t = target(); if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'smash', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 8, skill: 'smash', blocked: 32 }); }],
@@ -622,7 +667,7 @@ const PROFILE_SLIDERS: [string, keyof Profile, number, number, number][] = [
   ['挨打镜头', 'kickIn', 0, 15, 0.5],
   ['震动 px', 'shake', 0, 10, 0.5],
 ];
-const PROFILE_LABELS: [ProfileName, string][] = [['light', '轻'], ['medium', '中'], ['heavy', '重'], ['block', '格挡'], ['immune', '免疫']];
+const PROFILE_LABELS: [ProfileName, string][] = [['light', '轻'], ['medium', '中'], ['heavy', '重'], ['block', '格挡'], ['parry', '完美格挡'], ['guard_break', '破防'], ['immune', '免疫']];
 
 // profileEditor 是档位表编辑器：选一档，拖滑条改这一档的参数，导出整张表的 JSON 粘回 feel/profiles.ts。
 function profileEditor(): HTMLElement {

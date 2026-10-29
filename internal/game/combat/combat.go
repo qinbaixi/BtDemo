@@ -67,6 +67,7 @@ func (sys *System) Tick() {
 		if !entity.Dead {
 			sys.UpdateBuffs(entity)
 			sys.regen(entity)
+			sys.regenGuard(entity)
 		}
 	})
 }
@@ -457,7 +458,7 @@ func (sys *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, sk
 	if result.immune {
 		return
 	}
-	sys.applyImpact(src, dst, skill, result.blocked > 0, result.event)
+	sys.applyImpact(src, dst, skill, result.outcome, result.event)
 	sys.afterHit(src, dst, skill, result)
 	if dst.Alive() && skill.Debuff != nil {
 		sys.addBuff(dst, skill.Debuff)
@@ -466,14 +467,16 @@ func (sys *System) applyDamage(src, dst *core.Entity, dmg float64, crit bool, sk
 
 // damageResult 是一次伤害结算的结果。
 type damageResult struct {
-	immune  bool        // 目标无敌，整次伤害被免掉
-	blocked float64     // 被格挡掉的伤害
-	taken   float64     // 实际扣掉的生命
-	event   *core.Event // 发出的 DAMAGE 事件（还在队列里，applyImpact 往上补击退和硬直）
+	immune  bool         // 目标无敌，整次伤害被免掉
+	outcome pb.HitResult // 怎么挨的这一下：正常命中、格挡、完美格挡、破防
+	blocked float64      // 被格挡掉的伤害
+	taken   float64      // 实际扣掉的生命
+	event   *core.Event  // 发出的 DAMAGE 事件（还在队列里，applyImpact 往上补击退和硬直）
 }
 
 // damage 从 dst 中扣除 dmg，记录攻击者，发 DAMAGE 事件（skillID、proc 不空时写进事件），
-// 并在 HP 归零时击杀 dst。无敌时整个免掉；否则先按格挡减伤，再由护盾吸收，剩下的才扣生命。
+// 并在 HP 归零时击杀 dst。无敌时整个免掉；否则先按格挡减伤（只挡正面，完美格挡全挡，见 guard.go），
+// 再由护盾吸收，剩下的才扣生命。
 // 它不触发任何装备特效，特效自己造成的伤害（proc 不空）也走这里，所以特效不会连锁触发。
 func (sys *System) damage(
 	src, dst *core.Entity,
@@ -498,17 +501,24 @@ func (sys *System) damage(
 	if dst.Invulnerable() {
 		event.Value = core.F32(0)
 		event.Immune = proto.Bool(true)
+		event.Result = pb.HitResult_IMMUNE.Enum()
 		sys.state.Events.Emit(dst, event)
 		return damageResult{immune: true}
 	}
 	if crit && src.AmbushUntil > 0 {
 		src.AmbushUntil = 0 // 伏击的必暴用掉了
 	}
-	result := damageResult{event: event}
-	if dst.Blocking {
-		result.blocked = math.Round(dmg * sys.state.Cfg.World.Player.Block.Reduce)
+	result := damageResult{event: event, outcome: pb.HitResult_HIT}
+	if dst.Blocking && sys.shieldCovers(dst, src) {
+		result.outcome = sys.guard(dst, sys.state.Cfg.Skills[skillID], proc)
+		if result.outcome == pb.HitResult_PARRY {
+			result.blocked = dmg // 完美格挡：一点都不掉
+		} else {
+			result.blocked = math.Round(dmg * sys.state.Cfg.World.Player.Block.Reduce)
+		}
 		dmg -= result.blocked
 		event.Blocked = core.F32(result.blocked)
+		event.Result = result.outcome.Enum()
 	}
 	if absorbed := sys.absorb(dst, dmg); absorbed > 0 {
 		dmg -= absorbed

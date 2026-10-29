@@ -114,6 +114,7 @@ export interface EntityState {
   shield?: number;     // 护盾还能吸收的伤害
   blocking?: boolean;  // 正在格挡
   looks?: number;      // Buff 外观的位：LOOK_HASTE 等（见 game/config.ts）
+  guard?: number;      // 玩家：格挡架势剩余比例 0..1
 }
 
 export type EventKind = 'cast' | 'dmg' | 'heal' | 'buff' | 'die' | 'respawn' | 'say' | 'lvl' | 'loot' | 'interrupt';
@@ -150,6 +151,8 @@ export interface GameEvent {
   stun?: number;     // dmg：目标硬直秒数
   wall?: boolean;    // dmg：被打到撞墙
   hitAt?: number;    // cast：有前摇时命中的服务端时间（秒）
+  // dmg：怎么挨的这一下，没有就是正常命中。parry（完美格挡）时 kx / ky / knockTime / stun 说的是被弹开的攻击者（src）
+  result?: 'hit' | 'block' | 'parry' | 'guard_break' | 'immune';
 }
 
 // ZoneInfo 是地上的一块回血区：出生点的常驻泉水，或技能放下的法阵。
@@ -309,7 +312,7 @@ export type ClientMessage =
   | { t: 'cast'; slot: number; target: number; dx?: number; dy?: number }
   | { t: 'loadout'; skills: string[]; cls?: string }   // cls 空 = 不换职业
   | { t: 'watch'; id: number }
-  | { t: 'block'; on: boolean }
+  | { t: 'block'; on: boolean; face?: number }   // face：举盾时朝哪边，-1 左 1 右
   | { t: 'equip'; uid: number }      // 穿上背包里的一件（ItemSlotted.uid）
   | { t: 'unequip'; slot: string }   // 把这个槽位的卸回背包
   | { t: 'skin'; skin: string }     // 换当前职业的外观（空 = 默认）

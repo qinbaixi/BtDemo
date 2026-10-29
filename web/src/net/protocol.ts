@@ -49,6 +49,7 @@ function entity(e: any): EntityInfo {
 function event(ev: any): GameEvent {
   const out = { ...ev, k: EVENT_KIND[ev.kind] || String(ev.kind).toLowerCase() };
   if (ev.value !== undefined) out.v = ev.value;
+  if (ev.result !== undefined) out.result = String(ev.result).toLowerCase();   // HIT / BLOCK / PARRY / GUARD_BREAK / IMMUNE
   delete out.kind;
   return out;
 }
@@ -191,7 +192,7 @@ export function createProtocol(): Protocol {
       case 'cast': body = { cast: { slot: o.slot, target: o.target || 0, dx: o.dx || 0, dy: o.dy || 0 } }; break;
       case 'loadout': body = { loadout: { skills: o.skills, class: o.cls || undefined } }; break;
       case 'watch': body = { watch: { id: o.id || 0 } }; break;
-      case 'block': body = { block: { on: o.on } }; break;
+      case 'block': body = { block: { on: o.on, face: o.face ?? 0 } }; break;
       case 'equip': body = { equip: { uid: o.uid } }; break;
       case 'unequip': body = { unequip: { slot: o.slot } }; break;
       case 'skin': body = { skin: { skin: o.skin || '' } }; break;

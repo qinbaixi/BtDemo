@@ -1,8 +1,8 @@
-// 打击感档位表：每次命中先定一个档（轻 / 中 / 重，外加格挡、免疫），再按档查这里的参数。
+// 打击感档位表：每次命中先定一个档（轻 / 中 / 重，外加格挡、完美格挡、破防、免疫），再按档查这里的参数。
 // 取代以前 FEEL 里的全局顿帧和击退：重锤和斩击终于不一样重了。
 // ?fxlab 实验页里可以逐档拖滑条，并导出 JSON 粘回这里。
 //
-// 现在（P0）档位由前端按技能名查 SKILL_FEEL；以后服务端会直接在 DAMAGE 事件里给档位。
+// 档位由服务端在 DAMAGE 事件里给（skills.yaml 的 weight、HitResult）；没给时按技能名查 SKILL_FEEL。
 
 import type { Material, Tier, Weapon } from '../audio/recipes';
 
@@ -15,15 +15,21 @@ export interface Profile {
   shake: number;      // 自己参与时加的震动强度（像素，0 不震）
 }
 
-export type ProfileName = Tier | 'block' | 'immune';
+export type ProfileName = Tier | 'block' | 'parry' | 'guard_break' | 'immune';
 
 export const PROFILES: Record<ProfileName, Profile> = {
   light: { hitStopMs: 60, knockPx: 6, squash: 0.16, kickOut: 2.5, kickIn: 4, shake: 0 },
   medium: { hitStopMs: 80, knockPx: 10, squash: 0.22, kickOut: 4, kickIn: 5.5, shake: 0 },
   heavy: { hitStopMs: 110, knockPx: 16, squash: 0.3, kickOut: 6, kickIn: 8, shake: 3.5 },
   block: { hitStopMs: 90, knockPx: 4, squash: 0.08, kickOut: 2, kickIn: 3, shake: 0 },
+  // 完美格挡：这里的 knockPx、squash 是被弹开的攻击者的；顿帧双方都停
+  parry: { hitStopMs: 150, knockPx: 8, squash: 0.26, kickOut: 3, kickIn: 3, shake: 0 },
+  guard_break: { hitStopMs: 120, knockPx: 8, squash: 0.3, kickOut: 5, kickIn: 8, shake: 5 },
   immune: { hitStopMs: 40, knockPx: 0, squash: 0, kickOut: 1, kickIn: 1, shake: 0 },
 };
+
+// 自己参与的完美格挡：整个画面一起停一下（不只是双方），镜头放大
+export const PARRY = { worldStopMs: 110, zoom: 0.045 };
 
 // 暴击在本档上叠加
 export const CRIT = { hitStopMs: 40, knockScale: 1.6, kickScale: 1.6, zoom: 0.035 };

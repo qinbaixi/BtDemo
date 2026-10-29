@@ -14,6 +14,7 @@ type HitWeight struct {
 	Knock float64 `yaml:"knock"` // 击退距离（像素），再除以目标的 mass
 	Stun  float64 `yaml:"stun"`  // 硬直秒数：期间不能移动、不能出招，行为树暂停
 	Poise float64 `yaml:"poise"` // 打掉的韧性；韧性打空才会被击退和硬直
+	Guard float64 `yaml:"guard"` // 被举盾挡住时扣掉的架势；架势扣空就破防
 }
 
 // HitRules 对应 world.yaml 的 hit 段：命中档位和击退、韧性的公共规则。
@@ -27,9 +28,22 @@ type HitRules struct {
 
 // 没配 world.yaml 的 hit 段时用的默认值
 var defaultHitWeights = map[string]HitWeight{
-	WeightLight:  {Knock: 10, Stun: 0.15, Poise: 10},
-	WeightMedium: {Knock: 26, Stun: 0.25, Poise: 25},
-	WeightHeavy:  {Knock: 50, Stun: 0.45, Poise: 45},
+	WeightLight:  {Knock: 10, Stun: 0.15, Poise: 10, Guard: 12},
+	WeightMedium: {Knock: 26, Stun: 0.25, Poise: 25, Guard: 22},
+	WeightHeavy:  {Knock: 50, Stun: 0.45, Poise: 45, Guard: 40},
+}
+
+// Ranged 报告技能是不是远程的（投射物、直线投掷、箭雨）：远程能被格挡，但不能完美格挡弹开。
+func (skill *Skill) Ranged() bool {
+	switch skill.Kind {
+	case "line", "rain":
+		return true
+	}
+	switch skill.FX {
+	case "projectile", "arrow", "frostarrow", "pierce":
+		return true
+	}
+	return false
 }
 
 // Hit 返回技能命中的效果：weight 档位的默认值，被技能自己的 knock / stun / poise 覆盖。

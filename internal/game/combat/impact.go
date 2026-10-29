@@ -102,11 +102,26 @@ func (sys *System) poise(entity *core.Entity) (float64, float64) {
 
 // applyImpact 给技能 skill 对 dst 的一次命中加上分量：扣韧性，韧性打空时击退（撞墙多硬直）、
 // 硬直并打断 dst 的前摇。结果写进这次命中的 DAMAGE 事件 event（事件还在队列里，下次同步才发出）。
-// 格挡住的命中只推开一点；已经被打死的只被打飞，不再硬直。
-func (sys *System) applyImpact(src, dst *core.Entity, skill *config.Skill, blocked bool, event *core.Event) {
+// 格挡住的命中只推开一点；完美格挡把攻击者弹开，破防把举盾的人打开（见 guard.go）；
+// 已经被打死的只被打飞，不再硬直。
+func (sys *System) applyImpact(
+	src, dst *core.Entity,
+	skill *config.Skill,
+	outcome pb.HitResult,
+	event *core.Event,
+) {
 	rules := &sys.state.Cfg.World.Hit
 	hit := rules.Hit(skill)
 	event.Weight = proto.String(skill.Weight)
+	switch outcome {
+	case pb.HitResult_PARRY:
+		sys.recoil(src, dst, event)
+		return
+	case pb.HitResult_GUARD_BREAK:
+		sys.breakGuard(dst, src, event)
+		return
+	}
+	blocked := outcome == pb.HitResult_BLOCK
 	now := sys.state.Now()
 	poiseMax, mass := sys.poise(dst)
 	stun := hit.Stun
@@ -125,29 +140,45 @@ func (sys *System) applyImpact(src, dst *core.Entity, skill *config.Skill, block
 		}
 		dst.PoiseTaken = 0 // 韧性被打空，挨完这下重新算
 	}
-	if distance >= 1 {
-		from := nav.Vec{X: dst.X, Y: dst.Y}
-		direction, ok := unit(dst.X-src.X, dst.Y-src.Y)
-		if !ok {
-			direction = nav.Vec{X: 1}
-		}
-		end := sys.nav.Reach(from, direction, distance, dst.Radius)
-		dst.Knock = &core.Knock{From: from, To: end, Start: now, Duration: rules.KnockTime}
-		dst.Steering = core.Steering{} // 被推开了，原来的路线作废
-		event.Kx, event.Ky = core.F32(core.Round1(end.X)), core.F32(core.Round1(end.Y))
-		event.KnockTime = core.F32(rules.KnockTime)
-		// 没推满就停下：撞到了墙或物件
-		if end.Dist(from) < distance-1 && !blocked {
-			event.Wall = proto.Bool(true)
-			stun += rules.WallStun
-		}
+	// 格挡住时被推到墙上不算撞墙
+	if sys.push(dst, src, distance, event) && !blocked {
+		stun += rules.WallStun
 	}
-	if stun <= 0 || dst.Dead {
+	sys.stagger(dst, stun, event)
+}
+
+// push 把 entity 从 from 那边推开 distance 像素（被墙和物件挡住就停在跟前），写进 event 的击退落点；
+// 报告是不是撞墙了（没推满就停下）。distance 不到 1 像素时什么都不做。
+func (sys *System) push(entity, from *core.Entity, distance float64, event *core.Event) bool {
+	if distance < 1 {
+		return false
+	}
+	start := nav.Vec{X: entity.X, Y: entity.Y}
+	direction, ok := unit(entity.X-from.X, entity.Y-from.Y)
+	if !ok {
+		direction = nav.Vec{X: 1}
+	}
+	rules := &sys.state.Cfg.World.Hit
+	end := sys.nav.Reach(start, direction, distance, entity.Radius)
+	entity.Knock = &core.Knock{From: start, To: end, Start: sys.state.Now(), Duration: rules.KnockTime}
+	entity.Steering = core.Steering{} // 被推开了，原来的路线作废
+	event.Kx, event.Ky = core.F32(core.Round1(end.X)), core.F32(core.Round1(end.Y))
+	event.KnockTime = core.F32(rules.KnockTime)
+	if end.Dist(start) < distance-1 {
+		event.Wall = proto.Bool(true)
+		return true
+	}
+	return false
+}
+
+// stagger 让 entity 硬直 stun 秒（写进 event）并打断它的前摇；尸体和 stun 为 0 时什么都不做。
+func (sys *System) stagger(entity *core.Entity, stun float64, event *core.Event) {
+	if stun <= 0 || entity.Dead {
 		return // 尸体只被打飞，不硬直
 	}
-	dst.StunUntil = math.Max(dst.StunUntil, now+stun)
+	entity.StunUntil = math.Max(entity.StunUntil, sys.state.Now()+stun)
 	event.Stun = core.F32(stun)
-	sys.CancelWindup(dst)
+	sys.CancelWindup(entity)
 }
 
 // CancelWindup 打断 entity 正在前摇的出招（被打出硬直、举盾），通知客户端收起动作；没在前摇时什么都不做。

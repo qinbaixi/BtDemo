@@ -51,6 +51,8 @@ func packPlayer(player *core.Entity, now float64) travelPack {
 	// 前摇、击退和韧性是源场景里的事（击退路线还是源场景的坐标），不带过去
 	player.Windup, player.Knock = nil, nil
 	player.PoiseTaken, player.PoiseHitAt = 0, 0
+	player.StunUntil = 0
+	player.Guard = core.Guard{}
 	pack := travelPack{
 		cooldowns: map[string]float64{},
 		petSwapIn: max(0, player.PetSwapAt-now),

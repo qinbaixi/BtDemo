@@ -118,7 +118,12 @@ AOE 先收集目标再结算，是因为结算可能杀死目标，而遍历 AOI
 `applyDamage` 按顺序处理，伤害事件里分别记下来，前端据此飘“免疫”“格挡”“吸收 N”：
 
 0. **无敌**：目标身上有 `invulnerable` 的 Buff（圣光庇护）时，整次伤害免掉，事件 `immune` 为真、`v` 为 0，后面的格挡、护盾、debuff 都不再处理。
-1. **格挡**：玩家按住右键时 `entity.Blocking` 为真，伤害减少 `world.yaml` 的 `player.block.reduce`（默认 0.8，即减 80%），记在 `Event.blocked`。格挡时移速乘 `player.block.speed`（默认 0.5），不能放技能。
+1. **格挡**（格挡 2.0，代码在 `combat/guard.go`）：玩家按住右键时 `entity.Blocking` 为真。只挡盾正面 `player.block.arc`（默认 140°）以内来的攻击，选了敌对目标时盾朝着目标，否则朝举盾时面向的那一侧（`Block.face`）；背后挨打照常扣血。挡住时：
+   - **完美格挡**（`PARRY`）：举盾后 `block.parry`（0.18s）内挡住近战技能，伤害全挡、不扣架势，攻击者被弹开 `parry_knock`、硬直 `parry_stun`（无视韧性，打断它的前摇）。远程（投射物、飞斧、箭雨，见 `Skill.Ranged`）只能普通格挡；盾放下不到 `parry_rearm` 秒再举起没有完美格挡窗口。
+   - **普通格挡**（`BLOCK`）：伤害减少 `block.reduce`（默认 80%），按命中档位扣架势（`hit.weights.*.guard`，架势上限 `block.guard`）。
+   - **破防**（`GUARD_BREAK`）：架势扣空的那一下仍按普通格挡减伤，然后盾被打开放下、被推开 `break_knock`、硬直 `break_stun`；硬直中举不起盾。
+   - 架势 `guard_delay` 秒没挡到东西后开始回：放下盾每秒回 `guard_regen`，举着盾每秒回 `guard_regen_held`。剩余比例按 0.05 取整同步到 `EntityState.guard`。
+   挡掉的量记在 `Event.blocked`，结果记在 `Event.result`（完美格挡时事件里的击退和硬直说的是攻击者）。格挡时移速乘 `player.block.speed`（默认 0.5），不能放技能。
 2. **护盾**：剩下的伤害先由护盾 Buff 的 `Absorb` 吸收，记在 `Event.absorbed`；护盾打完这个 Buff 就被移除（时间到也会移除）。
 
 剩下的才扣生命（`Event.v`），可能是 0。

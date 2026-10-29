@@ -54,7 +54,10 @@ function sendMove(force = false): void {
 export function resendMove(): void {
   lastMove = '';
   sendMove(true);
-  if (blocking) deps.send({ t: 'block', on: true });
+  if (blocking) {
+    const me = state.ents.get(state.myId);
+    deps.send({ t: 'block', on: true, face: me && Math.cos(me.facing) < 0 ? -1 : 1 });
+  }
 }
 
 export function castSlot(slot: number): void {
@@ -157,7 +160,8 @@ function stunned(now: number): boolean {
   return !!me && now < me.stunUntil;
 }
 
-// forgetBlock 在换成不能格挡的职业时丢掉本地的格挡状态（服务端那边已经取消了，不用再发）。
+// forgetBlock 在换成不能格挡的职业、或者被破防时丢掉本地的格挡状态（服务端那边已经取消了，不用再发）；
+// 被破防后要再挡得重新按右键。
 export function forgetBlock(): void {
   blocking = false;
   state.blockHeld = false;
@@ -166,9 +170,14 @@ export function forgetBlock(): void {
 function setBlock(on: boolean): void {
   if (on && !state.canBlock) return;   // 这个职业没有盾，右键不格挡
   if (blocking === on) return;
+  const now = performance.now();
+  if (on && stunned(now)) return;      // 硬直中举不起盾（服务端也不收）
   blocking = on;
   state.blockHeld = on;
-  deps.send({ t: 'block', on });
+  const me = state.ents.get(state.myId);
+  // 举盾时告诉服务端盾朝哪边（没选目标时用；选了目标盾朝着目标）
+  const face = me && Math.cos(me.facing) < 0 ? -1 : 1;
+  deps.send({ t: 'block', on, face });
   if (on) play('block.raise', { gain: 0.8 });
 }
 

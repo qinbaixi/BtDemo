@@ -11,12 +11,12 @@ sync_rate: 10        # 状态同步频率（每秒）
 session:
   keep: 30           # 断线后角色保留多少秒：期间原地站着、照样会被打会死，重连能接着玩
 
-# 命中的分量（skills.yaml 的 weight）：击退距离（像素，再除以目标的 mass）、硬直秒数、打掉的韧性
+# 命中的分量（skills.yaml 的 weight）：击退距离（像素，再除以目标的 mass）、硬直秒数、打掉的韧性、被盾挡住时扣掉的架势
 hit:
   weights:
-    light:  { knock: 10, stun: 0.15, poise: 10 }
-    medium: { knock: 26, stun: 0.25, poise: 25 }
-    heavy:  { knock: 50, stun: 0.45, poise: 45 }
+    light:  { knock: 10, stun: 0.15, poise: 10, guard: 12 }
+    medium: { knock: 26, stun: 0.25, poise: 25, guard: 22 }
+    heavy:  { knock: 50, stun: 0.45, poise: 45, guard: 40 }
   knock_time: 0.18   # 击退位移多少秒走完
   wall_stun: 0.2     # 被打到撞墙额外硬直
   poise_reset: 2     # 多少秒没挨打韧性回满
@@ -34,7 +34,26 @@ player:
   name_prefix: 勇者
   level: 1
   respawn: 3
-  block: { reduce: 0.8, speed: 0.5 }   # 按住右键格挡（只有 can_block 的职业能格挡）：受到的伤害减少 80%，移动速度减半，不能放技能
+  # 按住右键格挡（只有 can_block 的职业能格挡）：移动速度减半，不能放技能。
+  #   只挡盾正面 arc 度以内的攻击（选了目标时盾朝着目标），挡住的减伤 reduce
+  #   架势 guard：挡一下扣 hit.weights 的 guard，扣空就破防（盾被打开，硬直 break_stun 秒、被推开 break_knock）
+  #     guard_delay 秒没挡到东西开始回：放下盾每秒回 guard_regen，举着盾每秒回 guard_regen_held
+  #   完美格挡：举盾后 parry 秒内挡住近战，不掉血、不扣架势，攻击者被弹开 parry_knock、硬直 parry_stun 秒
+  #     （远程攻击只能普通格挡；盾放下不到 parry_rearm 秒再举起没有完美格挡窗口）
+  block:
+    reduce: 0.8
+    speed: 0.5
+    arc: 140
+    guard: 100
+    guard_delay: 1
+    guard_regen: 40
+    guard_regen_held: 10
+    break_stun: 0.8
+    break_knock: 30
+    parry: 0.18
+    parry_rearm: 0.4
+    parry_stun: 0.6
+    parry_knock: 18
   poise: 30                            # 韧性和重量，含义同 monsters.yaml（狼咬三下才会把人咬得一踉跄）
   mass: 1.2
   bag: 24                              # 背包格数（装备着的物品不占格子）

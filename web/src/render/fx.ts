@@ -579,6 +579,53 @@ export class FX {
     }
   }
 
+  // perfectBlock 是完美格挡：盾前炸开一颗金白色的十字星和两圈冲击环，金色火花朝攻击者那边喷，
+  // 画面跟着震开一圈（后期冲击波）。attackerId 用来定火花的方向，不在视野里就朝盾的正面。
+  perfectBlock(id, attackerId, now) {
+    const p = this.pos(id, null);
+    if (!p) return;
+    const r = p.r || 14;
+    let dir = Math.cos(p.facing ?? 0) < 0 ? -1 : 1;
+    const attacker = attackerId ? this.pos(attackerId, null) : null;
+    if (attacker && Math.abs(attacker.x - p.x) > 2) dir = attacker.x < p.x ? -1 : 1;
+    const ox = dir * r * 1.05;
+    const oy = -(p.h || r * 2.6) * 0.6;
+    const x = p.x + ox;
+    const y = p.y + oy;
+    this.effects.push({ kind: 'perfect', anchor: id, ox, oy, x, y, dir, r, rgb: rgbOf('#ffe08a'), born: now, life: 520 });
+    for (let i = 0; i < 26; i++) {
+      const a = (dir > 0 ? 0 : Math.PI) + rand(-1.3, 1.3);
+      const sp = rand(0.25, 0.7);
+      this.spawn({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.15, grav: 0.0014,
+        life: rand(260, 520), size: rand(1.4, 3), color: i % 3 ? '#fff6d0' : '#ffd166', kind: 'spark', drag: 0.975, born: now });
+    }
+  }
+
+  // guardBreak 是破防：盾面裂成几块往后飞，带一蓬金属碎屑和一圈灰尘。
+  guardBreak(id, now) {
+    const p = this.pos(id, null);
+    if (!p) return;
+    const r = p.r || 14;
+    const dir = Math.cos(p.facing ?? 0) < 0 ? -1 : 1;
+    const x = p.x + dir * r * 0.95;
+    const y = p.y - (p.h || r * 2.6) * 0.6;
+    const pieces = [];
+    for (let i = 0; i < 5; i++) {
+      // 盾面上的一段弧，碎开后各自朝外、往上飞，边飞边转
+      const a0 = -1.2 + i * 0.48;
+      const out = a0 + 0.24;
+      pieces.push({ a0, a1: a0 + 0.42, vx: (Math.cos(out) * 0.12 + 0.06) * dir, vy: Math.sin(out) * 0.12 - 0.16, spin: rand(-0.012, 0.012) });
+    }
+    this.effects.push({ kind: 'shatter', x, y, dir, r, pieces, rgb: rgbOf('#cfe2f2'), born: now, life: 620 });
+    for (let i = 0; i < 18; i++) {
+      const a = (dir > 0 ? 0 : Math.PI) + rand(-1.4, 1.4);
+      const sp = rand(0.15, 0.45);
+      this.spawn({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.18, grav: 0.0016,
+        life: rand(300, 600), size: rand(1.6, 3.2), color: i % 2 ? '#dfe8ff' : '#ff9a5a', kind: 'spark', drag: 0.98, born: now });
+    }
+    this.footDust(p.x, p.y, -dir, now);
+  }
+
   // shieldHit 是护盾吸收了伤害：泡泡亮一下，受击处荡开一圈波纹。
   shieldHit(id, now) {
     const p = this.pos(id, null);
@@ -621,6 +668,13 @@ export class FX {
   cancel(id: number) {
     this.effects = this.effects.filter((f) => !(f.kind === 'warn' && f.src === id));
     this.scheduled = this.scheduled.filter((f) => f.src !== id);
+  }
+
+  // deflect 让 id 正在挥出的近战刀光很快收掉（这一下被完美格挡弹开了，刀光不该再糊在盾上）。
+  deflect(id: number, now: number) {
+    for (const f of this.effects) {
+      if (f.kind === 'slash' && f.src === id && now - f.born < f.life) f.life = Math.max(1, now - f.born + 30);
+    }
   }
 
   // warnPos 是预警圈当前的中心和半径：范围技能跟着施法者，单体技能跟着目标。
@@ -789,6 +843,12 @@ export class FX {
         case 'blink': {
           const k = clamp01(t / 0.5);
           if (k < 1) add(f.x1, f.y1 - 18, 10 + 70 * easeOut(k), 6 * (1 - k));
+          break;
+        }
+        case 'perfect': {
+          // 波从盾外一圈开始扩：从中心起扩的话前几帧会把人拧成一团
+          const k = clamp01(t / 0.6);
+          if (k < 1) add(f.x, f.y, f.r * 2.5 + 100 * easeOut(k), 4 * (1 - k));
           break;
         }
       }
@@ -984,6 +1044,8 @@ export class FX {
         case 'pillar': this.pillar(ctx, f, t); break;
         case 'buff': this.buffTop(ctx, f, t); break;
         case 'parry': this.parry(ctx, f, t); break;
+        case 'perfect': this.perfect(ctx, f, t); break;
+        case 'shatter': this.shatter(ctx, f, now - f.born, t); break;
         case 'shieldForm': this.shieldForm(ctx, f, t); break;
         case 'axe': this.axe(ctx, f, t, now); break;
         case 'bolt': this.bolt(ctx, f, now - f.born); break;
@@ -1028,6 +1090,8 @@ export class FX {
           break;
         }
         case 'parry': add(f.x, f.y, f.r * 3 + 10, f.r * 3 + 10, f.r * 3 + 10); break;
+        case 'perfect': { const p = this.pos(f.anchor, null); add(p ? p.x + f.ox : f.x, p ? p.y + f.oy : f.y, f.r * 5 + 20, f.r * 5 + 20, f.r * 5 + 20); break; }
+        case 'shatter': add(f.x, f.y, 140, 140, 140); break;
         case 'axe': {
           const k = clamp01(t);
           add(f.x0 + (f.x1 - f.x0) * k, f.y0 + (f.y1 - f.y0) * k - 22, 30, 30, 30);
@@ -1704,6 +1768,85 @@ export class FX {
     ctx.stroke();
     ctx.restore();
     blit(ctx, glow('#cfeeff'), x, y, 34 * fade + 8, fade);
+  }
+
+  // perfect 画完美格挡的十字星和冲击环（跟着举盾的人走）。这一层平时是叠加混合，
+  // 但在亮的地面上叠加会连人一起冲成白色（再被泛光放大），所以这里用普通混合、实色描边。
+  perfect(ctx, f, t) {
+    const p = this.pos(f.anchor, null);
+    const x = p ? p.x + f.ox : f.x;
+    const y = p ? p.y + f.oy : f.y;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    // 两圈冲击环：先一圈亮的快速扩开，再一圈金的慢一点；外面一圈深色衬底，亮地面上也看得见
+    for (const [delay, speed, color] of [[0, 1, whiten(f.rgb, 0.55)], [0.12, 0.75, f.rgb]] as [number, number, RGB][]) {
+      const k = clamp01((t - delay) / (1 - delay));
+      if (k <= 0 || k >= 1) continue;
+      const radius = f.r * (0.8 + 3.6 * easeOutCubic(k) * speed);
+      const width = 3 * (1 - k) + 0.8;
+      ctx.strokeStyle = `rgba(40,22,6,${0.45 * (1 - k)})`;
+      ctx.lineWidth = width + 2;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = rgba(color, 0.95 * (1 - k));
+      ctx.lineWidth = width;
+      ctx.stroke();
+    }
+    // 十字星：一下张到最大，再收回去；长的那条横着，短的竖着
+    const pop = t < 0.15 ? easeOut(t / 0.15) : 1 - easeOut((t - 0.15) / 0.6);
+    if (pop > 0) {
+      const long = f.r * 3 * pop;
+      const short = f.r * 1.6 * pop;
+      const thick = 2.2 * pop + 0.4;
+      const ray = (dx: number, dy: number, length: number) => {
+        ctx.beginPath();
+        ctx.moveTo(x + dx * length, y + dy * length);
+        ctx.lineTo(x - dy * thick, y + dx * thick);
+        ctx.lineTo(x - dx * length, y - dy * length);
+        ctx.lineTo(x + dy * thick, y - dx * thick);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      };
+      ctx.fillStyle = rgba(whiten(f.rgb, 0.75), Math.min(1, pop * 1.3));
+      ctx.strokeStyle = `rgba(120,70,10,${0.6 * pop})`;
+      ctx.lineWidth = 0.8;
+      ray(1, 0, long);
+      ray(0, 1, short);
+      ray(Math.SQRT1_2, Math.SQRT1_2, short * 0.55);
+      ray(Math.SQRT1_2, -Math.SQRT1_2, short * 0.55);
+    }
+    ctx.restore();
+  }
+
+  // shatter 画破防时盾面裂开的几块：每块是一段粗弧，各自飞出去、转着、往下掉、淡掉。
+  shatter(ctx, f, ms, t) {
+    const fade = 1 - clamp01((t - 0.4) / 0.6);
+    ctx.save();
+    ctx.lineCap = 'butt';
+    for (const piece of f.pieces) {
+      const px = f.x + piece.vx * ms;
+      const py = f.y + piece.vy * ms + 0.0007 * ms * ms;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(piece.spin * ms);
+      ctx.scale(f.dir, 1);
+      // 深色描边再一层亮面，在亮暗地面上都看得清
+      ctx.strokeStyle = `rgba(20,24,32,${0.85 * fade})`;
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.arc(-f.r * 0.9, 0, f.r * 0.9, piece.a0, piece.a1);
+      ctx.stroke();
+      ctx.strokeStyle = rgba(f.rgb, fade);
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.arc(-f.r * 0.9, 0, f.r * 0.9, piece.a0, piece.a1);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+    if (t < 0.25) blit(ctx, glow('#ffb07a'), f.x, f.y, 40 * (1 - t * 4) + 8, 1 - t * 4);
   }
 
   gash(ctx, f, t) {

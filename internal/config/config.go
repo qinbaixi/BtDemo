@@ -82,10 +82,26 @@ func (player *Player) Class(id string) *Class {
 	return nil
 }
 
-// Block 是玩家按住右键格挡时的效果。
+// Block 是玩家按住右键格挡时的效果：只挡正面，挡一下扣架势，架势扣空就破防；
+// 刚举盾的一小段时间里挡住近战是完美格挡。默认值见 block.go 的 validateBlock。
 type Block struct {
 	Reduce float64 `yaml:"reduce"` // 格挡时受到的伤害减少的比例，0.8 = 减少 80%
 	Speed  float64 `yaml:"speed"`  // 格挡时的移动速度倍率
+	Arc    float64 `yaml:"arc"`    // 挡得住的正面角度（度），盾朝着的方向两边各一半
+	// Guard 是架势上限，挡一下按命中档位扣（world.yaml hit.weights 的 guard）
+	Guard float64 `yaml:"guard"`
+	// GuardDelay 秒没挡到东西后架势开始回复：放下盾每秒回 GuardRegen，举着盾每秒回 GuardRegenHeld
+	GuardDelay     float64 `yaml:"guard_delay"`
+	GuardRegen     float64 `yaml:"guard_regen"`
+	GuardRegenHeld float64 `yaml:"guard_regen_held"`
+	BreakStun      float64 `yaml:"break_stun"`  // 破防：硬直秒数
+	BreakKnock     float64 `yaml:"break_knock"` // 破防：被推开的距离（像素）
+	// Parry 是完美格挡的窗口：举盾后这么多秒内挡住近战，不掉血、不扣架势，攻击者被弹开
+	Parry float64 `yaml:"parry"`
+	// ParryRearm：盾放下至少这么多秒再举起才有新的完美格挡窗口（防止狂点右键）
+	ParryRearm float64 `yaml:"parry_rearm"`
+	ParryStun  float64 `yaml:"parry_stun"`  // 完美格挡：攻击者的硬直秒数
+	ParryKnock float64 `yaml:"parry_knock"` // 完美格挡：攻击者被弹开的距离（像素）
 }
 
 // World 对应 config/world.yaml。
@@ -342,12 +358,8 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 	if world.Player.Level <= 0 {
 		world.Player.Level = 1
 	}
-	// 没配格挡时：减伤 80%、速度减半
-	if world.Player.Block.Reduce == 0 && world.Player.Block.Speed == 0 {
-		world.Player.Block = Block{Reduce: 0.8, Speed: 0.5}
-	}
-	if block := world.Player.Block; block.Reduce < 0 || block.Reduce > 1 || block.Speed < 0 {
-		return fmt.Errorf("world.yaml: player.block.reduce must be 0..1 and speed >= 0")
+	if err := world.Player.Block.validate(); err != nil {
+		return err
 	}
 	for faction, targets := range world.Hostile {
 		for _, target := range targets {

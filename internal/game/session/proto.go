@@ -70,6 +70,10 @@ func entityDelta(entity *core.Entity, dirty core.Dirty) *pb.EntityState {
 	if dirty&core.DirtyLooks != 0 {
 		delta.Looks = core.I32(int(entity.Looks()))
 	}
+	// 只有玩家会格挡，怪物和 NPC 不发架势
+	if dirty&core.DirtyGuard != 0 && entity.Kind == core.KindPlayer {
+		delta.Guard = core.F32(core.Round2(core.GuardShown(entity.GuardSpent)))
+	}
 	return delta
 }
 

@@ -299,6 +299,7 @@ function onState(s: EntityState, now: number): void {
   }
   if (s.blocking !== undefined) e.blocking = s.blocking && !e.dead;
   if (s.looks !== undefined) e.looks = e.dead ? 0 : s.looks;
+  if (s.guard !== undefined && s.guard !== e.guard) { e.guard = s.guard; e.guardAt = now; }
   e.fresh = false;
 }
 

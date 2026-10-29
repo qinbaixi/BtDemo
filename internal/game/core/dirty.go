@@ -1,5 +1,7 @@
 package core
 
+import "math"
+
 // Dirty 是实体自上次同步以来变了的、要同步给客户端的字段（pb.EntityState 的字段），每个字段一位。
 // 改这些字段时用下面的 setter（或者改完调 MarkDirty），session 每个同步帧只把变了的字段
 // 按实体所在位置推给附近的玩家，然后清零。
@@ -18,6 +20,7 @@ const (
 	DirtyShield                     // Shield()（护盾 Buff 的 Absorb 之和）
 	DirtyBlocking                   // Blocking
 	DirtyLooks                      // Looks()（Buff 外观位集合）
+	DirtyGuard                      // GuardSpent（按 GuardStep 取整后变了才算）
 
 	DirtyAll Dirty = 1<<iota - 1 // 全部字段（实体进入视野时发全量用）
 )
@@ -76,6 +79,26 @@ func (entity *Entity) SetDead(dead bool) {
 		entity.Dead = dead
 		entity.Dirty |= DirtyDead
 	}
+}
+
+// GuardStep 是架势同步的精度：架势回复是连续的，每变化这么多才发一次。
+const GuardStep = 0.05
+
+// SetGuardSpent 设置扣掉的架势比例（夹在 0..1），取整后的值变了才标脏。
+func (entity *Entity) SetGuardSpent(spent float64) {
+	spent = math.Max(0, math.Min(1, spent))
+	if GuardShown(spent) != GuardShown(entity.GuardSpent) {
+		entity.Dirty |= DirtyGuard
+	}
+	entity.GuardSpent = spent
+}
+
+// GuardShown 是发给客户端的剩余架势（0..1，按 GuardStep 取整；扣了一点点也不显示满）。
+func GuardShown(spent float64) float64 {
+	if spent <= 0 {
+		return 1
+	}
+	return math.Floor((1-spent)/GuardStep+1e-9) * GuardStep
 }
 
 // SetBlocking 设置是否举盾格挡。

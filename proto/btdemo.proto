@@ -87,6 +87,7 @@ message Loadout {
 // player takes 80% less damage, moves at half speed and cannot use skills.
 message Block {
   required bool on = 1;
+  optional float face = 2;  // raising: the side the shield faces, -1 left / 1 right (used when no target is selected)
 }
 
 // Move sets the held movement direction; the server normalizes it. 0,0 stops.
@@ -363,6 +364,7 @@ message EntityState {
   optional float shield = 10;  // damage the active shield can still absorb
   optional bool blocking = 11; // guard raised
   optional int32 looks = 12;   // buff looks, bit set: 1 haste, 2 holy (invulnerable), 4 fire (enchanted weapon), 8 frost (slowed)
+  optional float guard = 13;   // players: guard meter left for blocking, 0..1
 }
 
 enum EventKind {
@@ -412,6 +414,16 @@ message Event {
   optional float stun = 29;     // DAMAGE: the target is staggered (cannot move or act) for this many seconds
   optional bool wall = 30;      // DAMAGE: the knockback slammed the target into an obstacle
   optional float hit_at = 31;   // CAST with a windup: Frame.time when the hit lands
+  optional HitResult result = 32; // DAMAGE: how the hit was received (absent = HIT)
+}
+
+// HitResult is how a hit was received.
+enum HitResult {
+  HIT = 0;
+  BLOCK = 1;        // stopped by a raised shield (blocked = how much)
+  PARRY = 2;        // perfect block: no damage; kx/ky/knock_time/stun apply to the attacker (src), not dst
+  GUARD_BREAK = 3;  // blocked, but the guard meter ran out: the shield drops, dst is knocked back and staggered
+  IMMUNE = 4;       // the target was invulnerable
 }
 
 message Attrs {

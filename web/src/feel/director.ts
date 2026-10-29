@@ -11,9 +11,9 @@ import { LOOK_FIRE } from '../game/config';
 import { hypot } from '../game/math';
 import { posOf, state, type ClientEntity } from '../game/state';
 import type { GameEvent } from '../net/types';
-import { CRIT, DEATH_KNOCK_PX, KILL, MODEL_MATERIAL, PROFILES, skillFeel, type Profile } from './profiles';
+import { CRIT, DEATH_KNOCK_PX, KILL, MODEL_MATERIAL, PARRY, PROFILES, skillFeel, type Profile } from './profiles';
 
-export type HitResult = 'hit' | 'block' | 'immune';
+export type HitResult = 'hit' | 'block' | 'parry' | 'guard_break' | 'immune';
 
 export interface HitContext {
   srcId: number;
@@ -28,8 +28,8 @@ export interface HitContext {
   absorbed: boolean;   // 有一部分被护盾吸收了
   mine: boolean;       // 自己或自己的宠物打的
   hurtMe: boolean;     // 打在自己身上
-  knock: { x: number; y: number; ms: number } | null;   // 服务端的真实击退：落点和用时
-  stunMs: number;      // 服务端给的硬直
+  knock: { x: number; y: number; ms: number } | null;   // 服务端的真实击退：落点和用时（完美格挡时是攻击者的）
+  stunMs: number;      // 服务端给的硬直（完美格挡时是攻击者的）
   wall: boolean;       // 被打到撞墙
 }
 
@@ -67,7 +67,7 @@ export function buildHit(ev: GameEvent): HitContext | null {
   let weapon = feel.weapon;
   // 武器着火时，刀剑和钝器打出来是火焰声
   if (src && src.looks & LOOK_FIRE && (weapon === 'blade' || weapon === 'blunt') && !ev.proc) weapon = 'fire';
-  const result: HitResult = ev.immune ? 'immune' : ev.blocked ? 'block' : 'hit';
+  const result: HitResult = ev.result ?? (ev.immune ? 'immune' : ev.blocked ? 'block' : 'hit');
   return {
     srcId,
     src,
@@ -75,7 +75,7 @@ export function buildHit(ev: GameEvent): HitContext | null {
     tier: feel.tier,
     weapon,
     // 举盾挡住时打在盾上
-    material: result === 'block' ? 'metal' : MODEL_MATERIAL[target.model] ?? 'flesh',
+    material: result === 'block' || result === 'parry' || result === 'guard_break' ? 'metal' : MODEL_MATERIAL[target.model] ?? 'flesh',
     result,
     crit: !!ev.crit,
     damage: ev.v || 0,
@@ -90,17 +90,17 @@ export function buildHit(ev: GameEvent): HitContext | null {
   };
 }
 
-// profileOf 是这次命中用的档位参数（格挡、免疫有自己的一档）。
+// profileOf 是这次命中用的档位参数（格挡、完美格挡、破防、免疫有自己的一档）。
 function profileOf(hit: HitContext): Profile {
-  if (hit.result === 'block') return PROFILES.block;
-  if (hit.result === 'immune') return PROFILES.immune;
-  return PROFILES[hit.tier];
+  return hit.result === 'hit' ? PROFILES[hit.tier] : PROFILES[hit.result];
 }
 
 // playHit 播放一次命中的打击感，返回受击方向的横向分量（伤害数字往这边飘）。
 export function playHit(hit: HitContext, now: number): number {
+  if (hit.result === 'parry') return playParry(hit, now);
   const { target, src } = hit;
   const profile = profileOf(hit);
+  if (hit.result === 'guard_break') target.breakAt = now;
   const crit = hit.crit && hit.result === 'hit';
   lastHitBy.set(target.id, { src: hit.srcId, at: now });
 
@@ -165,6 +165,42 @@ export function playHit(hit: HitContext, now: number): number {
   return dx;
 }
 
+// playParry 是完美格挡：举盾的人往前一顶，攻击者被弹开、白闪、硬直；
+// 自己参与时整个画面停一下、镜头放大。返回伤害数字的飘向（往攻击者那边）。
+function playParry(hit: HitContext, now: number): number {
+  const { target, src } = hit;
+  const profile = PROFILES.parry;
+  target.parryAt = now;
+  const tp = posOf(target, now);
+  let dx = Math.cos(target.facing) < 0 ? -1 : 1;
+  let dy = 0;
+  if (src && src !== target) {
+    const sp = posOf(src, now);
+    const len = Math.hypot(sp.x - tp.x, sp.y - tp.y);
+    if (len > 0.5) { dx = (sp.x - tp.x) / len; dy = (sp.y - tp.y) / len; }
+    // 攻击者：被弹开（服务端的落点）、白闪、受击形变、硬直。白闪等停顿过去再亮：
+    // 停住的那一下它的武器还压在盾上，这时闪白会把举盾的人一起糊成一片白
+    src.hitAt = now + profile.hitStopMs;
+    src.knockX = dx;
+    src.knockY = dy;
+    src.knockAmp = profile.knockPx;
+    src.squashAmp = profile.squash;
+    if (hit.knock) knockTo(src, hit.knock, now);
+    if (hit.stunMs > 0) src.stunUntil = Math.max(src.stunUntil, now + hit.stunMs);
+    src.freezeUntil = Math.max(src.freezeUntil, now + profile.hitStopMs);
+  }
+  target.freezeUntil = Math.max(target.freezeUntil, now + profile.hitStopMs);
+  const involved = hit.hurtMe || hit.mine || (!!src && isMine(src.id));
+  if (involved) {
+    // 整个画面停一下：谁都别动，只有火花和声音
+    for (const entity of state.ents.values()) entity.freezeUntil = Math.max(entity.freezeUntil, now + PARRY.worldStopMs);
+    cameraPunch(PARRY.zoom);
+    kick(dx, dy, hit.hurtMe ? profile.kickIn : profile.kickOut, now);
+  }
+  play('parry', { x: tp.x, y: tp.y, gain: involved ? 1 : BYSTANDER_GAIN });
+  return dx;
+}
+
 // knockTo 让 target 沿击退曲线（先快后慢）滑到服务端的落点；途中的位置同步在 sync.ts 里先不管。
 function knockTo(target: ClientEntity, knock: { x: number; y: number; ms: number }, now: number): void {
   const from = posOf(target, now);
@@ -184,7 +220,7 @@ function kick(dx: number, dy: number, strength: number, now: number): void {
   kickBudget = { at: sameMoment ? kickBudget.at : now, strength };
 }
 
-// hitSound 是命中的声音：武器 × 材质 × 档位，暴击、格挡、免疫、护盾各加一层。
+// hitSound 是命中的声音：武器 × 材质 × 档位，暴击、格挡、破防、免疫、护盾各加一层（完美格挡见 playParry）。
 function hitSound(hit: HitContext, x: number, y: number): void {
   const gain = hit.mine || hit.hurtMe ? 1 : BYSTANDER_GAIN;
   const where = { x, y, gain };
@@ -194,6 +230,11 @@ function hitSound(hit: HitContext, x: number, y: number): void {
   }
   if (hit.result === 'block') {
     play('block', where);
+    return;
+  }
+  if (hit.result === 'guard_break') {
+    play('guard.break', where);
+    if (hit.damage > 0) play(`hit.${hit.weapon}.${MODEL_MATERIAL[hit.target.model] ?? 'flesh'}.${hit.tier}`, { ...where, gain: where.gain * 0.6 });
     return;
   }
   if (hit.damage > 0) play(`hit.${hit.weapon}.${hit.material}.${hit.tier}`, where);
