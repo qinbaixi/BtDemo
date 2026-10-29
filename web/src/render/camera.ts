@@ -2,10 +2,11 @@
 //   1. 方向冲击（kick）：被打或打中别人时，画面沿受击方向弹一下再回来（阻尼弹簧），
 //   2. 震动（trauma）：大范围技能时的晃动，用平滑噪声而不是每帧随机跳，看起来不发抖，
 //   3. 缩放冲击（punch）：暴击时画面放大一点再弹回。
-// 所有强度都乘 FEEL 里的参数（?fxlab 可调）。
+// 所有强度都乘 FEEL 里的参数（?fxlab 可调）和玩家设置里的震屏强度（game/settings.ts）。
 
 import { FEEL, LERP_MS } from '../game/config';
 import { clamp } from '../game/math';
+import { SETTINGS } from '../game/settings';
 import { posOf, state, type Point } from '../game/state';
 
 const SNAP = 500;            // 目标点一下跳得比这远（复活、传送）就直接切过去
@@ -24,7 +25,7 @@ const cam = {
 // kick 让镜头沿 (dx, dy) 方向被推一下，strength 是像素。
 export function cameraKick(dx: number, dy: number, strength: number): void {
   const len = Math.hypot(dx, dy) || 1;
-  const s = strength * FEEL.shake;
+  const s = strength * FEEL.shake * SETTINGS.shake;
   // 给速度而不是直接给位移：画面先被推出去再弹回来，更像被撞了一下
   cam.kickVx += (dx / len) * s * 0.06;
   cam.kickVy += (dy / len) * s * 0.06;
@@ -32,7 +33,7 @@ export function cameraKick(dx: number, dy: number, strength: number): void {
 
 // cameraPunch 让画面瞬间放大 amount（比例），然后弹回。
 export function cameraPunch(amount: number): void {
-  cam.zoomV += amount * 0.1;
+  cam.zoomV += amount * 0.1 * SETTINGS.shake;
 }
 
 // updateCamera 每帧调用：算出这一帧的镜头矩形 state.cam（已对齐到设备像素）、
@@ -104,7 +105,7 @@ function shakeOffset(now: number, step: number): Point {
   // 大范围技能的震动：fx.shake 是强度（像素），这里按时间衰减并用几个正弦叠出平滑的噪声
   const fx = state.fx;
   if (fx && fx.shake > 0.2) {
-    const s = fx.shake * FEEL.shake;
+    const s = fx.shake * FEEL.shake * SETTINGS.shake;
     const t = now / 1000;
     x += s * (Math.sin(t * 47 + cam.seed) * 0.6 + Math.sin(t * 83 + cam.seed * 2) * 0.4);
     y += s * (Math.sin(t * 53 + cam.seed * 3) * 0.6 + Math.sin(t * 71 + cam.seed * 5) * 0.4);

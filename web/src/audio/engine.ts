@@ -1,25 +1,29 @@
 // 音频引擎：总线、限幅、混响、声像和距离衰减、并发限制。
 //
-//   声音 → 声像（按屏幕左右）→ 距离衰减（远了变小变闷）→ 总线（sfx / ui）→ 主音量 → 限幅器 → 扬声器
+//   声音 → 声像（按屏幕左右）→ 距离衰减（远了变小变闷）→ 总线（sfx / ui / amb）→ 主音量 → 限幅器 → 扬声器
 //                                                         ↘ 混响（金属、铃声的尾音）↗
 //
 // 浏览器要求用户点过页面才能出声，所以第一次按键或点击时才创建 AudioContext；在那之前 play() 什么都不做。
 // 声音先找烘焙好的素材（audio/audio.json 的图集，见 sprite.ts；地址带 ?sfx=live 时不读），
 // 没有就用 recipes.ts 的配方实时合成。每个声音的音量、音高微调在 mix.ts。
+// 环境声（风、鸟叫、营火，见 ambience.ts）走 amb 总线；重击、完美格挡时 duck() 把它压低一下。
+// 音效、环境声两条总线的音量跟着玩家设置（game/settings.ts）。
 
+import { clockSpeed, gameNow } from '../game/clock';
+import { onSettings, SETTINGS } from '../game/settings';
 import { state } from '../game/state';
 import { Kit, makeImpulse, makeNoiseBuffer } from './kit';
 import { MIX } from './mix';
 import { fallbacks, RECIPES } from './recipes';
 import { loadSprite } from './sprite';
 
-export type Bus = 'sfx' | 'ui';
+export type Bus = 'sfx' | 'ui' | 'amb';
 
 export interface PlayOptions {
   x?: number;          // 世界坐标：给了就按屏幕位置算声像和距离衰减，不给就是正中、不衰减
   y?: number;
   gain?: number;       // 音量倍数（旁观的命中更小声）
-  at?: number;         // 什么时候响（performance.now 的毫秒），不给就是马上
+  at?: number;         // 什么时候响（演出时钟 gameNow() 的毫秒），不给就是马上
   bus?: Bus;
 }
 
@@ -31,6 +35,9 @@ const DEFAULT_LIMIT = 3;
 const TOTAL_LIMIT = 28;
 const SAME_NAME_MS = 30;     // 同一个声音 30ms 内只响一次（范围技能同时打中一群）
 const STORE_KEY = 'btdemo.audio';
+const SFX_LEVEL = 0.9;       // 总线的基础音量，再乘设置里的音量
+const UI_LEVEL = 0.6;
+const AMB_LEVEL = 0.55;
 
 const audio = {
   ctx: null as AudioContext | null,
@@ -45,9 +52,12 @@ const audio = {
   spriteLoaded: false,
   volume: 0.8,
   muted: false,
+  duckUntil: 0,          // 环境声压低到什么时候（AudioContext 的秒）
+  duckDepth: 0,          // 正在压低多少 0..1
 };
 
 loadSettings();
+onSettings(() => applyBusLevels());
 
 // initAudio 等第一次用户操作再创建 AudioContext（浏览器的自动播放限制）。
 export function initAudio(): void {
@@ -74,11 +84,11 @@ function ensureContext(): AudioContext | null {
     const master = ctx.createGain();
     master.connect(limiter);
     const sfx = ctx.createGain();
-    sfx.gain.value = 0.9;
     sfx.connect(master);
     const ui = ctx.createGain();
-    ui.gain.value = 0.6;
     ui.connect(master);
+    const amb = ctx.createGain();
+    amb.connect(master);
     const reverb = ctx.createConvolver();
     reverb.buffer = makeImpulse(ctx);
     const wet = ctx.createGain();
@@ -87,10 +97,11 @@ function ensureContext(): AudioContext | null {
     wet.connect(master);
     audio.ctx = ctx;
     audio.master = master;
-    audio.buses = { sfx, ui };
+    audio.buses = { sfx, ui, amb };
     audio.reverb = reverb;
     audio.noise = makeNoiseBuffer(ctx);
     applyVolume();
+    applyBusLevels();
     if (new URLSearchParams(location.search).get('sfx') === 'live') audio.useSamples = false;
     else void loadSprite(ctx).then((sounds) => {
       if (!sounds) return;
@@ -106,7 +117,7 @@ function ensureContext(): AudioContext | null {
 export function play(name: string, options: PlayOptions = {}): boolean {
   const ctx = audio.ctx;
   if (!ctx || ctx.state !== 'running' || audio.muted || audio.volume <= 0) return false;
-  const nowMs = performance.now();
+  const nowMs = gameNow();
   const last = audio.lastPlayed.get(name);
   if (last !== undefined && Math.abs((options.at ?? nowMs) - last) < SAME_NAME_MS) return false;
 
@@ -133,7 +144,9 @@ export function play(name: string, options: PlayOptions = {}): boolean {
   const group = name.split('.')[0];
   makeRoom(group, ctx.currentTime);
 
-  const t = ctx.currentTime + Math.max(0, ((options.at ?? nowMs) - nowMs) / 1000) + 0.005;
+  // 演出时间换成真实时间：慢放时同样的延迟要等更久（暂停时按很慢算，免得画面停着声音先响）
+  const delay = Math.max(0, (options.at ?? nowMs) - nowMs) / Math.max(0.05, clockSpeed());
+  const t = ctx.currentTime + delay / 1000 + 0.005;
   const voiceGain = ctx.createGain();
   voiceGain.gain.value = Math.min(gain, 4);
   const nodes: AudioNode[] = [voiceGain];
@@ -282,6 +295,51 @@ export function setVolume(volume: number): void {
   audio.volume = Math.max(0, Math.min(1, volume));
   applyVolume();
   saveSettings();
+}
+
+// applyBusLevels 按设置更新音效、环境声总线的音量（界面声跟着音效走）。
+function applyBusLevels(): void {
+  const ctx = audio.ctx;
+  if (!ctx || !audio.buses.sfx) return;
+  audio.buses.sfx.gain.setTargetAtTime(SFX_LEVEL * SETTINGS.sfx, ctx.currentTime, 0.03);
+  audio.buses.ui.gain.setTargetAtTime(UI_LEVEL * SETTINGS.sfx, ctx.currentTime, 0.03);
+  scheduleAmbience(0.03);
+}
+
+// scheduleAmbience 按当前设置和压低状态重新排环境声总线的音量：压低中先保持压低，到点再回到（最新的）正常音量。
+function scheduleAmbience(attack: number): void {
+  const ctx = audio.ctx;
+  const bus = audio.buses.amb;
+  if (!ctx || !bus) return;
+  const now = ctx.currentTime;
+  const level = AMB_LEVEL * SETTINGS.ambience;
+  bus.gain.cancelScheduledValues(now);
+  bus.gain.setValueAtTime(bus.gain.value, now);
+  if (now < audio.duckUntil) {
+    bus.gain.setTargetAtTime(level * (1 - audio.duckDepth), now, attack);
+    bus.gain.setTargetAtTime(level, audio.duckUntil, 0.25);
+  } else {
+    audio.duckDepth = 0;
+    bus.gain.setTargetAtTime(level, now, attack);
+  }
+}
+
+// duck 把环境声压低 depth（0..1）持续 ms 毫秒再慢慢回来，让重击、完美格挡这一下更突出。
+export function duck(depth: number, ms: number): void {
+  const ctx = audio.ctx;
+  const bus = audio.buses.amb;
+  if (!ctx || !bus || depth <= 0) return;
+  const now = ctx.currentTime;
+  // 叠在上一次压低里时取更深、更久的；结束后 0.25 秒左右回到正常音量
+  audio.duckDepth = now < audio.duckUntil ? Math.max(audio.duckDepth, Math.min(1, depth)) : Math.min(1, depth);
+  audio.duckUntil = Math.max(audio.duckUntil, now + ms / 1000);
+  scheduleAmbience(0.015);
+}
+
+// ambienceOutput 给 ambience.ts 用：AudioContext、环境声总线和共享的白噪声；声音还没解锁时返回 null。
+export function ambienceOutput(): { ctx: AudioContext; bus: GainNode; noise: AudioBuffer } | null {
+  if (!audio.ctx || audio.ctx.state !== 'running' || !audio.buses.amb || !audio.noise) return null;
+  return { ctx: audio.ctx, bus: audio.buses.amb, noise: audio.noise };
 }
 
 function applyVolume(): void {

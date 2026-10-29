@@ -1,5 +1,6 @@
 // HUD：自己的面板、目标面板、技能栏、死亡遮罩、提示条、连接状态。都是 DOM，不画在画布上。
 
+import { gameNow } from '../game/clock';
 import { BASE_ATTRS, DERIVED_ATTRS, SKILL_KEY_LABELS } from '../game/config';
 import { clamp, fmt } from '../game/math';
 import { cdRemaining, state } from '../game/state';
@@ -95,7 +96,7 @@ function buildPetHud(): void {
 // renderPetHud 按状态画宠物小卡：不带 / 复活倒计时 / 召唤中 / 阵亡 / 名字加血条。
 export function renderPetHud(): void {
   if (!petUi) return;
-  const now = performance.now();
+  const now = gameNow();
   const pet = state.pets.find((p) => p.id === state.myPet);
   const entity = state.petEntity ? state.ents.get(state.petEntity) : undefined;
   const hasBar = !!state.myPet && !!entity && !entity.dead && state.petRespawnAt <= now;
@@ -202,7 +203,7 @@ export function renderSelf(): void {
   for (const [k] of DERIVED_ATTRS) {
     setText(attrEls['der.' + k], formatDerived(k, (s.attr as any)?.[k]));
   }
-  renderBuffs(s.buffs || [], performance.now());
+  renderBuffs(s.buffs || [], gameNow());
 }
 
 // Buff 按结束时间点倒计时。self 消息只在列表变了才来，所以主循环每帧调 renderBuffTimes 刷新数字。

@@ -13,19 +13,21 @@ export interface Profile {
   kickOut: number;    // 自己打中别人时镜头被推的强度（像素）
   kickIn: number;     // 自己挨打时镜头被推的强度
   shake: number;      // 自己参与时加的震动强度（像素，0 不震）
+  rumble: number;     // 自己参与时手柄 / 手机震动的强度 0..1（0 不震），见 haptics.ts
+  duck: number;       // 自己参与时把环境声压低多少 0..1（0 不压），突出这一下
 }
 
 export type ProfileName = Tier | 'block' | 'parry' | 'guard_break' | 'immune';
 
 export const PROFILES: Record<ProfileName, Profile> = {
-  light: { hitStopMs: 60, knockPx: 6, squash: 0.16, kickOut: 2.5, kickIn: 4, shake: 0 },
-  medium: { hitStopMs: 80, knockPx: 10, squash: 0.22, kickOut: 4, kickIn: 5.5, shake: 0 },
-  heavy: { hitStopMs: 110, knockPx: 16, squash: 0.3, kickOut: 6, kickIn: 8, shake: 3.5 },
-  block: { hitStopMs: 90, knockPx: 4, squash: 0.08, kickOut: 2, kickIn: 3, shake: 0 },
+  light: { hitStopMs: 60, knockPx: 6, squash: 0.16, kickOut: 2.5, kickIn: 4, shake: 0, rumble: 0.15, duck: 0 },
+  medium: { hitStopMs: 80, knockPx: 10, squash: 0.22, kickOut: 4, kickIn: 5.5, shake: 0, rumble: 0.3, duck: 0 },
+  heavy: { hitStopMs: 110, knockPx: 16, squash: 0.3, kickOut: 6, kickIn: 8, shake: 3.5, rumble: 0.65, duck: 0.5 },
+  block: { hitStopMs: 90, knockPx: 4, squash: 0.08, kickOut: 2, kickIn: 3, shake: 0, rumble: 0.3, duck: 0 },
   // 完美格挡：这里的 knockPx、squash 是被弹开的攻击者的；顿帧双方都停
-  parry: { hitStopMs: 150, knockPx: 8, squash: 0.26, kickOut: 3, kickIn: 3, shake: 0 },
-  guard_break: { hitStopMs: 120, knockPx: 8, squash: 0.3, kickOut: 5, kickIn: 8, shake: 5 },
-  immune: { hitStopMs: 40, knockPx: 0, squash: 0, kickOut: 1, kickIn: 1, shake: 0 },
+  parry: { hitStopMs: 150, knockPx: 8, squash: 0.26, kickOut: 3, kickIn: 3, shake: 0, rumble: 0.8, duck: 0.7 },
+  guard_break: { hitStopMs: 120, knockPx: 8, squash: 0.3, kickOut: 5, kickIn: 8, shake: 5, rumble: 0.9, duck: 0.6 },
+  immune: { hitStopMs: 40, knockPx: 0, squash: 0, kickOut: 1, kickIn: 1, shake: 0, rumble: 0, duck: 0 },
 };
 
 // 自己参与的完美格挡：整个画面一起停一下（不只是双方），镜头放大
@@ -37,7 +39,13 @@ export const CRIT = { hitStopMs: 40, knockScale: 1.6, kickScale: 1.6, zoom: 0.03
 // 倒地时尸体被打飞的距离（像素）
 export const DEATH_KNOCK_PX = 18;
 // 致命一击（自己或自己的宠物打死的）：再停一下、飞得更远、镜头放大
-export const KILL = { hitStopMs: 90, knockScale: 1.5, zoom: 0.03 };
+export const KILL = { hitStopMs: 90, knockScale: 1.5, zoom: 0.03, rumble: 0.5 };
+
+// 清场：自己打死视野里最后一只怪，或者打死首领。全局慢放 slowMs（真实时间）到 scale 倍速，镜头再放大一点，
+// 环境声压低；cooldownMs 内只放一次（一群小怪接连倒下时不会一直慢）。设置里能关（SETTINGS.slowmo）。
+export const CLEAR = { scale: 0.3, slowMs: 380, zoom: 0.05, duck: 0.8, rumble: 0.8, cooldownMs: 4000, viewMargin: 60 };
+// 首领模型：打死它们算清场（不管周围还有没有怪）
+export const BOSS_MODELS = new Set(['ogre_chief']);
 
 // 每个技能的档位和武器种类（技能 id 见 config/skills.yaml）。没列出的按 fx 猜，见 skillFeel()。
 export const SKILL_FEEL: Record<string, { tier: Tier; weapon: Weapon }> = {

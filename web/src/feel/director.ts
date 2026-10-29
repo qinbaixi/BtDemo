@@ -4,14 +4,17 @@
 //
 // 视角规则：自己（或自己的宠物）参与的命中全通道满强度；别人之间的命中不动镜头，声音小一些。
 
-import { play } from '../audio/engine';
+import { duck, play } from '../audio/engine';
+import { slowMotion } from '../game/clock';
+import { SETTINGS } from '../game/settings';
+import { rumble } from './haptics';
 import type { Material, Tier, Weapon } from '../audio/recipes';
 import { cameraKick, cameraPunch } from '../render/camera';
 import { LOOK_FIRE } from '../game/config';
 import { hypot } from '../game/math';
 import { posOf, state, type ClientEntity } from '../game/state';
 import type { GameEvent } from '../net/types';
-import { CRIT, DEATH_KNOCK_PX, KILL, MODEL_MATERIAL, PARRY, PROFILES, skillFeel, type Profile } from './profiles';
+import { BOSS_MODELS, CLEAR, CRIT, DEATH_KNOCK_PX, KILL, MODEL_MATERIAL, PARRY, PROFILES, skillFeel, type Profile } from './profiles';
 
 export type HitResult = 'hit' | 'block' | 'parry' | 'guard_break' | 'immune';
 
@@ -41,6 +44,7 @@ const lastCastFx = new Map<number, string>();
 const lastHitBy = new Map<number, { src: number; at: number }>();
 // 镜头冲击的预算：同一时刻（范围技能一下打中一群）只取最强的那一次
 let kickBudget = { at: -1e9, strength: 0 };
+let lastClearAt = -1e9;   // 上一次清场慢放的时间
 
 // forgetEntity 在实体离开视野时丢掉它的记录。
 export function forgetEntity(id: number): void {
@@ -161,6 +165,11 @@ export function playHit(hit: HitContext, now: number): number {
     if (hit.damage > 0) state.hurtAt = now;
   }
   if ((hit.mine || hit.hurtMe) && profile.shake > 0 && state.fx) state.fx.shake = Math.max(state.fx.shake, profile.shake);
+  // 手柄 / 手机震动和压低环境声：只在自己参与时
+  if (hit.mine || hit.hurtMe) {
+    rumble(profile.rumble * (crit ? 1.3 : 1) * (hit.hurtMe ? 1 : 0.75), 40 + stop * 0.8, now);
+    duck(profile.duck, 300);
+  }
 
   // 画面：命中点按材质喷一遍序列帧（金属火星、骨渣、血点……），地上留印记
   if (hit.result === 'hit') state.fx?.hitBurst(target.id, hit.material, hit.tier, crit, dx, now);
@@ -225,6 +234,8 @@ function playParry(hit: HitContext, now: number): number {
   target.freezeUntil = Math.max(target.freezeUntil, now + profile.hitStopMs);
   const involved = hit.hurtMe || hit.mine || (!!src && isMine(src.id));
   if (involved) {
+    rumble(profile.rumble, 90, now);
+    duck(profile.duck, 350);
     // 整个画面停一下：谁都别动，只有火花和声音
     for (const entity of state.ents.values()) entity.freezeUntil = Math.max(entity.freezeUntil, now + PARRY.worldStopMs);
     cameraPunch(PARRY.zoom);
@@ -288,6 +299,35 @@ export function onDeath(entity: ClientEntity, now: number): void {
   entity.freezeUntil = Math.max(entity.freezeUntil, now + KILL.hitStopMs);
   if (last.src === state.myId) cameraPunch(KILL.zoom);
   play('kill', { x: p.x, y: p.y });
+  if (isClear(entity, now)) {
+    playClear(now);
+  } else {
+    rumble(KILL.rumble, 70, now);
+  }
+}
+
+// isClear 判断这一下是不是“清场”：打死的是首领，或者是镜头里最后一只活着的怪。
+function isClear(entity: ClientEntity, now: number): boolean {
+  if (entity.kind !== 'monster') return false;
+  if (BOSS_MODELS.has(entity.model)) return true;
+  const view = state.cam;
+  const margin = CLEAR.viewMargin;
+  for (const other of state.ents.values()) {
+    if (other === entity || other.kind !== 'monster' || other.dead) continue;
+    const p = posOf(other, now);
+    if (p.x > view.x - margin && p.x < view.x + view.w + margin && p.y > view.y - margin && p.y < view.y + view.h + margin) return false;
+  }
+  return true;
+}
+
+// playClear 是清场的演出：全局慢放一下、镜头再放大一点、环境声压低、震一下。几秒内只放一次。
+function playClear(now: number): void {
+  if (now - lastClearAt < CLEAR.cooldownMs) return;
+  lastClearAt = now;
+  if (SETTINGS.slowmo) slowMotion(CLEAR.scale, CLEAR.slowMs);
+  cameraPunch(CLEAR.zoom);
+  duck(CLEAR.duck, CLEAR.slowMs + 300);
+  rumble(CLEAR.rumble, 160, now);
 }
 
 // 施法 fx → 出手时的声音（不在表里的 fx 没有声音）

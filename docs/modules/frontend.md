@@ -48,17 +48,21 @@ web/
     game/
       config.ts         插值时长、动画时长、配色、属性表等常量
       math.ts           clamp、lerp、hypot、fmt
+      clock.ts          演出时钟 gameNow()：画面、动画、特效、声音排期都用它；清场慢放时走慢，之后追上真实时间
+      settings.ts       玩家设置（音效、环境声音量，震屏强度，闪白、震动、慢放开关），存在 localStorage
       state.ts          State 和 ClientEntity 类型、全局 state、插值 posOf、头顶位置 headY
       sync.ts           处理 Frame 里的 welcome / enter / leave / state / event / self / zones / ai / toast 等消息；welcome 后下载地图建场景
       map.ts            下载并解析所在场景的地图（/maps/*.tmj）（Tiled 地图，和服务端读同一份）
       events.ts         事件 → 动画、特效、飘字
     feel/
       profiles.ts       打击感档位表（light/medium/heavy、格挡、完美格挡、破防……）和技能 → 档位/武器
-      director.ts       一次命中分发到顿帧、击退、镜头、音效、命中序列帧、地面印记
+      director.ts       一次命中分发到顿帧、击退、镜头、音效、震动、压低环境声、命中序列帧、地面印记；清场慢放
+      haptics.ts        手柄（vibrationActuator）和手机（navigator.vibrate）震动
     audio/
       kit.ts            合成积木（噪声、振荡器、包络、滤波）
       recipes.ts        每个声音的配方（武器.材质.档位 命名，找不到时逐级回退）
-      engine.ts         音频总线：先用烘焙好的音频图集，没有或 ?sfx=live 时实时合成
+      engine.ts         音频总线（sfx / ui / amb）：先用烘焙好的音频图集，没有或 ?sfx=live 时实时合成；duck() 压低环境声
+      ambience.ts       环境声：按所在区域混合风、营火底噪，随机鸟叫、乌鸦、钟声、火堆噼啪
       sprite.ts         读 audio/audio.json + sfx.webm / sfx.m4a，切成每个声音的变体
       bake.ts           ?sfxbake 时离线渲染全部配方，给 tools/sfxbake/bake.mjs 调用
       mix.ts            每个声音的音量 / 音高微调（sfxlab 导出后粘贴进来）
@@ -89,6 +93,7 @@ web/
       debug.ts          调试抽屉：标签页、跟随选中目标、向服务端要追踪
       debug-ai.ts       AI 决策页：整棵行为树（可折叠）叠加每帧结果和判断依据，暂停后逐帧回看，节点详情
       debug-proto.ts    调试抽屉：协议收发列表
+      settings.ts       设置面板（Esc 或右上角“设置”按钮）
     styles/             CSS，由 main.ts 引入
 ```
 
@@ -294,6 +299,13 @@ npm run sfx:bake      # 输出 web/public/audio/sfx.webm、sfx.m4a、audio.json�
 - 换真实素材：把 wav 放进 `assets-src/audio/<声音名>/`（多个文件就是多个变体），在 `assets-src/audio/CREDITS.md` 记下来源和授权，再烘焙一次。声音名见 sfxlab 页面。
 - 调音：打开 `?sfxlab`，拖音量和音高，点“导出”，把结果粘贴进 `audio/mix.ts`。
 - 加载失败（文件缺失、浏览器不支持）时自动回到实时合成，不会没声音。
+
+## 演出时钟和慢放
+
+前端所有“现在几点”都用 `game/clock.ts` 的 `gameNow()`，不直接用 `performance.now()`（只有帧率监测这种要真实时间的例外）。
+平时两者一样；`slowMotion(scale, ms)` 让演出时钟变慢，落下的时间之后以 1.6 倍速追回来。服务端不受影响，所以慢放只用在很短的时刻：
+自己打死镜头里最后一只怪或者首领时（`feel/director.ts` 的 `playClear`，参数在 `feel/profiles.ts` 的 `CLEAR`）。
+`?fxlab` 里有 1× / 0.25× / 暂停 / 单帧按钮，用来逐帧看命中。
 
 ## 改协议
 

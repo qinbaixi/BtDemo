@@ -5,7 +5,8 @@
 
 import { getVolume, play, setVolume } from './audio/engine';
 import { MATERIALS, RECIPES, TIERS, WEAPONS } from './audio/recipes';
-import { PROFILES, type Profile, type ProfileName } from './feel/profiles';
+import { CLEAR, PROFILES, type Profile, type ProfileName } from './feel/profiles';
+import { gameNow, setTimeScale, slowMotion, stepFrame, timeScale } from './game/clock';
 import { FEEL, LOOK_FIRE, LOOK_FROST, LOOK_HASTE, LOOK_HOLY, ZONE_ASPECT } from './game/config';
 import { onEvent } from './game/events';
 import { makeEntity, posOf, state, type ClientEntity, type ClientZone } from './game/state';
@@ -35,7 +36,7 @@ const lookUntil = new Map<number, Map<number, number>>();
 function addLook(id: number, look: number, seconds: number): void {
   let looks = lookUntil.get(id);
   if (!looks) lookUntil.set(id, (looks = new Map()));
-  looks.set(look, performance.now() + seconds * 1000);
+  looks.set(look, gameNow() + seconds * 1000);
 }
 
 export async function startFxLab(): Promise<void> {
@@ -53,7 +54,7 @@ export async function startFxLab(): Promise<void> {
   const at = map?.zones[zone]?.[0] ?? map?.zones.graveyard?.[0];
   center = at ? { x: at.x - 60, y: at.y + 40 } : { x: state.map.w / 2, y: state.map.h / 2 };
 
-  const now = performance.now();
+  const now = gameNow();
   state.myId = ME;
   // ?fxlab&ranger 一开始就是游侠
   const ranger = new URLSearchParams(location.search).has('ranger');
@@ -75,7 +76,7 @@ export async function startFxLab(): Promise<void> {
   let last = 0;
   const loop = () => {
     requestAnimationFrame(loop);
-    const t = performance.now();
+    const t = gameNow();
     if (t - last >= 100) { last = t; tick(); }
   };
   requestAnimationFrame(loop);
@@ -84,7 +85,7 @@ export async function startFxLab(): Promise<void> {
 // tick 模拟服务端 10Hz 同步：绕圈走、自动连打、尸体复活。
 let tickN = 0;
 function tick(): void {
-  const now = performance.now();
+  const now = gameNow();
   tickN++;
   const me = state.ents.get(ME)!;
   if (walking) {
@@ -107,7 +108,7 @@ let nextZoneId = 1;
 
 function addZone(zone: Omit<ClientZone, 'id' | 'goneAt' | 'seed' | 'pulseFrom'>): void {
   // 同一个人只能有一个法阵：旧的淡出
-  for (const old of state.zones) if (zone.owner && old.owner === zone.owner && !old.goneAt) old.goneAt = performance.now();
+  for (const old of state.zones) if (zone.owner && old.owner === zone.owner && !old.goneAt) old.goneAt = gameNow();
   state.zones.push({ ...zone, id: nextZoneId++, goneAt: 0, pulseFrom: zone.born, seed: Math.random() * 100 });
 }
 
@@ -145,7 +146,7 @@ function target(): ClientEntity | undefined {
 }
 
 function emit(ev: GameEvent): void {
-  onEvent(ev, performance.now());
+  onEvent(ev, gameNow());
 }
 
 function damage(e: ClientEntity, v: number): void {
@@ -165,12 +166,12 @@ function hit(crit: boolean, heavy = false): void {
 
 // later 让 fn 在 ms 毫秒后跑（走主循环的 state.pending，录预览换掉时钟时也对得上）。
 function later(ms: number, fn: () => void): void {
-  state.pending.push({ at: performance.now() + ms, fn });
+  state.pending.push({ at: gameNow() + ms, fn });
 }
 
 // knockAway 算 victim 被 from 打中后、推开 distance 像素的落点（服务端用 nav.Reach，这里是空地）。
 function knockAway(victim: ClientEntity, from: ClientEntity, distance: number): { kx: number; ky: number } {
-  const now = performance.now();
+  const now = gameNow();
   const vp = posOf(victim, now);
   const fp = posOf(from, now);
   const len = Math.hypot(vp.x - fp.x, vp.y - fp.y) || 1;
@@ -183,11 +184,11 @@ function ogreSmash(blocked: boolean): void {
   const me = state.ents.get(ME)!;
   const windup = 600;
   // 先走到自己身边（够得着重锤的射程）
-  const mp = posOf(me, performance.now());
-  moveTo(ogre, mp.x + 74, mp.y - 6, performance.now());
+  const mp = posOf(me, gameNow());
+  moveTo(ogre, mp.x + 74, mp.y - 6, gameNow());
   ogre.facing = Math.PI;
   emit({ k: 'cast', src: ogre.id, dst: ME, fx: 'melee', skill: 'smash', weight: 'heavy', color: '#ff9f43',
-    hitAt: (performance.now() + windup) / 1000 });
+    hitAt: (gameNow() + windup) / 1000 });
   if (blocked) me.blocking = true;
   later(windup, () => {
     const knock = knockAway(me, ogre, blocked ? 50 / 1.2 * 0.3 : 50 / 1.2);
@@ -204,20 +205,20 @@ function guardDemo(kind: 'parry' | 'guard_break' | 'back'): void {
   const ogre = state.ents.get(3)!;
   const me = state.ents.get(ME)!;
   const windup = 600;
-  const mp = posOf(me, performance.now());
-  moveTo(ogre, mp.x + 74, mp.y - 6, performance.now());
+  const mp = posOf(me, gameNow());
+  moveTo(ogre, mp.x + 74, mp.y - 6, gameNow());
   ogre.facing = Math.PI;
   me.facing = kind === 'back' ? Math.PI : 0;
   emit({ k: 'cast', src: ogre.id, dst: ME, fx: 'melee', skill: 'smash', weight: 'heavy', color: '#ff9f43',
-    hitAt: (performance.now() + windup) / 1000 });
+    hitAt: (gameNow() + windup) / 1000 });
   // 完美格挡：命中前 0.1 秒才举盾；其它两种一开始就举着
   const raiseAt = kind === 'parry' ? windup - 100 : 0;
   later(raiseAt, () => {
     me.blocking = true;
-    if (kind === 'guard_break') { me.guard = 0.25; me.guardAt = performance.now(); }
+    if (kind === 'guard_break') { me.guard = 0.25; me.guardAt = gameNow(); }
   });
   later(windup, () => {
-    const now = performance.now();
+    const now = gameNow();
     if (kind === 'parry') {
       const knock = knockAway(ogre, me, 18 / 2.5);
       emit({ k: 'dmg', src: ogre.id, dst: ME, v: 0, skill: 'smash', weight: 'heavy', blocked: 60, result: 'parry',
@@ -229,7 +230,7 @@ function guardDemo(kind: 'parry' | 'guard_break' | 'back'): void {
         ...knock, knockTime: 0.18, stun: 0.8 });
       damage(me, 12);
       // 架势过一会儿开始回
-      for (let i = 1; i <= 20; i++) later(1000 + i * 125, () => { me.guard = i / 20; me.guardAt = performance.now(); });
+      for (let i = 1; i <= 20; i++) later(1000 + i * 125, () => { me.guard = i / 20; me.guardAt = gameNow(); });
     } else {
       // 盾还举着，但朝着另一边：照样挨了整整一锤
       const knock = knockAway(me, ogre, 50 / 1.2);
@@ -243,7 +244,7 @@ function guardDemo(kind: 'parry' | 'guard_break' | 'back'): void {
 // heavySweep 是自己的旋风斩：重击，按每只怪的重量把它们推开，食人魔首领韧性高推不动。
 function heavySweep(): void {
   const me = state.ents.get(ME)!;
-  const p = posOf(me, performance.now());
+  const p = posOf(me, gameNow());
   emit({ k: 'cast', src: ME, fx: 'circle', skill: 'whirlwind', name: '旋风斩', weight: 'heavy', color: '#e0e0e0', radius: 130, x: p.x, y: p.y });
   later(80, () => {
     for (const e of state.ents.values()) {
@@ -275,7 +276,7 @@ function groundMarksDemo(): void {
 function interruptWolf(): void {
   const wolf = state.ents.get(2)!;
   emit({ k: 'cast', src: wolf.id, dst: ME, fx: 'melee', skill: 'heavy_bite', weight: 'heavy', color: '#ffef5c',
-    hitAt: (performance.now() + 500) / 1000 });
+    hitAt: (gameNow() + 500) / 1000 });
   later(220, () => {
     emit({ k: 'cast', src: ME, dst: wolf.id, fx: 'melee', skill: 'slash', weight: 'light', color: '#ffd166' });
     later(130, () => {
@@ -305,7 +306,7 @@ const ACTIONS: [string, () => void][] = [
   ['重击', () => hit(true, true)],
   ['击杀', () => { const t = target(); if (t) { emit({ k: 'cast', src: ME, dst: t.id, fx: 'melee', skill: 'smash', color: '#ffd166' }); emit({ k: 'dmg', src: ME, dst: t.id, v: t.hp, skill: 'smash', crit: true }); damage(t, t.hp); kill(t); } }],
   ['旋风斩', () => {
-    const me = posOf(state.ents.get(ME)!, performance.now());
+    const me = posOf(state.ents.get(ME)!, gameNow());
     emit({ k: 'cast', src: ME, fx: 'circle', skill: 'whirlwind', name: '旋风斩', color: '#ff9a3c', radius: 130, x: me.x, y: me.y });
     for (const e of state.ents.values()) if (e.id !== ME && !e.dead) { const v = 45; emit({ k: 'dmg', src: ME, dst: e.id, v, crit: Math.random() < 0.3 }); damage(e, v); if (e.hp <= 0) kill(e); }
   }],
@@ -338,7 +339,7 @@ const ACTIONS: [string, () => void][] = [
   ['免疫', () => { const t = target(); if (!t) return; emit({ k: 'cast', src: t.id, dst: ME, fx: 'melee', skill: 'bite', color: '#ff5a50' }); emit({ k: 'dmg', src: t.id, dst: ME, v: 0, immune: true }); }],
   ['闪现', () => {
     const me = state.ents.get(ME)!;
-    const from = posOf(me, performance.now());
+    const from = posOf(me, gameNow());
     const dir = Math.cos(me.facing) < 0 ? -1 : 1;
     // 闪出去再闪回来，来回都看得到
     const to = { x: from.x + dir * 170, y: from.y };
@@ -348,9 +349,9 @@ const ACTIONS: [string, () => void][] = [
   ['烈焰附魔', () => { emit({ k: 'cast', src: ME, fx: 'enchant', skill: 'enchant', name: '烈焰附魔', color: '#ff8a3a' }); addLook(ME, LOOK_FIRE, 8); }],
   ['飞斧', () => {
     const victim = target();
-    const from = posOf(state.ents.get(ME)!, performance.now());
+    const from = posOf(state.ents.get(ME)!, gameNow());
     if (!victim) return;
-    const to = posOf(victim, performance.now());
+    const to = posOf(victim, gameNow());
     const dist = Math.hypot(to.x - from.x, to.y - from.y) || 1;
     const stop = Math.max(0, dist - (victim.r || 14));
     emit({ k: 'cast', src: ME, dst: victim.id, fx: 'axe', skill: 'axe', name: '飞斧', color: '#d8dde6',
@@ -360,7 +361,7 @@ const ACTIONS: [string, () => void][] = [
     if (victim.hp <= 0) kill(victim);
   }],
   ['冰霜新星', () => {
-    const me = posOf(state.ents.get(ME)!, performance.now());
+    const me = posOf(state.ents.get(ME)!, gameNow());
     emit({ k: 'cast', src: ME, fx: 'frost', skill: 'frost_nova', name: '冰霜新星', color: '#8fd8ff', radius: 130, x: me.x, y: me.y });
     for (const e of state.ents.values()) {
       if (e.id === ME || e.dead) continue;
@@ -371,15 +372,15 @@ const ACTIONS: [string, () => void][] = [
   }],
   ['治愈之泉', () => {
     const me = state.ents.get(ME)!;
-    const p = posOf(me, performance.now());
+    const p = posOf(me, gameNow());
     emit({ k: 'cast', src: ME, fx: 'zone', skill: 'healing_spring', name: '治愈之泉', color: '#7dffb0', radius: 110, x: p.x, y: p.y });
-    const now = performance.now();
+    const now = gameNow();
     addZone({ x: p.x, y: p.y, radius: 110, name: '治愈之泉', color: '#7dffb0', look: 'rune', owner: ME,
       dur: 60, interval: 1, heal: 0.03, born: now + leadOf('zone'), endsAt: now + leadOf('zone') + 60000 });
     me.hp = Math.min(me.hp, me.maxHp * 0.5);   // 先掉点血，看得到回血
   }],
   ['生命之泉', () => {
-    const now = performance.now();
+    const now = gameNow();
     const old = state.zones.find((zone) => zone.look === 'spring' && !zone.goneAt);
     if (old) { old.goneAt = now; return; }
     // 放在广场中间（村子里正好是游戏里出生点的位置）
@@ -421,13 +422,13 @@ ACTIONS.push(
   ['穿云箭', asRanger(() => {
     // 朝目标方向射穿到 380 外，沿线的敌人按远近挨个挨打
     const me = state.ents.get(ME)!;
-    const from = posOf(me, performance.now());
+    const from = posOf(me, gameNow());
     const t = target();
-    const dir = t ? Math.atan2(posOf(t, performance.now()).y - from.y, posOf(t, performance.now()).x - from.x) : (Math.cos(me.facing) < 0 ? Math.PI : 0);
+    const dir = t ? Math.atan2(posOf(t, gameNow()).y - from.y, posOf(t, gameNow()).x - from.x) : (Math.cos(me.facing) < 0 ? Math.PI : 0);
     const range = 380 + 16;
     const hits = [...state.ents.values()].filter((e) => {
       if (e.id === ME || e.dead) return false;
-      const p = posOf(e, performance.now());
+      const p = posOf(e, gameNow());
       const along = (p.x - from.x) * Math.cos(dir) + (p.y - from.y) * Math.sin(dir);
       const across = Math.abs(-(p.x - from.x) * Math.sin(dir) + (p.y - from.y) * Math.cos(dir));
       return along > 0 && along < range && across < (e.r || 14) + 10;
@@ -439,9 +440,9 @@ ACTIONS.push(
   ['箭雨', asRanger(() => {
     const t = target();
     const me = state.ents.get(ME)!;
-    const from = posOf(me, performance.now());
+    const from = posOf(me, gameNow());
     const dir = Math.cos(me.facing) < 0 ? -1 : 1;
-    const c = t ? posOf(t, performance.now()) : { x: from.x + dir * 180, y: from.y };
+    const c = t ? posOf(t, gameNow()) : { x: from.x + dir * 180, y: from.y };
     emit({ k: 'cast', src: ME, dst: t?.id, fx: 'rain', skill: 'arrow_rain', name: '箭雨', color: '#cfe6ff', radius: 90, x: c.x, y: c.y });
     for (const e of state.ents.values()) {
       if (e.id === ME || e.dead || Math.hypot(e.x - c.x, e.y - c.y) > 90 + (e.r || 14)) continue;
@@ -453,7 +454,7 @@ ACTIONS.push(
   ['冰霜箭', asRanger(() => shoot('frostarrow', 'frost_arrow', '冰霜箭', '#8fd8ff', 30))],
   ['翻滚', asRanger(() => {
     const me = state.ents.get(ME)!;
-    const from = posOf(me, performance.now());
+    const from = posOf(me, gameNow());
     const dir = Math.cos(me.facing) < 0 ? -1 : 1;
     emit({ k: 'cast', src: ME, fx: 'roll', skill: 'roll', name: '翻滚', color: '#c8f0c0', x: from.x, y: from.y, tx: from.x + dir * 130, ty: from.y });
     // 滚完转回来，下一次往回滚
@@ -529,7 +530,7 @@ const LAB_PETS: Record<string, { name: string; color: string; r: number; attack:
 };
 
 function summonPet(model: string): void {
-  const now = performance.now();
+  const now = gameNow();
   const me = state.ents.get(ME)!;
   const from = posOf(me, now);
   const cfg = LAB_PETS[model];
@@ -559,8 +560,8 @@ ACTIONS.push(
     const cfg = LAB_PETS[pet.model];
     // 小狼先扑到目标身边再咬
     if (cfg.attack === 'melee') {
-      const p = posOf(t, performance.now());
-      moveTo(pet, p.x - 34, p.y + 4, performance.now());
+      const p = posOf(t, gameNow());
+      moveTo(pet, p.x - 34, p.y + 4, gameNow());
     }
     const color = pet.model === 'sprout' ? '#8fe08f' : pet.model === 'ember' ? '#ff7b39' : '#e8c9a0';
     emit({ k: 'cast', src: PET, dst: t.id, fx: cfg.attack, color });
@@ -582,7 +583,7 @@ ACTIONS.push(
   ['宠物传送', () => {
     const pet = petOf();
     if (!pet) return;
-    const now = performance.now();
+    const now = gameNow();
     const from = posOf(pet, now);
     const me = posOf(state.ents.get(ME)!, now);
     const away = from.x < me.x ? 1 : -1;
@@ -599,6 +600,36 @@ const SLIDERS: [string, keyof typeof FEEL, number, number, number][] = [
   ['溶解时长 ms', 'dissolveMs', 200, 3000, 100],
   ['扭曲倍数', 'distort', 0, 5, 0.1],
 ];
+
+// timeControls 是演出时钟的控制：正常、0.25 倍慢放、暂停，暂停时单帧步进（看各通道是不是对齐在命中那一刻）。
+function timeControls(): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'fxlab-buttons';
+  const speeds: [string, number][] = [['1×', 1], ['0.25×', 0.25], ['暂停', 0]];
+  const buttons: HTMLButtonElement[] = [];
+  for (const [label, speed] of speeds) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.className = 'toggle' + (speed === timeScale() ? ' on' : '');
+    b.onclick = () => {
+      setTimeScale(speed);
+      for (const other of buttons) other.classList.toggle('on', other === b);
+    };
+    buttons.push(b);
+    row.appendChild(b);
+  }
+  const step = document.createElement('button');
+  step.textContent = '单帧 ▸';
+  step.title = '暂停时往前走一帧（1/60 秒）';
+  step.onclick = () => stepFrame();
+  row.appendChild(step);
+  const clear = document.createElement('button');
+  clear.textContent = '清场慢放';
+  clear.title = '直接放一次清场的全局慢放';
+  clear.onclick = () => slowMotion(CLEAR.scale, CLEAR.slowMs);
+  row.appendChild(clear);
+  return row;
+}
 
 function buildPanel(): void {
   const panel = document.createElement('div');
@@ -625,6 +656,7 @@ function buildPanel(): void {
     buttons.appendChild(b);
   }
   panel.appendChild(buttons);
+  panel.appendChild(timeControls());
   for (const [label, key, min, max, step] of SLIDERS) {
     panel.appendChild(slider(label, min, max, step, FEEL[key], (v) => { FEEL[key] = v; }));
   }
@@ -679,7 +711,9 @@ const PROFILE_SLIDERS: [string, keyof Profile, number, number, number][] = [
   ['受击形变', 'squash', 0, 0.6, 0.02],
   ['打中镜头', 'kickOut', 0, 15, 0.5],
   ['挨打镜头', 'kickIn', 0, 15, 0.5],
-  ['震动 px', 'shake', 0, 10, 0.5],
+  ['震屏 px', 'shake', 0, 10, 0.5],
+  ['手柄震动', 'rumble', 0, 1, 0.05],
+  ['压环境声', 'duck', 0, 1, 0.05],
 ];
 const PROFILE_LABELS: [ProfileName, string][] = [['light', '轻'], ['medium', '中'], ['heavy', '重'], ['block', '格挡'], ['parry', '完美格挡'], ['guard_break', '破防'], ['immune', '免疫']];
 

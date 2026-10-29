@@ -1,6 +1,7 @@
 // 客户端的全部本地状态，以及实体相关的小工具函数。
 // 服务端是权威：这里只保存最近一次同步的结果，加上插值和动画需要的数据。
 
+import { clockLag, gameNow } from './clock';
 import type { Aura, FX } from '../render/fx';
 import type { createScenery } from '../render/scenery';
 import type {
@@ -108,13 +109,13 @@ export interface State {
   scene: SceneInfo | null;        // 所在的场景和线（welcome 里带的），传送门也在里面
   myPet: string;                  // 自己选的宠物 id（空 = 不带），以服务端 PetStatus 为准
   petEntity: number;              // 自己宠物的实体 id（没在视野或没召唤为 0）
-  petRespawnAt: number;           // 宠物复活的时间（performance.now()），0 = 没在复活中
-  petCooldownUntil: number;       // 换宠物冷却结束的时间（performance.now()），0 = 没有冷却
+  petRespawnAt: number;           // 宠物复活的时间（演出时钟 gameNow()），0 = 没在复活中
+  petCooldownUntil: number;       // 换宠物冷却结束的时间（演出时钟 gameNow()），0 = 没有冷却
   ents: Map<number, ClientEntity>;
   self: SelfInfo | null;          // 服务端增量合并后的完整自己信息
-  cds: Record<string, number>;    // 技能 id -> 冷却结束的本地时间（performance.now() 毫秒）
+  cds: Record<string, number>;    // 技能 id -> 冷却结束的本地时间（演出时钟 gameNow() 毫秒）
   clockSynced: boolean;           // 已经收到过服务端的帧（clockOffset 有效）
-  clockOffset: number;            // performance.now() - 服务端时间 × 1000：每收到一帧更新，把服务端时间点换成本地时间
+  clockOffset: number;            // performance.now() - 服务端时间 × 1000（真实时间）：每收到一帧更新，把服务端时间点换成本地时间
   target: number;
   hoverSlot: number;
   showAOI: boolean;
@@ -148,9 +149,9 @@ export interface State {
 
 // ClientZone 是客户端记着的一块回血区：服务端的 ZoneInfo 加上本地时间。
 export interface ClientZone extends ZoneInfo {
-  born: number;     // 出现的时间（performance.now()）：技能放的从施法动作按地的那一刻开始铺开
+  born: number;     // 出现的时间（演出时钟 gameNow()）：技能放的从施法动作按地的那一刻开始铺开
   pulseFrom: number; // 回血节奏的起点：服务端放下区域的时间（收到列表的时刻），画回血脉冲用
-  endsAt: number;   // 消失的时间（performance.now()），0 表示常驻
+  endsAt: number;   // 消失的时间（演出时钟 gameNow()），0 表示常驻
   goneAt: number;   // 服务端已经去掉、正在淡出时是去掉的时间，否则为 0
   seed: number;
 }
@@ -324,14 +325,14 @@ export function faceToward(e: ClientEntity, x: number, y: number, now: number): 
 export function fxResolve(id: number): { x: number; y: number; r: number; facing: number; h: number } | null {
   const e = state.ents.get(id);
   if (!e) return null;
-  const p = posOf(e, performance.now());
+  const p = posOf(e, gameNow());
   return { x: p.x, y: p.y, r: e.r || 14, facing: e.facing, h: p.y - headY(e, p) };
 }
 
 // fxAuras 列出身上带护盾、要画护盾泡泡的实体。
 export function fxAuras(): Aura[] {
   const out: Aura[] = [];
-  const now = performance.now();
+  const now = gameNow();
   for (const e of state.ents.values()) {
     if (e.dead || e.shield <= 0) continue;
     const p = posOf(e, now);
@@ -344,9 +345,9 @@ export function cdRemaining(skillId: string, now: number): number {
   return Math.max(0, ((state.cds[skillId] || 0) - now) / 1000);
 }
 
-// localTime 把服务端时间（秒，Frame.time 同一个时钟）换成本地 performance.now() 毫秒；0 保持 0（没有这个时间点）。
+// localTime 把服务端时间（秒，Frame.time 同一个时钟）换成本地 gameNow() 毫秒；0 保持 0（没有这个时间点）。
 export function localTime(serverTime: number): number {
-  return serverTime ? serverTime * 1000 + state.clockOffset : 0;
+  return serverTime ? serverTime * 1000 + state.clockOffset - clockLag() : 0;
 }
 
 // setQuality 切换画质档位，同时维护 hq（不是低档）。

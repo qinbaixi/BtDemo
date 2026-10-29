@@ -1,5 +1,6 @@
 // 处理服务端的帧和消息：welcome / enter / leave / state / event / self / zones / ai / toast / skills / inventory / petStatus，更新本地状态。
 
+import { gameNow } from './clock';
 import { forgetEntity, sfxAt } from '../feel/director';
 import type { Debug } from '../ui/debug';
 import { buildSkillBar, renderPetHud, renderSelf, setConn, showToast } from '../ui/hud';
@@ -29,10 +30,11 @@ export interface SyncDeps {
 
 // handleFrame 处理一个 WebSocket 帧：先用帧里的服务端时间校准时钟，再按顺序处理每条消息。
 export function handleFrame(frame: ServerFrame, deps: SyncDeps): void {
-  const now = performance.now();
+  const now = gameNow();
   // 偏移里含这一帧的网络延迟：取最小的那个（延迟最小的帧最接近真实偏移），每帧允许回升 1ms 以跟上时钟漂移，
   // 这样倒计时不会随网络抖动跳来跳去
-  const sample = now - frame.time * 1000;
+  // 用真实时间校准（演出时钟慢放时会落后，混进偏移里要好几秒才回得来），换算时再减去落后的部分（localTime）
+  const sample = performance.now() - frame.time * 1000;
   // 差了 2 秒以上说明服务端时钟重新开始了（服务器重启），直接重新取
   const restarted = sample - state.clockOffset > 2000;
   state.clockOffset = state.clockSynced && !restarted ? Math.min(sample, state.clockOffset + 1) : sample;

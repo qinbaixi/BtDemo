@@ -8,6 +8,8 @@
 //   audio/    音效：引擎（总线、声像、并发限制）和程序化合成配方
 //   input.ts  键盘鼠标
 
+import { updateAmbience } from './audio/ambience';
+import { gameNow, tickClock } from './game/clock';
 import './styles/style.css';
 import './styles/debug.css';
 import './styles/debug-proto.css';
@@ -27,6 +29,7 @@ import {
   initHud, renderBuffTimes, renderDeath, renderSkillBar, renderTarget, setConn, showToast,
 } from './ui/hud';
 import { initBag } from './ui/bag';
+import { initSettingsPanel } from './ui/settings';
 import { initPicker } from './ui/picker';
 import { initLines } from './ui/lines';
 
@@ -65,20 +68,31 @@ function faceInput(now: number): void {
 
 function frame(): void {
   requestAnimationFrame(frame);
-  const now = performance.now();
+  tickClock();
+  const now = gameNow();
   const dt = state.lastFrame ? now - state.lastFrame : 16;
   state.lastFrame = now;
-  watchFrameRate(dt);
+  watchFrameRate(realFrameMs());
   runPending(now);
   faceInput(now);
   debug.setTarget(state.target);
   debug.update(now);
   updateCamera(now, dt);
   drawWorld(now, dt, debug.open);
+  updateAmbience(now, dt);
   renderTarget();
   renderSkillBar(now);
   renderDeath(now);
   renderBuffTimes(now);
+}
+
+// realFrameMs 是这一帧的真实时长（帧率监测要真实时间：慢放、暂停时演出时钟的 dt 不准）。
+let lastRealFrame = 0;
+function realFrameMs(): number {
+  const real = performance.now();
+  const ms = lastRealFrame ? real - lastRealFrame : 16;
+  lastRealFrame = real;
+  return ms;
 }
 
 // watchFrameRate 在约 3 秒低于约 30fps 后降一档画质（高 → 中 → 低），降完给 5 秒再评判。
@@ -118,6 +132,7 @@ async function init(): Promise<void> {
   initHud(castSlot);
   initPicker(conn.send);
   initBag(conn.send);
+  initSettingsPanel();
   initLines(conn.send);
   await loadArt();   // 美术资源要在建场景、建角色之前就绪
   await initWorld(canvas, document.getElementById('overlay') as HTMLCanvasElement);

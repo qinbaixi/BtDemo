@@ -1,5 +1,6 @@
 // 把服务端事件（施法、伤害、死亡……）变成动画、特效和飘字。
 
+import { gameNow } from './clock';
 import type { GameEvent, SkillInfo } from '../net/types';
 import { buildHit, isMine, onCast, onDeath, playHit, sfxAt } from '../feel/director';
 import { forgetBlock } from '../input';
@@ -95,7 +96,7 @@ export function onEvent(ev: GameEvent, now: number): void {
       const proc = PROC_DAMAGE[ev.proc || ''];
       const color = proc ? proc.color : land ? land.color : '#ffd166';
       const hit = () => {
-        const t = performance.now();
+        const t = gameNow();
         const e = state.ents.get(ev.dst);
         const v = ev.v || 0;
         let side = Math.random() < 0.5 ? -1 : 1;
@@ -168,12 +169,12 @@ export function onEvent(ev: GameEvent, now: number): void {
       const proc = PROC_HEAL[ev.proc || ''];
       const show = proc
         ? () => {
-          const t = performance.now();
+          const t = gameNow();
           fx.procHeal(ev.dst, ev.proc!, t);
           sfxAt('heal.tick', ev.dst, t, true);
           addFloat(t, ev.dst, `${proc.label} +${ev.v}`, proc.color, 14, 900, { rise: 30 });
         }
-        : () => addFloat(performance.now(), ev.dst, `+${ev.v}`, '#7cff9b', 18, 1000);
+        : () => addFloat(gameNow(), ev.dst, `+${ev.v}`, '#7cff9b', 18, 1000);
       if (land && land.at > now) state.pending.push({ at: land.at, fn: show });
       else show();
       break;
@@ -210,8 +211,8 @@ export function onEvent(ev: GameEvent, now: number): void {
         state.pending.push({
           at: now + flight,
           fn: () => {
-            addFloat(performance.now(), ev.dst, `获得 ${item.name}`, color, mine ? 17 : 13, 1500, { pop: mine, rise: 54 });
-            if (mine) sfxAt(`loot.${item.rarity || 'common'}`, ev.dst, performance.now());
+            addFloat(gameNow(), ev.dst, `获得 ${item.name}`, color, mine ? 17 : 13, 1500, { pop: mine, rise: 54 });
+            if (mine) sfxAt(`loot.${item.rarity || 'common'}`, ev.dst, gameNow());
           },
         });
       }

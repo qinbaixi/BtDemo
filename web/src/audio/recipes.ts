@@ -318,6 +318,45 @@ export const RECIPES: Record<string, Recipe> = {
     return 1.3;
   },
 
+  // —— 环境（ambience.ts 按场景随机播；风声、火堆的底噪是持续的，不在这里）
+  // 小鸟：两三声往上挑的短啾
+  'amb.bird': (k, t, p) => {
+    const notes = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < notes; i++) {
+      const base = (2600 + Math.random() * 900) * p;
+      k.tone(t + i * 0.11, 'sine', base, base * 1.35, 0.06, 0.035, 0.004);
+    }
+    return 0.4;
+  },
+  // 另一种鸟：一串快速的颤音，音高往下走
+  'amb.bird.trill': (k, t, p) => {
+    for (let i = 0; i < 7; i++) {
+      const base = (3600 - i * 120) * p;
+      k.tone(t + i * 0.045, 'sine', base, base * 0.92, 0.03, 0.025, 0.003);
+    }
+    return 0.4;
+  },
+  // 乌鸦：沙哑的两声“嘎”
+  'amb.crow': (k, t, p) => {
+    for (let i = 0; i < 2; i++) {
+      const at = t + i * 0.32;
+      k.noise(at, 0.18, 'bandpass', 1300 * p, 900 * p, 4, 0.05, 0.01, 0.3);
+      k.tone(at, 'sawtooth', 560 * p, 420 * p, 0.18, 0.012, 0.01, 0.3);
+    }
+    return 0.8;
+  },
+  // 远处的丧钟：很轻、尾音很长
+  'amb.bell': (k, t, p) => {
+    k.metal(t, 196 * p, [1, 2.76, 5.4, 8.93], 3, 0.03, 0.9);
+    return 3.2;
+  },
+  // 火堆里木头爆一下
+  'amb.crackle': (k, t, p) => {
+    k.crackle(t, 0.5, 5, 0.06);
+    k.noise(t, 0.05, 'lowpass', 700 * p, 200, 1, 0.05);
+    return 0.6;
+  },
+
   // —— 界面
   'ui.deny': (k, t, p) => {
     k.tone(t, 'square', 180 * p, 150, 0.1, 0.06);

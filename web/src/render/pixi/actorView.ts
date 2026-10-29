@@ -4,6 +4,7 @@
 
 import { Container, Graphics, Sprite, Texture, type RenderLayer } from 'pixi.js';
 import { MODEL_SCALE, modelBox } from '../../game/config';
+import { SETTINGS } from '../../game/settings';
 import { art, type LoadedCharacter } from '../art';
 import { drawModel } from '../models';
 import { CanvasSprite } from './canvasSprite';
@@ -134,7 +135,8 @@ export class ActorView {
       this.drawnRes = res;
     }
 
-    const flash = !dead && pose.hit >= 0 && pose.hit < HIT_FLASH ? 1 - pose.hit / HIT_FLASH : 0;
+    // 设置里关了闪白时不闪（受击还有形变和火花）
+    const flash = SETTINGS.flash && !dead && pose.hit >= 0 && pose.hit < HIT_FLASH ? 1 - pose.hit / HIT_FLASH : 0;
     if (hq) {
       this.ink ??= new InkFilter(this.rim);
       this.ink.set(dead, flash);

@@ -9,6 +9,7 @@
 //                （pixi/spriteCtx.ts），护盾泡泡等有形状的特效画在只覆盖特效范围的小画布上
 //   overlay      另一块 2D 画布：头顶文字、调试线条、暗角（不参与泛光和调色，保持清晰）
 
+import { SETTINGS } from '../game/settings';
 import { Application, Container, Graphics, RenderLayer, type TextureSource } from 'pixi.js';
 import { ATTACK_HOLD, DEATH_MS, FEEL, HIT_MS, LOOK_FROST, LOOK_HOLY, MODEL_SCALE, RIM, ZONE_ASPECT } from '../game/config';
 import { clamp, hypot } from '../game/math';
@@ -491,7 +492,8 @@ function updatePost(now: number, dt: number, mp: Point | null, shake: Point, zoo
   const waves: Distort[] = [];
   if (distort) state.fx.waves((x: number, y: number, radius: number, strength: number) => {
     const p = toScreen(x, y);
-    waves.push({ x: p.x, y: p.y, radius: radius * zoom, strength: strength * FEEL.distort });
+    // 冲击波也算画面晃动：跟着设置里的震屏强度
+    waves.push({ x: p.x, y: p.y, radius: radius * zoom, strength: strength * FEEL.distort * SETTINGS.shake });
   }, now);
   const heat: Distort[] = [];
   if (distort) state.scenery?.heat((x: number, y: number, radius: number, strength: number) => {
