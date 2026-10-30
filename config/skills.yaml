@@ -94,9 +94,9 @@ skills:
   #   rally 集结：给自己和 radius 以内的同类加上 buff
   pack_howl:  { name: 狼嚎,   kind: rally,  radius: 260, cooldown: 14000, fx: buff, color: "#ffb347",
                 buff: { name: 狼嚎, duration: 6000, atk_pct: 2500, speed_pct: 3000, look: haste } }
-  pounce:     { weight: heavy, windup: 800, name: 扑杀, kind: charge, range: 320, distance: 300, self_stun: 2000, cooldown: 6000,
+  pounce:     { weight: heavy, windup: 800, name: 扑杀, kind: charge, range: 320, distance: 300, self_stun: 1500, cooldown: 4500,
                 damage: physical, ratio: 16000, base: 8, knock: 70, fx: pounce, color: "#ff5a3a" }
-  frenzy_pounce: { weight: medium, windup: 450, name: 连扑, kind: charge, range: 300, distance: 240, self_stun: 1200, cooldown: 100,
+  frenzy_pounce: { weight: medium, windup: 380, name: 连扑, kind: charge, range: 300, distance: 240, self_stun: 1200, cooldown: 100,
                 damage: physical, ratio: 11000, base: 5, fx: pounce, color: "#ff2a2a" }
   king_roar:  { name: 狼王号令, kind: rally, radius: 420, cooldown: 18000, fx: buff, color: "#ffd166",
                 buff: { name: 狼王号令, duration: 8000, atk_pct: 2000, speed_pct: 2000 } }

@@ -86,7 +86,7 @@ var WolfKingNodes = map[int]map[string]any{
 		"services":   []int{},
 		"properties": map[string]any{
 			"Template": "pack_wolf",
-			"Count":    2,
+			"Count":    3,
 			"Radius":   220,
 		},
 	},
@@ -261,7 +261,7 @@ var WolfKingNodes = map[int]map[string]any{
 		"sub_type":                "cooldown",
 		"inverse_check_condition": false,
 		"properties": map[string]any{
-			"Seconds": 9,
+			"Seconds": 7,
 		},
 	},
 	// TargetInRange

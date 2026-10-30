@@ -69,7 +69,7 @@
             },
             {
               "name": "Count",
-              "value": 2
+              "value": 3
             },
             {
               "name": "Radius",
@@ -237,7 +237,7 @@
               "properties": [
                 {
                   "name": "Seconds",
-                  "value": 9
+                  "value": 7
                 }
               ]
             },

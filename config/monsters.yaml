@@ -121,15 +121,15 @@ templates:
     kind: monster
     faction: monster
     tree: wolf_king
-    level: 7
-    attrs: { str: 18, agi: 12, int: 2, vit: 34 }
-    speed: 135
+    level: 9
+    attrs: { str: 22, agi: 14, int: 2, vit: 52 }
+    speed: 150
     radius: 26
     color: "#c8c4bc"
     skills: [bite, heavy_bite, pounce, king_roar, frenzy_pounce, bloodlust]
     respawn: 6000
     exp: 400
-    poise: 140
+    poise: 180
     mass: 26000
   hunter:
     name: 猎人老陈
