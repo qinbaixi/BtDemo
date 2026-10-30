@@ -26,7 +26,7 @@ export class GateLayer {
 
   // update 按副本进度画每扇门。gates 换了（换了场景）就全部重建；level 为 null（还没收到进度）时门都当开着。
   update(gates: GateInfo[], level: ClientLevel | null, now: number, res: number): void {
-    const key = gates.map((gate) => gate.id).join(',');
+    const key = gates.map((gate) => `${gate.id}@${gate.x},${gate.y},${gate.w},${gate.h}`).join('|');
     if (key !== this.sceneKey) this.rebuild(gates, key);
     for (const gate of gates) {
       const shut = closedness(gate, level, now);

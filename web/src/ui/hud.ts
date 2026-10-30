@@ -210,7 +210,8 @@ export function renderSelf(): void {
 let lastBuffText = '';
 function renderBuffs(list: { name: string; endsAt: number }[], now: number): void {
   const live = list.filter((b) => b.endsAt > now);
-  const texts = live.map((b) => `${b.name} ${((b.endsAt - now) / 1000).toFixed(1)}s`);
+  // 剩十分钟以上的是副本的关内祝福：不倒数，写“关内”
+  const texts = live.map((b) => (b.endsAt - now > 600_000 ? `${b.name} · 关内` : `${b.name} ${((b.endsAt - now) / 1000).toFixed(1)}s`));
   const key = texts.join('|');
   if (key === lastBuffText) return;
   lastBuffText = key;

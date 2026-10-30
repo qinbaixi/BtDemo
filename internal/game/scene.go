@@ -155,6 +155,7 @@ func newScene(
 	scene.Level = level.New(
 		scene.State,
 		scene.Nav,
+		scene.Move,
 		scene.Spawn,
 		scene.Combat,
 		scene.Items,

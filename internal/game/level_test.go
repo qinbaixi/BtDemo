@@ -221,3 +221,24 @@ func TestSafeRoomOpensShortcutAndLeavingClears(t *testing.T) {
 		t.Fatal("the empty dungeon should close")
 	}
 }
+
+// 一波怪很久没倒下（可能卡在走不到的角落）：活着的、离玩家远的怪被挪到玩家附近。
+func TestStuckMonstersAreMovedToThePlayer(t *testing.T) {
+	manager := shippedManager(t)
+	client, scene := enterDungeon(t, manager)
+	player := client.Player
+	moveTo(scene, player, 460, 1560)
+	pump(manager, 1)
+	monsters := roomMonsters(scene, "r1")
+	for _, monster := range monsters {
+		monster.Speed = 0 // 站着不动，模拟卡住
+		monster.AI = nil
+		moveTo(scene, monster, 200, 1400)
+	}
+	pump(manager, 20*21) // 20 秒多一点
+	for _, monster := range monsters {
+		if core.Dist(monster, player) > 240 {
+			t.Fatalf("stuck monster %d still %.0f away", monster.ID, core.Dist(monster, player))
+		}
+	}
+}

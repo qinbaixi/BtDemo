@@ -15,6 +15,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/combat"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/game/item"
+	"github.com/qinbaixi/BtDemo/internal/game/move"
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
 	"github.com/qinbaixi/BtDemo/internal/game/spawn"
 	"github.com/qinbaixi/BtDemo/internal/pb"
@@ -31,6 +32,10 @@ const (
 	spawnInset = 56
 	// spawnClearance 是怪尽量刷在离玩家多远之外（不贴脸刷）
 	spawnClearance = 160
+	// stuckLimit 是一波怪多少毫秒没有倒下一只就当作卡住了，见 unstick
+	stuckLimit config.Millis = 20000
+	// unstickRange 是卡住的怪离玩家多远以上才挪（近的说明玩家打得到，只是还没打死）
+	unstickRange = 240
 )
 
 // 给玩家的提示。
@@ -43,6 +48,7 @@ const (
 type System struct {
 	state  *core.State
 	nav    *nav.Map
+	move   *move.System
 	spawn  *spawn.System
 	combat *combat.System
 	items  *item.System
@@ -60,6 +66,9 @@ type room struct {
 	monsters []*core.Entity // 这个房间刷出来、还在场景里的怪（含尸体）
 	waveAt   config.Millis  // 下一波的刷怪时刻，0 表示没有在等
 	emptyAt  config.Millis  // 房间里最近一次没有活着的玩家的时刻，0 表示有人
+	// alive 和 progressAt：这一波还活着几只、最近一次有怪倒下的时刻，用来发现卡住的怪（见 unstick）
+	alive      int
+	progressAt config.Millis
 }
 
 // gate 是一扇门：地图上的矩形，关着时是寻路图里第 shape 个障碍物。
@@ -87,6 +96,7 @@ func GateShapes(layout config.Layout) []nav.Shape {
 func New(
 	state *core.State,
 	navMap *nav.Map,
+	moveSys *move.System,
 	spawnSys *spawn.System,
 	combatSys *combat.System,
 	itemSys *item.System,
@@ -96,6 +106,7 @@ func New(
 	sys := &System{
 		state:  state,
 		nav:    navMap,
+		move:   moveSys,
 		spawn:  spawnSys,
 		combat: combatSys,
 		items:  itemSys,
@@ -154,20 +165,18 @@ func (sys *System) Tick(players func(fn func(*core.Entity))) {
 
 // checkpoints 记下走进存档点（带 checkpoint 的回血区）的玩家。
 func (sys *System) checkpoints(alive []*core.Entity) {
-	for _, zone := range sys.state.Zones.List() {
-		if !zone.Cfg.Checkpoint {
-			continue
-		}
-		point := config.Point{X: zone.Cfg.X, Y: zone.Cfg.Y, Spread: zone.Cfg.Radius / 3}
-		for _, player := range alive {
-			if !zone.Cfg.Contains(zone.X, zone.Y, player.X, player.Y) {
+	for _, player := range alive {
+		for _, zone := range sys.state.Zones.List() {
+			if !zone.Cfg.Checkpoint || !zone.Cfg.Contains(zone.X, zone.Y, player.X, player.Y) {
 				continue
 			}
-			if player.Checkpoint != nil && *player.Checkpoint == point {
-				continue
+			// 只认站着的第一个存档点：两个存档点挨在一起时不会来回切换、一直弹提示
+			point := config.Point{X: zone.Cfg.X, Y: zone.Cfg.Y, Spread: zone.Cfg.Radius / 3}
+			if player.Checkpoint == nil || *player.Checkpoint != point {
+				player.Checkpoint = &point
+				player.Notices = append(player.Notices, NoticeCheckpoint+"："+zone.Cfg.Name)
 			}
-			player.Checkpoint = &point
-			player.Notices = append(player.Notices, NoticeCheckpoint+"："+zone.Cfg.Name)
+			break
 		}
 	}
 }
@@ -188,6 +197,7 @@ func (sys *System) enter(current *room) {
 	}
 	current.status.Phase = core.RoomFight
 	current.emptyAt = 0
+	current.progressAt = sys.state.Now()
 	sys.spawnWave(current, 1)
 }
 
@@ -210,16 +220,51 @@ func (sys *System) fight(current *room, alive []*core.Entity, now config.Millis)
 		}
 		return
 	}
+	monstersLeft := 0
 	for _, monster := range current.monsters {
 		if monster.Alive() {
-			return
+			monstersLeft++
 		}
+	}
+	if monstersLeft != current.alive {
+		current.alive, current.progressAt = monstersLeft, now
+	}
+	if monstersLeft > 0 {
+		if now-current.progressAt >= stuckLimit {
+			sys.unstick(current)
+			current.progressAt = now
+		}
+		return
 	}
 	if current.status.Wave < len(current.cfg.Waves) {
 		current.waveAt = now + waveGap
 		return
 	}
 	sys.clear(current)
+}
+
+// unstick 在一波怪很久没有倒下时调用：活着的怪可能卡在玩家走不到的角落（门关着，玩家出不去，
+// 房间就永远清不完），把它们挪到离玩家近一点的地方重新盯上玩家。
+func (sys *System) unstick(current *room) {
+	inside := sys.playersInside(current.area)
+	if len(inside) == 0 {
+		return
+	}
+	for _, monster := range current.monsters {
+		if !monster.Alive() {
+			continue
+		}
+		nearest := nearestOf(monster, inside)
+		if core.Dist(monster, nearest) <= unstickRange {
+			continue
+		}
+		angle := sys.state.Rand.Float64() * 2 * math.Pi
+		x := nearest.X + math.Cos(angle)*unstickRange/2
+		y := nearest.Y + math.Sin(angle)*unstickRange/2
+		sys.move.Place(monster, x, y)
+		monster.Steering = core.Steering{}
+		monster.SetTarget(nearest.ID)
+	}
 }
 
 // spawnWave 刷出房间的第 number 波（从 1 开始），刷出来的怪直接盯上离得最近的玩家。
