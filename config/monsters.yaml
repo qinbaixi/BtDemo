@@ -184,6 +184,7 @@ templates:
     poise: 100000
     mass: 1000000
     heavy_only: true
+    light_hits: 3 # 普通攻击 3 下也能打散，重击、范围技能一下就碎
     revive: skeleton_soldier
   # 精英骷髅骑士：大一号的骷髅兵，架势很厚，打空了硬直 2 秒（墓穴守卫房和野外墓园营地）
   skeleton_knight:

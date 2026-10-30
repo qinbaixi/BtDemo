@@ -552,6 +552,13 @@ func (sys *System) damage(
 		// 按下数算的东西（灵火盆）：每下打掉 1/Hits 的血，不看攻击力
 		dmg = (dst.Attr.MaxHP + dst.Tmpl.Hits - 1) / dst.Tmpl.Hits
 	}
+	if dst.Tmpl != nil && dst.Tmpl.HeavyOnly && dst.Tmpl.LightHits > 0 {
+		// 普通攻击也打得散的骨堆：重击、范围技能一下就碎，普通攻击每下打掉 1/LightHits 的血
+		dmg = (dst.Attr.MaxHP + dst.Tmpl.LightHits - 1) / dst.Tmpl.LightHits
+		if skill := sys.state.Cfg.Skills[skillID]; skill != nil && skill.Smashes() {
+			dmg = dst.HP
+		}
+	}
 	if dst.Blocking && sys.ShieldCovers(dst, src) {
 		result.outcome = sys.guard(dst, sys.state.Cfg.Skills[skillID], proc)
 		if result.outcome == pb.HitResult_PARRY {
@@ -581,14 +588,20 @@ func (sys *System) damage(
 	return result
 }
 
-// shrugsOff 报告 dst 是不是只怕重击（骨堆）而这一下不够重：不是重击、不是范围技能、或者是装备特效打的。
-// 这样的一下按免疫处理，客户端在骨堆身上飘「要重击」。
+// shrugsOff 报告 dst 是不是只怕重击（骨堆、裂墙）而这一下打不动：装备特效打的，
+// 或者不是重击、不是范围技能、模板又没配 light_hits。这样的一下按免疫处理，客户端飘「要重击」。
 func (sys *System) shrugsOff(dst *core.Entity, skillID string, proc string) bool {
 	if dst.Tmpl == nil || !dst.Tmpl.HeavyOnly {
 		return false
 	}
+	if proc != "" {
+		return true
+	}
 	skill := sys.state.Cfg.Skills[skillID]
-	return proc != "" || skill == nil || !skill.Smashes()
+	if skill == nil {
+		return true
+	}
+	return !skill.Smashes() && dst.Tmpl.LightHits == 0
 }
 
 // absorb 用 entity 身上的护盾吸收至多 dmg 点伤害，返回吸收了多少；吸收完的护盾 Buff 被移除。

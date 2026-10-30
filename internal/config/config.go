@@ -256,6 +256,9 @@ type Template struct {
 	Revive string `yaml:"revive"`
 	// HeavyOnly：只有重击（weight: heavy）和范围技能（aoe、rain）打得动，别的打上去是免疫（骨堆）。
 	HeavyOnly bool `yaml:"heavy_only"`
+	// LightHits 让 heavy_only 的东西也能被普通攻击慢慢打散（0 = 普通攻击完全打不动）：
+	// 普通攻击每下打掉 1/LightHits 的血，重击和范围技能一下就碎。骨堆用，免得没有范围技能的配招卡在房间里。
+	LightHits int `yaml:"light_hits"`
 	// Guard 是怪物举盾时的架势上限（0 = 和玩家一样，world.yaml 的 player.block.guard）；
 	// BreakStun 是架势被打空后的硬直毫秒数（0 = 和玩家一样）。精英骷髅骑士用。
 	Guard     int    `yaml:"guard"`
@@ -556,8 +559,8 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 				return fmt.Errorf("monsters.yaml: template %s: %s %q is not a template", id, field, other)
 			}
 		}
-		if template.Guard < 0 || template.BreakStun < 0 || template.Hits < 0 {
-			return fmt.Errorf("monsters.yaml: template %s: guard, break_stun and hits must be >= 0", id)
+		if template.Guard < 0 || template.BreakStun < 0 || template.Hits < 0 || template.LightHits < 0 {
+			return fmt.Errorf("monsters.yaml: template %s: guard, break_stun, hits and light_hits must be >= 0", id)
 		}
 		if _, ok := world.Hostile[template.Faction]; !ok {
 			return fmt.Errorf(

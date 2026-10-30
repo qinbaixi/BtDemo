@@ -45,7 +45,7 @@ func strikeNow(t *testing.T, scene *Scene, src *core.Entity, skill *config.Skill
 	landWindup(scene, src)
 }
 
-// 骷髅兵在副本房间里倒下变成骨堆；骨堆不怕轻击，6 秒后重新站起来。
+// 骷髅兵在副本房间里倒下变成骨堆；轻击每下打掉三分之一，没打散的 6 秒后重新站起来。
 func TestSoldierBecomesAPileThatRisesAgain(t *testing.T) {
 	client, scene, soldier := bossArena(t, "skeleton_soldier", 1200, 700)
 	player := client.Player
@@ -60,11 +60,12 @@ func TestSoldierBecomesAPileThatRisesAgain(t *testing.T) {
 	moveTo(scene, player, pile.X-40, pile.Y)
 	scene.State.Events.Clear()
 	strikeNow(t, scene, player, scene.State.Cfg.Skills["slash"], pile.ID)
-	if pile.HP < pile.Attr.MaxHP {
-		t.Fatal("a light hit should not hurt the pile")
+	if !pile.Alive() || pile.HP != pile.Attr.MaxHP-(pile.Attr.MaxHP+2)/3 {
+		t.Fatalf("a light hit should knock off a third of the pile, hp %d/%d", pile.HP, pile.Attr.MaxHP)
 	}
-	if event := damageOn(scene, pile); event == nil || event.GetResult() != pb.HitResult_IMMUNE {
-		t.Fatalf("the pile should shrug off the slash, event %v", event)
+	strikeNow(t, scene, player, scene.State.Cfg.Skills["slash"], pile.ID)
+	if !pile.Alive() {
+		t.Fatal("two light hits should not break the pile yet")
 	}
 	moveTo(scene, player, 400, 3300) // 走远一点，别让站起来的骷髅兵马上打起来
 	stepScene(scene, 6000/50+10)
@@ -76,7 +77,7 @@ func TestSoldierBecomesAPileThatRisesAgain(t *testing.T) {
 	}
 }
 
-// 重击或范围技能能砸碎骨堆，砸碎了就不会再站起来；房间要等骨堆砸碎才算清完。
+// 重击或范围技能一下就砸碎满血的骨堆，砸碎了就不会再站起来；房间要等骨堆砸碎才算清完。
 func TestSmashingThePileClearsTheRoom(t *testing.T) {
 	client, scene, soldier := bossArena(t, "skeleton_soldier", 1200, 700)
 	player := client.Player
@@ -98,7 +99,6 @@ func TestSmashingThePileClearsTheRoom(t *testing.T) {
 		t.Fatal("no pile")
 	}
 	pile.AI = nil // 别让它在测试里站起来
-	pile.HP = 1
 	moveTo(scene, player, pile.X-40, pile.Y)
 	strikeNow(t, scene, player, scene.State.Cfg.Skills["whirlwind"], 0)
 	if pile.Alive() {
@@ -110,6 +110,20 @@ func TestSmashingThePileClearsTheRoom(t *testing.T) {
 	}
 	if status.Phase != core.RoomClear {
 		t.Fatalf("smashing the last pile should clear the room, phase %v", status.Phase)
+	}
+}
+
+// 没有范围技能也能清房：普通攻击打三下骨堆就散了。
+func TestLightHitsBreakThePile(t *testing.T) {
+	client, scene, pile := bossArena(t, "bone_pile", 1200, 700)
+	player := client.Player
+	pile.AI = nil
+	moveTo(scene, player, pile.X-40, pile.Y)
+	for range 3 {
+		strikeNow(t, scene, player, scene.State.Cfg.Skills["slash"], pile.ID)
+	}
+	if pile.Alive() {
+		t.Fatalf("three light hits should break the pile, hp %d", pile.HP)
 	}
 }
 
