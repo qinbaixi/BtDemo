@@ -139,7 +139,7 @@ export interface GameEvent {
   absorbed?: number; // dmg：被护盾吸收的部分（不含在 v 里）
   blocked?: number;  // dmg：被格挡挡掉的部分（不含在 v 里）
   immune?: boolean;  // dmg：目标无敌，没受伤
-  tx?: number;       // cast（闪现、飞斧）：终点；起点是 x、y
+  tx?: number;       // cast（闪现、飞斧）：终点；起点是 x、y。dmg（cover）：箭停下的地方
   ty?: number;
   zone?: number;     // heal：站在这个回血区里回的血（Zone.id）
   item?: string;     // loot：掉落的 ItemInfo.id（src = 死掉的怪，dst = 拿到的玩家）
@@ -152,7 +152,7 @@ export interface GameEvent {
   wall?: boolean;    // dmg：被打到撞墙
   hitAt?: number;    // cast：有前摇时命中的服务端时间（秒）
   // dmg：怎么挨的这一下，没有就是正常命中。parry（完美格挡）时 kx / ky / knockTime / stun 说的是被弹开的攻击者（src）
-  result?: 'hit' | 'block' | 'parry' | 'guard_break' | 'immune';
+  result?: 'hit' | 'block' | 'parry' | 'guard_break' | 'immune' | 'cover';   // cover：远程打在了掩体上，tx、ty 是停下的地方
 }
 
 // ZoneInfo 是地上的一块回血区：出生点的常驻泉水，或技能放下的法阵。

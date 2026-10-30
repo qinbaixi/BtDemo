@@ -6,7 +6,12 @@
     {
       "type": "UpdateTarget",
       "label": "刷新仇恨",
-      "properties": [{ "name": "Range", "value": 300 }],
+      "properties": [
+        {
+          "name": "Range",
+          "value": 300
+        }
+      ],
       "timeBetweenTicks": 0.5
     }
   ],
@@ -14,41 +19,149 @@
     {
       "type": "Sequence",
       "label": "脱战回家",
-      "decorators": [{ "type": "FarFromHome", "properties": [{ "name": "Distance", "value": 500 }] }],
+      "decorators": [
+        {
+          "type": "FarFromHome",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 500
+            }
+          ]
+        }
+      ],
       "childNodes": [
-        { "type": "ClearTarget" },
-        { "type": "ReturnHome" }
+        {
+          "type": "ClearTarget"
+        },
+        {
+          "type": "ReturnHome"
+        }
       ]
     },
     {
       "type": "Selector",
       "label": "战斗",
-      "decorators": [{ "type": "HasTarget" }],
+      "decorators": [
+        {
+          "type": "HasTarget"
+        }
+      ],
       "childNodes": [
         {
           "type": "Flee",
           "label": "拉开距离",
-          "properties": [{ "name": "Distance", "value": 140 }],
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 140
+            }
+          ],
           "decorators": [
-            { "type": "TargetInRange", "properties": [{ "name": "Range", "value": 90 }] },
-            { "type": "Cooldown", "properties": [{ "name": "Seconds", "value": 4 }] }
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 90
+                }
+              ]
+            },
+            {
+              "type": "Cooldown",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 4
+                }
+              ]
+            }
           ]
         },
         {
           "type": "CastSkill",
           "label": "射击",
-          "properties": [{ "name": "Slot", "value": 1 }],
-          "decorators": [{ "type": "TargetInRange", "properties": [{ "name": "Range", "value": 240 }] }]
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 1
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 240
+                }
+              ]
+            },
+            {
+              "type": "HasSight"
+            }
+          ]
         },
-        { "type": "ChaseTarget", "label": "靠近", "properties": [{ "name": "StopRange", "value": 200 }] }
+        {
+          "type": "FindShotSpot",
+          "label": "找射击位",
+          "comment": "墓碑、墙挡住视线时横着挪，找看得见的位置再射",
+          "properties": [
+            {
+              "name": "Range",
+              "value": 240
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 320
+                }
+              ]
+            },
+            {
+              "type": "HasSight",
+              "inverseCheckCondition": true
+            }
+          ]
+        },
+        {
+          "type": "ChaseTarget",
+          "label": "靠近",
+          "properties": [
+            {
+              "name": "StopRange",
+              "value": 200
+            }
+          ]
+        }
       ]
     },
     {
       "type": "Sequence",
       "label": "闲逛",
       "childNodes": [
-        { "type": "Wander", "properties": [{ "name": "Radius", "value": 80 }] },
-        { "type": "Wait", "properties": [{ "name": "Seconds", "value": 3 }] }
+        {
+          "type": "Wander",
+          "properties": [
+            {
+              "name": "Radius",
+              "value": 80
+            }
+          ]
+        },
+        {
+          "type": "Wait",
+          "properties": [
+            {
+              "name": "Seconds",
+              "value": 3
+            }
+          ]
+        }
       ]
     }
   ]

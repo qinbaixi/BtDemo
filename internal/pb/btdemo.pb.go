@@ -305,6 +305,7 @@ const (
 	HitResult_PARRY       HitResult = 2 // perfect block: no damage; kx/ky/knock_time/stun apply to the attacker (src), not dst
 	HitResult_GUARD_BREAK HitResult = 3 // blocked, but the guard meter ran out: the shield drops, dst is knocked back and staggered
 	HitResult_IMMUNE      HitResult = 4 // the target was invulnerable
+	HitResult_COVER       HitResult = 5 // a ranged shot hit cover (a tombstone, a wall) on the way: no damage; tx/ty is where it stopped
 )
 
 // Enum value maps for HitResult.
@@ -315,6 +316,7 @@ var (
 		2: "PARRY",
 		3: "GUARD_BREAK",
 		4: "IMMUNE",
+		5: "COVER",
 	}
 	HitResult_value = map[string]int32{
 		"HIT":         0,
@@ -322,6 +324,7 @@ var (
 		"PARRY":       2,
 		"GUARD_BREAK": 3,
 		"IMMUNE":      4,
+		"COVER":       5,
 	}
 )
 
@@ -3725,7 +3728,7 @@ type Event struct {
 	Absorbed      *int32                 `protobuf:"varint,17,opt,name=absorbed" json:"absorbed,omitempty"` // DAMAGE: taken by a shield (not included in value)
 	Blocked       *int32                 `protobuf:"varint,18,opt,name=blocked" json:"blocked,omitempty"`   // DAMAGE: stopped by blocking (not included in value)
 	Immune        *bool                  `protobuf:"varint,19,opt,name=immune" json:"immune,omitempty"`     // DAMAGE: the target was invulnerable (value is 0)
-	Tx            *int32                 `protobuf:"varint,20,opt,name=tx" json:"tx,omitempty"`             // CAST of a dash or line skill: where it ended (x, y is where it started)
+	Tx            *int32                 `protobuf:"varint,20,opt,name=tx" json:"tx,omitempty"`             // CAST of a dash or line skill: where it ended (x, y is where it started); DAMAGE with result COVER: where the shot stopped
 	Ty            *int32                 `protobuf:"varint,21,opt,name=ty" json:"ty,omitempty"`
 	Zone          *int32                 `protobuf:"varint,22,opt,name=zone" json:"zone,omitempty"`    // HEAL: from standing in this zone (Zone.id)
 	Item          *string                `protobuf:"bytes,23,opt,name=item" json:"item,omitempty"`     // LOOT: ItemInfo.id that dropped (src = the slain monster, dst = who got it)
@@ -5579,14 +5582,15 @@ const file_btdemo_proto_rawDesc = "" +
 	"\bLEVEL_UP\x10\b\x12\b\n" +
 	"\x04LOOT\x10\t\x12\r\n" +
 	"\tINTERRUPT\x10\n" +
-	"*G\n" +
+	"*R\n" +
 	"\tHitResult\x12\a\n" +
 	"\x03HIT\x10\x00\x12\t\n" +
 	"\x05BLOCK\x10\x01\x12\t\n" +
 	"\x05PARRY\x10\x02\x12\x0f\n" +
 	"\vGUARD_BREAK\x10\x03\x12\n" +
 	"\n" +
-	"\x06IMMUNE\x10\x04*1\n" +
+	"\x06IMMUNE\x10\x04\x12\t\n" +
+	"\x05COVER\x10\x05*1\n" +
 	"\bAiStatus\x12\v\n" +
 	"\aFAILURE\x10\x00\x12\v\n" +
 	"\aSUCCESS\x10\x01\x12\v\n" +

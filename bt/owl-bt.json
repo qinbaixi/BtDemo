@@ -247,6 +247,20 @@
           "default": 2
         }
       ]
+    },
+    {
+      "name": "FindShotSpot",
+      "icon": "crosshairs",
+      "color": "#7aa6c9",
+      "description": "找射击位：看不见目标时横着挪，找一个看得见、又在 {{Range}} 射程内的位置",
+      "properties": [
+        {
+          "name": "Range",
+          "type": "number",
+          "min": 0,
+          "default": 240
+        }
+      ]
     }
   ],
   "decorators": [
@@ -392,6 +406,12 @@
           "default": 2
         }
       ]
+    },
+    {
+      "name": "HasSight",
+      "icon": "eye",
+      "description": "看得见目标（中间没有墓碑、墙挡着）",
+      "properties": []
     }
   ],
   "services": [

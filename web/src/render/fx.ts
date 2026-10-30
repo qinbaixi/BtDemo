@@ -835,6 +835,29 @@ export class FX {
     ctx.restore();
   }
 
+  // blockShot 让 srcId 射向 dstId、还在飞（或还没出手）的箭和法球改飞到 (x, y) 停下：路上被墓碑、墙挡住了。
+  blockShot(srcId: number, dstId: number, x: number, y: number) {
+    for (const f of [...this.effects, ...this.scheduled]) {
+      if ((f.kind === 'arrow' || f.kind === 'orb') && f.src === srcId && f.dst === dstId) {
+        f.dst = 0;
+        f.dx = x;
+        f.dy = y;
+        f.dr = 14;
+      }
+    }
+  }
+
+  // coverHit 是箭打在掩体上：迸一小团石屑和火星（(x, y) 是挡住的地方，脚底高度）。
+  coverHit(x: number, y: number, now: number) {
+    for (let i = 0; i < 12; i++) {
+      const a = rand(-Math.PI, 0);
+      const sp = rand(0.04, 0.16);
+      this.spawn({ x: x + rand(-3, 3), y: y - 14 + rand(-3, 3), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 0.95,
+        life: rand(240, 420), size: rand(1.4, 2.8), color: i % 3 ? '#b8b0a0' : '#fff2cc', kind: 'spark', born: now });
+    }
+    this.effects.push({ kind: 'ring', x, y, radius: 18, life: 240, born: now, color: '#d8d0c0', rgb: rgbOf('#d8d0c0') });
+  }
+
   // cancel 收掉 id 还没落下的出招：预警圈、等着出手时才放的刀光（前摇被打断时）。
   cancel(id: number) {
     this.effects = this.effects.filter((f) => !((f.kind === 'warn' || f.kind === 'band') && f.src === id));

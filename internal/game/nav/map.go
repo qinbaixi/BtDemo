@@ -137,6 +137,14 @@ func (navMap *Map) Clear(from, to Vec, radius float64) bool {
 	return true
 }
 
+// sightRadius 是视线检查用的半径：箭、火球这么粗，擦着墓碑边过去不算挡住。
+const sightRadius = 3
+
+// Sight 报告从 from 能不能看见 to：两点之间的直线没被障碍物（墙、墓碑、树、关着的门）挡住。
+func (navMap *Map) Sight(from, to Vec) bool {
+	return navMap.Clear(from, to, sightRadius)
+}
+
 // Reach 返回半径为 radius 的圆从 from 沿方向 dir（单位向量）直线前进、最远 maxDist 时
 // 能到达的最远位置：碰到障碍物或地图边缘就停在前面。用于闪现和投掷物。
 func (navMap *Map) Reach(from, dir Vec, maxDist, radius float64) Vec {

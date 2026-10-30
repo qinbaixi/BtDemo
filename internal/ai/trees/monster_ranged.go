@@ -14,7 +14,7 @@ var MonsterRangedNodes = map[int]map[string]any{
 		"sub_type":   "selector",
 		"decorators": []int{},
 		"services":   []int{2},
-		"children":   []int{4, 8, 15},
+		"children":   []int{4, 8, 19},
 	},
 	// UpdateTarget - 刷新仇恨
 	2: {
@@ -78,7 +78,7 @@ var MonsterRangedNodes = map[int]map[string]any{
 		"sub_type":   "selector",
 		"decorators": []int{7},
 		"services":   []int{},
-		"children":   []int{11, 13, 14},
+		"children":   []int{11, 14, 17, 18},
 	},
 	// TargetInRange
 	9: {
@@ -121,20 +121,57 @@ var MonsterRangedNodes = map[int]map[string]any{
 			"Range": 240,
 		},
 	},
-	// CastSkill - 射击
+	// HasSight
 	13: {
-		"node_id":    13,
+		"node_id":                 13,
+		"type":                    "decorator",
+		"sub_type":                "has_sight",
+		"inverse_check_condition": false,
+		"properties":              map[string]any{},
+	},
+	// CastSkill - 射击
+	14: {
+		"node_id":    14,
 		"type":       "task",
 		"sub_type":   "cast_skill",
-		"decorators": []int{12},
+		"decorators": []int{12, 13},
 		"services":   []int{},
 		"properties": map[string]any{
 			"Slot": 1,
 		},
 	},
+	// TargetInRange
+	15: {
+		"node_id":                 15,
+		"type":                    "decorator",
+		"sub_type":                "target_in_range",
+		"inverse_check_condition": false,
+		"properties": map[string]any{
+			"Range": 320,
+		},
+	},
+	// HasSight
+	16: {
+		"node_id":                 16,
+		"type":                    "decorator",
+		"sub_type":                "has_sight",
+		"inverse_check_condition": true,
+		"properties":              map[string]any{},
+	},
+	// FindShotSpot - 找射击位
+	17: {
+		"node_id":    17,
+		"type":       "task",
+		"sub_type":   "find_shot_spot",
+		"decorators": []int{15, 16},
+		"services":   []int{},
+		"properties": map[string]any{
+			"Range": 240,
+		},
+	},
 	// ChaseTarget - 靠近
-	14: {
-		"node_id":    14,
+	18: {
+		"node_id":    18,
 		"type":       "task",
 		"sub_type":   "chase_target",
 		"decorators": []int{},
@@ -144,17 +181,17 @@ var MonsterRangedNodes = map[int]map[string]any{
 		},
 	},
 	// Sequence - 闲逛
-	15: {
-		"node_id":    15,
+	19: {
+		"node_id":    19,
 		"type":       "composite",
 		"sub_type":   "sequence",
 		"decorators": []int{},
 		"services":   []int{},
-		"children":   []int{16, 17},
+		"children":   []int{20, 21},
 	},
 	// Wander
-	16: {
-		"node_id":    16,
+	20: {
+		"node_id":    20,
 		"type":       "task",
 		"sub_type":   "wander",
 		"decorators": []int{},
@@ -164,8 +201,8 @@ var MonsterRangedNodes = map[int]map[string]any{
 		},
 	},
 	// Wait
-	17: {
-		"node_id":    17,
+	21: {
+		"node_id":    21,
 		"type":       "task",
 		"sub_type":   "wait",
 		"decorators": []int{},

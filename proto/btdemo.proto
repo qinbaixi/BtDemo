@@ -455,7 +455,7 @@ message Event {
   optional int32 absorbed = 17; // DAMAGE: taken by a shield (not included in value)
   optional int32 blocked = 18;  // DAMAGE: stopped by blocking (not included in value)
   optional bool immune = 19;    // DAMAGE: the target was invulnerable (value is 0)
-  optional int32 tx = 20;       // CAST of a dash or line skill: where it ended (x, y is where it started)
+  optional int32 tx = 20;       // CAST of a dash or line skill: where it ended (x, y is where it started); DAMAGE with result COVER: where the shot stopped
   optional int32 ty = 21;
   optional int32 zone = 22;     // HEAL: from standing in this zone (Zone.id)
   optional string item = 23;    // LOOT: ItemInfo.id that dropped (src = the slain monster, dst = who got it)
@@ -477,6 +477,7 @@ enum HitResult {
   PARRY = 2;        // perfect block: no damage; kx/ky/knock_time/stun apply to the attacker (src), not dst
   GUARD_BREAK = 3;  // blocked, but the guard meter ran out: the shield drops, dst is knocked back and staggered
   IMMUNE = 4;       // the target was invulnerable
+  COVER = 5;        // a ranged shot hit cover (a tombstone, a wall) on the way: no damage; tx/ty is where it stopped
 }
 
 message Attrs {

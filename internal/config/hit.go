@@ -46,6 +46,13 @@ func (skill *Skill) Ranged() bool {
 	return false
 }
 
+// NeedsSight 报告技能是不是要看得见目标才能放：单体的远程技能（射箭、火球）。
+// 出手时看不见放不出来；飞行中目标躲到墓碑、墙后面，打在挡住的东西上。
+// 直线投掷和箭雨不用：它们本来就沿直线飞、碰到墙就停。
+func (skill *Skill) NeedsSight() bool {
+	return skill.Kind == "target" && skill.Ranged()
+}
+
 // Hit 返回技能命中的效果：weight 档位的默认值，被技能自己的 knock / stun / poise 覆盖。
 func (rules *HitRules) Hit(skill *Skill) HitWeight {
 	hit := rules.Weights[skill.Weight]

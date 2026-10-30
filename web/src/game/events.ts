@@ -96,6 +96,16 @@ export function onEvent(ev: GameEvent, now: number): void {
     }
     case 'dmg': {
       if (!ev.dst) break;
+      if (ev.result === 'cover') {
+        // 箭飞到半路，目标躲到了掩体后面：箭改飞到挡住的地方停下，落地时迸石屑
+        const land = state.lands.get(ev.src || 0);
+        const at = land && land.at > now ? land.at : now;
+        fx.blockShot(ev.src || 0, ev.dst, ev.tx ?? 0, ev.ty ?? 0);
+        const chip = () => fx.coverHit(ev.tx ?? 0, ev.ty ?? 0, gameNow());
+        if (at > now) state.pending.push({ at, fn: chip });
+        else chip();
+        break;
+      }
       // 荆棘反伤：等攻击者那一下打到身上再弹回去（攻击者的出手时刻记在 lands 里）
       const land = state.lands.get(ev.proc === 'thorns' ? ev.dst : ev.src);
       const at = land && land.at > now ? land.at : now;

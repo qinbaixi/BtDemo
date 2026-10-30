@@ -67,6 +67,10 @@ func (sys *System) strike(entity *core.Entity, skill *config.Skill, targetID int
 		if core.EdgeDist(entity, target) > float64(reach) {
 			return // 打空了
 		}
+		if skill.NeedsSight() && !sys.HasSight(entity, target) {
+			sys.hitCover(entity, target, skill) // 飞到半路，目标躲到了掩体后面
+			return
+		}
 		dmg, crit := sys.CalcDamage(entity, target, skill)
 		sys.applyDamage(entity, target, dmg, crit, skill)
 	case "aoe":

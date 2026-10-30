@@ -72,7 +72,9 @@ export function buildHit(ev: GameEvent): HitContext | null {
   let weapon = feel.weapon;
   // 武器着火时，刀剑和钝器打出来是火焰声
   if (src && src.looks & LOOK_FIRE && (weapon === 'blade' || weapon === 'blunt') && !ev.proc) weapon = 'fire';
-  const result: HitResult = ev.result ?? (ev.immune ? 'immune' : ev.blocked ? 'block' : 'hit');
+  // cover（打在掩体上）在 game/events.ts 里单独处理，不走这里
+  const given = ev.result === 'cover' ? undefined : ev.result;
+  const result: HitResult = given ?? (ev.immune ? 'immune' : ev.blocked ? 'block' : 'hit');
   return {
     srcId,
     src,

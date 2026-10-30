@@ -8,7 +8,7 @@ var All = map[string]Exported{
 	"monster_boss":   {RootID: MonsterBossRootID, Nodes: MonsterBossNodes, Labels: map[int]string{1: "首领", 2: "刷新仇恨", 4: "脱战回家", 9: "战斗", 12: "狂暴", 13: "狂暴", 16: "旋风斩", 18: "普攻", 19: "追击", 20: "待机"}},
 	"monster_melee":  {RootID: MonsterMeleeRootID, Nodes: MonsterMeleeNodes, Labels: map[int]string{1: "近战怪物", 2: "刷新仇恨", 4: "脱战回家", 9: "战斗", 11: "重击", 13: "普攻", 14: "追击", 15: "闲逛"}},
 	"monster_pack":   {RootID: MonsterPackRootID, Nodes: MonsterPackNodes, Labels: map[int]string{1: "狼群", 2: "刷新仇恨", 4: "脱战回家", 8: "战斗", 10: "猛扑", 12: "撕咬", 14: "包抄", 15: "扑上去", 16: "闲逛"}},
-	"monster_ranged": {RootID: MonsterRangedRootID, Nodes: MonsterRangedNodes, Labels: map[int]string{1: "远程怪物", 2: "刷新仇恨", 4: "脱战回家", 8: "战斗", 11: "拉开距离", 13: "射击", 14: "靠近", 15: "闲逛"}},
+	"monster_ranged": {RootID: MonsterRangedRootID, Nodes: MonsterRangedNodes, Labels: map[int]string{1: "远程怪物", 2: "刷新仇恨", 4: "脱战回家", 8: "战斗", 11: "拉开距离", 14: "射击", 17: "找射击位", 18: "靠近", 19: "闲逛"}},
 	"npc_guard":      {RootID: NpcGuardRootID, Nodes: NpcGuardNodes, Labels: map[int]string{1: "守卫", 2: "警戒", 4: "自我治疗", 6: "回岗", 10: "战斗", 12: "攻击", 14: "巡逻", 17: "说话冷却中也继续执行后面的节点"}},
 	"npc_villager":   {RootID: NpcVillagerRootID, Nodes: NpcVillagerNodes, Labels: map[int]string{1: "村民", 3: "逃跑", 5: "说话冷却中也继续执行后面的节点", 9: "回家", 11: "日常", 12: "散步", 15: "闲聊", 18: "提醒"}},
 	"pet_caster":     {RootID: PetCasterRootID, Nodes: PetCasterNodes, Labels: map[int]string{1: "火灵", 2: "守护主人", 4: "回到主人身边", 8: "战斗", 10: "爆燃", 11: "远程输出", 13: "技能冷却时也留在战斗分支，不跑回主人身边", 14: "火球", 15: "跟随", 19: "说话冷却中也继续执行后面的节点"}},

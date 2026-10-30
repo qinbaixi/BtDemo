@@ -26,6 +26,7 @@ var (
 	ErrBadSkill = errors.New("未知的技能类型")
 	ErrBlocking = errors.New("格挡中不能出招")
 	ErrNoAim    = errors.New("没有方向")
+	ErrNoSight  = errors.New("看不到目标")
 	ErrNoRoom   = errors.New("前面过不去")
 	ErrStunned  = errors.New("硬直中")
 	ErrBusy     = errors.New("正在出招")
@@ -217,6 +218,9 @@ func (sys *System) CastAimed(
 		}
 		if core.EdgeDist(entity, target) > float64(skill.Range) {
 			return ErrTooFar
+		}
+		if skill.NeedsSight() && !sys.HasSight(entity, target) {
+			return ErrNoSight
 		}
 		event := castEvent(entity, target, skill)
 		sys.state.Events.Emit(entity, event)
