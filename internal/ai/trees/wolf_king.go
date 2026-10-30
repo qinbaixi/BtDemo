@@ -14,7 +14,7 @@ var WolfKingNodes = map[int]map[string]any{
 		"sub_type":   "selector",
 		"decorators": []int{},
 		"services":   []int{2},
-		"children":   []int{5, 12, 17, 39},
+		"children":   []int{5, 12, 17, 40},
 	},
 	// UpdateTarget - 刷新仇恨
 	2: {
@@ -178,7 +178,7 @@ var WolfKingNodes = map[int]map[string]any{
 		"sub_type":   "selector",
 		"decorators": []int{16},
 		"services":   []int{},
-		"children":   []int{20, 26, 33, 35, 37, 38},
+		"children":   []int{21, 27, 34, 36, 38, 39},
 	},
 	// PhaseAtLeast
 	18: {
@@ -190,9 +190,20 @@ var WolfKingNodes = map[int]map[string]any{
 			"Phase": 2,
 		},
 	},
-	// Cooldown
+	// AlliesNear
 	19: {
 		"node_id":                 19,
+		"type":                    "decorator",
+		"sub_type":                "allies_near",
+		"inverse_check_condition": true,
+		"properties": map[string]any{
+			"Range": 400,
+			"Count": 2,
+		},
+	},
+	// Cooldown
+	20: {
+		"node_id":                 20,
 		"type":                    "decorator",
 		"sub_type":                "cooldown",
 		"inverse_check_condition": false,
@@ -200,18 +211,18 @@ var WolfKingNodes = map[int]map[string]any{
 			"Seconds": 20,
 		},
 	},
-	// Sequence - 再叫狼
-	20: {
-		"node_id":    20,
-		"type":       "composite",
-		"sub_type":   "sequence",
-		"decorators": []int{18, 19},
-		"services":   []int{},
-		"children":   []int{21, 22},
-	},
-	// Say
+	// Sequence - 身边狼少了再叫
 	21: {
 		"node_id":    21,
+		"type":       "composite",
+		"sub_type":   "sequence",
+		"decorators": []int{18, 19, 20},
+		"services":   []int{},
+		"children":   []int{22, 23},
+	},
+	// Say
+	22: {
+		"node_id":    22,
 		"type":       "task",
 		"sub_type":   "say",
 		"decorators": []int{},
@@ -221,8 +232,8 @@ var WolfKingNodes = map[int]map[string]any{
 		},
 	},
 	// Summon
-	22: {
-		"node_id":    22,
+	23: {
+		"node_id":    23,
 		"type":       "task",
 		"sub_type":   "summon",
 		"decorators": []int{},
@@ -234,8 +245,8 @@ var WolfKingNodes = map[int]map[string]any{
 		},
 	},
 	// PhaseAtLeast
-	23: {
-		"node_id":                 23,
+	24: {
+		"node_id":                 24,
 		"type":                    "decorator",
 		"sub_type":                "phase_at_least",
 		"inverse_check_condition": false,
@@ -244,8 +255,8 @@ var WolfKingNodes = map[int]map[string]any{
 		},
 	},
 	// Cooldown
-	24: {
-		"node_id":                 24,
+	25: {
+		"node_id":                 25,
 		"type":                    "decorator",
 		"sub_type":                "cooldown",
 		"inverse_check_condition": false,
@@ -254,8 +265,8 @@ var WolfKingNodes = map[int]map[string]any{
 		},
 	},
 	// TargetInRange
-	25: {
-		"node_id":                 25,
+	26: {
+		"node_id":                 26,
 		"type":                    "decorator",
 		"sub_type":                "target_in_range",
 		"inverse_check_condition": false,
@@ -264,29 +275,29 @@ var WolfKingNodes = map[int]map[string]any{
 		},
 	},
 	// Sequence - 连扑
-	26: {
-		"node_id":    26,
-		"type":       "composite",
-		"sub_type":   "sequence",
-		"decorators": []int{23, 24, 25},
-		"services":   []int{},
-		"children":   []int{27, 28, 29, 30, 31},
-	},
-	// CastSkill - 连扑
 	27: {
 		"node_id":    27,
-		"type":       "task",
-		"sub_type":   "cast_skill",
-		"decorators": []int{},
+		"type":       "composite",
+		"sub_type":   "sequence",
+		"decorators": []int{24, 25, 26},
 		"services":   []int{},
-		"properties": map[string]any{
-			"Slot": 5,
-		},
+		"children":   []int{28, 29, 30, 31, 32},
 	},
-	// Wait
+	// CastSkill - 连扑
 	28: {
 		"node_id":    28,
 		"type":       "task",
+		"sub_type":   "cast_skill",
+		"decorators": []int{},
+		"services":   []int{},
+		"properties": map[string]any{
+			"Slot": 5,
+		},
+	},
+	// Wait
+	29: {
+		"node_id":    29,
+		"type":       "task",
 		"sub_type":   "wait",
 		"decorators": []int{},
 		"services":   []int{},
@@ -295,8 +306,8 @@ var WolfKingNodes = map[int]map[string]any{
 		},
 	},
 	// CastSkill - 连扑
-	29: {
-		"node_id":    29,
+	30: {
+		"node_id":    30,
 		"type":       "task",
 		"sub_type":   "cast_skill",
 		"decorators": []int{},
@@ -306,8 +317,8 @@ var WolfKingNodes = map[int]map[string]any{
 		},
 	},
 	// Wait
-	30: {
-		"node_id":    30,
+	31: {
+		"node_id":    31,
 		"type":       "task",
 		"sub_type":   "wait",
 		"decorators": []int{},
@@ -317,8 +328,8 @@ var WolfKingNodes = map[int]map[string]any{
 		},
 	},
 	// CastSkill - 连扑
-	31: {
-		"node_id":    31,
+	32: {
+		"node_id":    32,
 		"type":       "task",
 		"sub_type":   "cast_skill",
 		"decorators": []int{},
@@ -328,8 +339,8 @@ var WolfKingNodes = map[int]map[string]any{
 		},
 	},
 	// TargetInRange
-	32: {
-		"node_id":                 32,
+	33: {
+		"node_id":                 33,
 		"type":                    "decorator",
 		"sub_type":                "target_in_range",
 		"inverse_check_condition": false,
@@ -338,19 +349,19 @@ var WolfKingNodes = map[int]map[string]any{
 		},
 	},
 	// CastSkill - 扑杀
-	33: {
-		"node_id":    33,
+	34: {
+		"node_id":    34,
 		"type":       "task",
 		"sub_type":   "cast_skill",
-		"decorators": []int{32},
+		"decorators": []int{33},
 		"services":   []int{},
 		"properties": map[string]any{
 			"Slot": 3,
 		},
 	},
 	// TargetInRange
-	34: {
-		"node_id":                 34,
+	35: {
+		"node_id":                 35,
 		"type":                    "decorator",
 		"sub_type":                "target_in_range",
 		"inverse_check_condition": false,
@@ -359,19 +370,19 @@ var WolfKingNodes = map[int]map[string]any{
 		},
 	},
 	// CastSkill - 猛扑
-	35: {
-		"node_id":    35,
+	36: {
+		"node_id":    36,
 		"type":       "task",
 		"sub_type":   "cast_skill",
-		"decorators": []int{34},
+		"decorators": []int{35},
 		"services":   []int{},
 		"properties": map[string]any{
 			"Slot": 2,
 		},
 	},
 	// TargetInRange
-	36: {
-		"node_id":                 36,
+	37: {
+		"node_id":                 37,
 		"type":                    "decorator",
 		"sub_type":                "target_in_range",
 		"inverse_check_condition": false,
@@ -380,19 +391,19 @@ var WolfKingNodes = map[int]map[string]any{
 		},
 	},
 	// CastSkill - 撕咬
-	37: {
-		"node_id":    37,
+	38: {
+		"node_id":    38,
 		"type":       "task",
 		"sub_type":   "cast_skill",
-		"decorators": []int{36},
+		"decorators": []int{37},
 		"services":   []int{},
 		"properties": map[string]any{
 			"Slot": 1,
 		},
 	},
 	// ChaseTarget - 追击
-	38: {
-		"node_id":    38,
+	39: {
+		"node_id":    39,
 		"type":       "task",
 		"sub_type":   "chase_target",
 		"decorators": []int{},
@@ -402,8 +413,8 @@ var WolfKingNodes = map[int]map[string]any{
 		},
 	},
 	// Wait - 守着狼穴
-	39: {
-		"node_id":    39,
+	40: {
+		"node_id":    40,
 		"type":       "task",
 		"sub_type":   "wait",
 		"decorators": []int{},

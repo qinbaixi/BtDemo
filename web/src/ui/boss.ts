@@ -22,7 +22,7 @@ let ghostEl: HTMLElement;
 let marksEl: HTMLElement;
 let shownId = 0;
 let ghost = 1;
-let lastHurtAt = 0;
+let holdUntil = 0;   // 残影在这之前不缩
 let lastFrac = 1;
 
 export function initBossBar(): void {
@@ -57,10 +57,11 @@ export function renderBossBar(dt: number): void {
       .map((at) => `<span style="left:${(at * 100).toFixed(1)}%"></span>`)
       .join('');
   }
-  if (frac < lastFrac) lastHurtAt = now;
+  // 残影追上血条以后再挨打才重新计时：一直挨打时残影照样会缩，不会一直挂着
+  if (frac < lastFrac && ghost <= lastFrac + 0.001) holdUntil = now + GHOST_DELAY;
   lastFrac = frac;
   if (frac > ghost) ghost = frac;
-  else if (now - lastHurtAt > GHOST_DELAY) ghost = Math.max(frac, ghost - (GHOST_SPEED * dt) / 1000);
+  else if (now > holdUntil) ghost = Math.max(frac, ghost - (GHOST_SPEED * dt) / 1000);
   fillEl.style.width = `${(frac * 100).toFixed(2)}%`;
   ghostEl.style.width = `${(ghost * 100).toFixed(2)}%`;
   box.classList.toggle('low', frac <= (BOSS_PHASES[boss.model]?.at(-1) ?? 0.25));

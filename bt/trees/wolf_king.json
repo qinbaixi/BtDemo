@@ -155,13 +155,27 @@
       "childNodes": [
         {
           "type": "Sequence",
-          "label": "再叫狼",
+          "label": "身边狼少了再叫",
           "decorators": [
             {
               "type": "PhaseAtLeast",
               "properties": [
                 {
                   "name": "Phase",
+                  "value": 2
+                }
+              ]
+            },
+            {
+              "type": "AlliesNear",
+              "inverseCheckCondition": true,
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 400
+                },
+                {
+                  "name": "Count",
                   "value": 2
                 }
               ]

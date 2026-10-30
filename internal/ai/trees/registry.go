@@ -14,5 +14,5 @@ var All = map[string]Exported{
 	"pet_caster":     {RootID: PetCasterRootID, Nodes: PetCasterNodes, Labels: map[int]string{1: "火灵", 2: "守护主人", 4: "回到主人身边", 8: "战斗", 10: "爆燃", 11: "远程输出", 13: "技能冷却时也留在战斗分支，不跑回主人身边", 14: "火球", 15: "跟随", 19: "说话冷却中也继续执行后面的节点"}},
 	"pet_healer":     {RootID: PetHealerRootID, Nodes: PetHealerNodes, Labels: map[int]string{1: "林精", 2: "守护主人", 4: "治疗主人", 6: "愈合", 8: "回到主人身边", 12: "战斗", 14: "荆棘术", 15: "靠近", 16: "跟随", 20: "说话冷却中也继续执行后面的节点"}},
 	"pet_melee":      {RootID: PetMeleeRootID, Nodes: PetMeleeNodes, Labels: map[int]string{1: "小狼", 2: "守护主人", 4: "回到主人身边", 8: "战斗", 10: "嚎叫", 12: "咬", 13: "追击", 14: "跟随", 18: "说话冷却中也继续执行后面的节点"}},
-	"wolf_king":      {RootID: WolfKingRootID, Nodes: WolfKingNodes, Labels: map[int]string{1: "灰鬃狼王", 2: "刷新仇恨", 5: "进入第二阶段", 8: "叫狼", 9: "狼王号令", 12: "进入第三阶段", 15: "嗜血", 17: "战斗", 20: "再叫狼", 26: "连扑", 27: "连扑", 29: "连扑", 31: "连扑", 33: "扑杀", 35: "猛扑", 37: "撕咬", 38: "追击", 39: "守着狼穴"}},
+	"wolf_king":      {RootID: WolfKingRootID, Nodes: WolfKingNodes, Labels: map[int]string{1: "灰鬃狼王", 2: "刷新仇恨", 5: "进入第二阶段", 8: "叫狼", 9: "狼王号令", 12: "进入第三阶段", 15: "嗜血", 17: "战斗", 21: "身边狼少了再叫", 27: "连扑", 28: "连扑", 30: "连扑", 32: "连扑", 34: "扑杀", 36: "猛扑", 38: "撕咬", 39: "追击", 40: "守着狼穴"}},
 }
