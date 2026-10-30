@@ -5,6 +5,7 @@ package trees
 // All 把每棵导出的树按文件名（不含 .json）映射到它的数据。
 var All = map[string]Exported{
 	"alpha_wolf":       {RootID: AlphaWolfRootID, Nodes: AlphaWolfNodes, Labels: map[int]string{1: "头狼", 2: "刷新仇恨", 4: "脱战回家", 8: "战斗", 10: "狼嚎", 12: "猛扑", 14: "撕咬", 15: "追击", 16: "闲逛"}},
+	"blood_hammer":     {RootID: BloodHammerRootID, Nodes: BloodHammerNodes, Labels: map[int]string{1: "食人魔首领·血槌", 2: "刷新仇恨", 5: "进入第二阶段", 8: "狂暴", 11: "进入第三阶段", 15: "战斗", 18: "敲地叫弓手", 19: "敲地", 20: "左边台子", 21: "右边台子", 24: "震地", 26: "震地", 27: "看着环扩出去", 29: "狂暴", 32: "冲撞", 34: "旋风斩", 36: "重锤", 37: "追击", 38: "守着献祭坑"}},
 	"bone_pile":        {RootID: BonePileRootID, Nodes: BonePileNodes, Labels: map[int]string{1: "骨堆", 2: "等骨头拼回去", 3: "站起来"}},
 	"bone_statue":      {RootID: BoneStatueRootID, Nodes: BoneStatueNodes, Labels: map[int]string{1: "骨箭雕像", 2: "等待", 3: "横线预警", 4: "横着射", 5: "等待", 6: "竖线预警", 7: "竖着射"}},
 	"monster_boss":     {RootID: MonsterBossRootID, Nodes: MonsterBossNodes, Labels: map[int]string{1: "首领", 2: "刷新仇恨", 4: "脱战回家", 9: "战斗", 12: "狂暴", 13: "狂暴", 16: "旋风斩", 18: "普攻", 19: "追击", 20: "待机"}},

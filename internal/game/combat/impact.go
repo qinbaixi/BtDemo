@@ -43,9 +43,12 @@ func (sys *System) resolveWindups() {
 		if !entity.Alive() {
 			continue
 		}
-		if windup.Skill.Kind == "charge" {
+		switch windup.Skill.Kind {
+		case "charge":
 			sys.charge(entity, windup)
-		} else {
+		case "quake":
+			sys.landQuake(entity, windup.Skill)
+		default:
 			sys.strike(entity, windup.Skill, windup.Target, true)
 		}
 	}

@@ -49,6 +49,12 @@ type Gate struct {
 	Key string
 }
 
+// Bare 报告门是不是只是个挡路的东西（献祭坑的石柱）：不跟着哪个房间开关，只等里面的东西碎掉。
+// 客户端不给它画栅栏，门里的实体本身就是它的样子。
+func (gate *Gate) Bare() bool {
+	return gate.After == "" && gate.To == "" && gate.Breakable != ""
+}
+
 // Center 是门的中心。
 func (gate *Gate) Center() (float64, float64) {
 	return float64(gate.X) + float64(gate.W)/2, float64(gate.Y) + float64(gate.H)/2

@@ -165,6 +165,7 @@ func newScene(
 	)
 	scene.AI.SetSummon(scene.Level.Summon)
 	scene.AI.SetReassemble(scene.Level.Reassemble)
+	scene.AI.SetRaise(scene.Level.SummonAt)
 	scene.Sessions.SetHost(scene)
 	scene.Spawn.SpawnConfigured()
 	return scene, nil

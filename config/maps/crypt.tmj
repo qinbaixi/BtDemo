@@ -112,7 +112,7 @@
    "y": 0,
    "objects": [
     {
-     "id": 585,
+     "id": 581,
      "name": "graveyard",
      "type": "zone",
      "x": 800.0,
@@ -124,7 +124,7 @@
      "point": true
     },
     {
-     "id": 586,
+     "id": 582,
      "name": "graveyard",
      "type": "zone",
      "x": 800.0,
@@ -136,7 +136,7 @@
      "point": true
     },
     {
-     "id": 587,
+     "id": 583,
      "name": "graveyard",
      "type": "zone",
      "x": 800.0,
@@ -148,7 +148,7 @@
      "point": true
     },
     {
-     "id": 588,
+     "id": 584,
      "name": "graveyard",
      "type": "zone",
      "x": 540.0,
@@ -160,7 +160,7 @@
      "point": true
     },
     {
-     "id": 589,
+     "id": 585,
      "name": "graveyard",
      "type": "zone",
      "x": 140.0,
@@ -172,7 +172,7 @@
      "point": true
     },
     {
-     "id": 590,
+     "id": 586,
      "name": "graveyard",
      "type": "zone",
      "x": 1130.0,
@@ -184,7 +184,7 @@
      "point": true
     },
     {
-     "id": 591,
+     "id": 587,
      "name": "graveyard",
      "type": "zone",
      "x": 800.0,
@@ -196,7 +196,7 @@
      "point": true
     },
     {
-     "id": 592,
+     "id": 588,
      "name": "graveyard",
      "type": "zone",
      "x": 800.0,
@@ -208,7 +208,7 @@
      "point": true
     },
     {
-     "id": 593,
+     "id": 589,
      "name": "graveyard",
      "type": "zone",
      "x": 800.0,
@@ -220,7 +220,7 @@
      "point": true
     },
     {
-     "id": 594,
+     "id": 590,
      "name": "graveyard",
      "type": "zone",
      "x": 800.0,
@@ -232,7 +232,7 @@
      "point": true
     },
     {
-     "id": 595,
+     "id": 591,
      "name": "camp",
      "type": "zone",
      "x": 760,
@@ -256,7 +256,7 @@
    "y": 0,
    "objects": [
     {
-     "id": 596,
+     "id": 592,
      "name": "",
      "type": "road",
      "x": 800,
@@ -293,7 +293,7 @@
      ]
     },
     {
-     "id": 597,
+     "id": 593,
      "name": "",
      "type": "road",
      "x": 800,
@@ -318,7 +318,7 @@
      ]
     },
     {
-     "id": 598,
+     "id": 594,
      "name": "",
      "type": "road",
      "x": 800,
@@ -15848,82 +15848,6 @@
     {
      "id": 576,
      "name": "",
-     "type": "column",
-     "x": 620,
-     "y": 3480,
-     "width": 0,
-     "height": 0,
-     "rotation": 0,
-     "visible": true,
-     "point": true,
-     "properties": [
-      {
-       "name": "s",
-       "type": "float",
-       "value": 1.6
-      }
-     ]
-    },
-    {
-     "id": 577,
-     "name": "",
-     "type": "column",
-     "x": 980,
-     "y": 3480,
-     "width": 0,
-     "height": 0,
-     "rotation": 0,
-     "visible": true,
-     "point": true,
-     "properties": [
-      {
-       "name": "s",
-       "type": "float",
-       "value": 1.6
-      }
-     ]
-    },
-    {
-     "id": 578,
-     "name": "",
-     "type": "column",
-     "x": 620,
-     "y": 3720,
-     "width": 0,
-     "height": 0,
-     "rotation": 0,
-     "visible": true,
-     "point": true,
-     "properties": [
-      {
-       "name": "s",
-       "type": "float",
-       "value": 1.6
-      }
-     ]
-    },
-    {
-     "id": 579,
-     "name": "",
-     "type": "column",
-     "x": 980,
-     "y": 3720,
-     "width": 0,
-     "height": 0,
-     "rotation": 0,
-     "visible": true,
-     "point": true,
-     "properties": [
-      {
-       "name": "s",
-       "type": "float",
-       "value": 1.6
-      }
-     ]
-    },
-    {
-     "id": 580,
-     "name": "",
      "type": "bones",
      "x": 500,
      "y": 3600,
@@ -15941,7 +15865,7 @@
      ]
     },
     {
-     "id": 581,
+     "id": 577,
      "name": "",
      "type": "bones",
      "x": 1100,
@@ -15960,7 +15884,7 @@
      ]
     },
     {
-     "id": 582,
+     "id": 578,
      "name": "",
      "type": "totem",
      "x": 800,
@@ -15972,7 +15896,7 @@
      "point": true
     },
     {
-     "id": 583,
+     "id": 579,
      "name": "",
      "type": "brazier",
      "x": 740,
@@ -15984,7 +15908,7 @@
      "point": true
     },
     {
-     "id": 584,
+     "id": 580,
      "name": "",
      "type": "brazier",
      "x": 860,
@@ -16068,7 +15992,7 @@
    "y": 0,
    "objects": [
     {
-     "id": 599,
+     "id": 595,
      "name": "r0",
      "type": "room",
      "x": 620,
@@ -16086,7 +16010,7 @@
      ]
     },
     {
-     "id": 600,
+     "id": 596,
      "name": "r1",
      "type": "room",
      "x": 360,
@@ -16104,7 +16028,7 @@
      ]
     },
     {
-     "id": 601,
+     "id": 597,
      "name": "r2",
      "type": "room",
      "x": 300,
@@ -16122,7 +16046,7 @@
      ]
     },
     {
-     "id": 602,
+     "id": 598,
      "name": "r3a",
      "type": "room",
      "x": 300,
@@ -16140,7 +16064,7 @@
      ]
     },
     {
-     "id": 603,
+     "id": 599,
      "name": "secret",
      "type": "room",
      "x": 40,
@@ -16158,7 +16082,7 @@
      ]
     },
     {
-     "id": 604,
+     "id": 600,
      "name": "r3b",
      "type": "room",
      "x": 880,
@@ -16176,7 +16100,7 @@
      ]
     },
     {
-     "id": 605,
+     "id": 601,
      "name": "r4",
      "type": "room",
      "x": 500,
@@ -16194,7 +16118,7 @@
      ]
     },
     {
-     "id": 606,
+     "id": 602,
      "name": "r5",
      "type": "room",
      "x": 420,
@@ -16212,7 +16136,7 @@
      ]
     },
     {
-     "id": 607,
+     "id": 603,
      "name": "r6",
      "type": "room",
      "x": 440,
@@ -16230,7 +16154,7 @@
      ]
     },
     {
-     "id": 608,
+     "id": 604,
      "name": "r7",
      "type": "room",
      "x": 700,
@@ -16260,7 +16184,7 @@
    "y": 0,
    "objects": [
     {
-     "id": 609,
+     "id": 605,
      "name": "g_r1_in",
      "type": "gate",
      "x": 750,
@@ -16278,7 +16202,7 @@
      ]
     },
     {
-     "id": 610,
+     "id": 606,
      "name": "g_r1_out",
      "type": "gate",
      "x": 750,
@@ -16301,7 +16225,7 @@
      ]
     },
     {
-     "id": 611,
+     "id": 607,
      "name": "g_r2_a",
      "type": "gate",
      "x": 420,
@@ -16324,7 +16248,7 @@
      ]
     },
     {
-     "id": 612,
+     "id": 608,
      "name": "g_r2_b",
      "type": "gate",
      "x": 1080,
@@ -16347,7 +16271,7 @@
      ]
     },
     {
-     "id": 613,
+     "id": 609,
      "name": "g_vault",
      "type": "gate",
      "x": 262,
@@ -16375,7 +16299,7 @@
      ]
     },
     {
-     "id": 614,
+     "id": 610,
      "name": "g_r3a_out",
      "type": "gate",
      "x": 560,
@@ -16398,7 +16322,7 @@
      ]
     },
     {
-     "id": 615,
+     "id": 611,
      "name": "g_r3b_out",
      "type": "gate",
      "x": 980,
@@ -16421,7 +16345,7 @@
      ]
     },
     {
-     "id": 616,
+     "id": 612,
      "name": "g_r4_out",
      "type": "gate",
      "x": 750,
@@ -16444,7 +16368,7 @@
      ]
     },
     {
-     "id": 617,
+     "id": 613,
      "name": "g_r5_out",
      "type": "gate",
      "x": 750,
@@ -16467,7 +16391,7 @@
      ]
     },
     {
-     "id": 618,
+     "id": 614,
      "name": "g_r6_out",
      "type": "gate",
      "x": 750,
@@ -16490,7 +16414,7 @@
      ]
     },
     {
-     "id": 619,
+     "id": 615,
      "name": "g_shortcut",
      "type": "gate",
      "x": 984,
@@ -16504,6 +16428,78 @@
        "name": "after",
        "type": "string",
        "value": "r4"
+      }
+     ]
+    },
+    {
+     "id": 616,
+     "name": "g_pillar1",
+     "type": "gate",
+     "x": 598,
+     "y": 3458,
+     "width": 44,
+     "height": 44,
+     "rotation": 0,
+     "visible": true,
+     "properties": [
+      {
+       "name": "breakable",
+       "type": "string",
+       "value": "stone_pillar"
+      }
+     ]
+    },
+    {
+     "id": 617,
+     "name": "g_pillar2",
+     "type": "gate",
+     "x": 958,
+     "y": 3458,
+     "width": 44,
+     "height": 44,
+     "rotation": 0,
+     "visible": true,
+     "properties": [
+      {
+       "name": "breakable",
+       "type": "string",
+       "value": "stone_pillar"
+      }
+     ]
+    },
+    {
+     "id": 618,
+     "name": "g_pillar3",
+     "type": "gate",
+     "x": 598,
+     "y": 3698,
+     "width": 44,
+     "height": 44,
+     "rotation": 0,
+     "visible": true,
+     "properties": [
+      {
+       "name": "breakable",
+       "type": "string",
+       "value": "stone_pillar"
+      }
+     ]
+    },
+    {
+     "id": 619,
+     "name": "g_pillar4",
+     "type": "gate",
+     "x": 958,
+     "y": 3698,
+     "width": 44,
+     "height": 44,
+     "rotation": 0,
+     "visible": true,
+     "properties": [
+      {
+       "name": "breakable",
+       "type": "string",
+       "value": "stone_pillar"
       }
      ]
     }

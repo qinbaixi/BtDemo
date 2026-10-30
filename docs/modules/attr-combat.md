@@ -62,6 +62,8 @@ warcry:   { kind: self,   cooldown: 15000, buff: { duration: 6000, atk_pct: 4000
 - `rain`：箭雨。落点是选中的目标（存活、敌对、边缘距离不超过 `range`）所在的位置；没有这样的目标，就是施法者沿瞄准方向 `distance` 处（夹在地图内）。对落点 `radius` 内（边缘距离）的所有敌人造成伤害。
 
 - `charge`：冲锋（狼王的扑杀）。目标要在 `range` 以内。出招时朝目标定下方向，算好最远冲到哪（`distance`，被障碍物挡住就停在前面），发 `CAST`（`x`、`y` 起点，`tx`、`ty` 预计终点，客户端画预警带）。前摇 `windup` 结束时沿定好的方向冲出去（速度 900 像素 / 秒，用击退的位移来走）：路上碰到第一个敌人就停在它面前打它一下；没碰到人但被墙、石头挡住，就自己晕 `self_stun` 毫秒，这是玩家的输出窗口。冲出去时再发一个 `CAST`（`fx` 加 `_go`，`dur` 是冲刺时长，撞墙时带 `wall` 和 `stun`）。代码在 `combat/charge.go`。
+  冲锋撞墙停下时，挡路的如果是模板 `charge_break: true` 的东西（献祭坑的石柱），它就碎了（`combat/quake.go` 的 `breakObstacle`），第二个 `CAST` 的 `dst` 是它。
+- `quake`：震地（血槌）。像 `aoe` 一样出招（`CAST` 带 `radius`、`hit_at`），前摇结束落地发 `CAST`（`fx` 加 `_go`，带 `rings`、`ring_gap`、`ring_speed`），然后每隔 `ring_gap` 毫秒放出一圈冲击环，以 `ring_speed` 像素 / 秒往外扩到 `radius`。环的边扫过谁（离落点的距离落在环的 28 像素厚度里，竖直方向的距离按地面压扁乘 2）打谁一下，每圈每人一下。算远程（能挡不能弹开），也算砸得碎骨堆。代码在 `combat/quake.go`。
 - `rally`：集结（头狼嚎叫、狼王号令）。给自己和 `radius` 以内同阵营、同类的同伴都加上 `buff`。
 - `zone`：在自己脚下放一块回血区（`zone` 字段），同一个人再放时旧的消失；回血由 zone 系统做，见 [zone](zone.md)。
 

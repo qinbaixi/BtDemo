@@ -323,6 +323,23 @@ func (sys *System) Summon(owner *core.Entity, template string, count int, radius
 	return made
 }
 
+// SummonAt 在 (x, y) 刷出一只模板 template 的怪（血槌敲地，坑边骨堆台子上站起骷髅弓手）：
+// 和 owner 同一个房间，盯着 owner 的目标。那里站不下（在墙里）返回 nil。
+func (sys *System) SummonAt(owner *core.Entity, template string, x, y float64) *core.Entity {
+	if !sys.nav.Free(nav.Vec{X: x, Y: y}, 12) {
+		return nil
+	}
+	monster := sys.spawn.Template(sys.state.Cfg.Templates[template], x, y)
+	monster.Room = owner.Room
+	monster.SetTarget(owner.Target)
+	sys.adopt(monster)
+	sys.state.Events.Emit(
+		monster,
+		&core.Event{Kind: pb.EventKind_RESPAWN.Enum(), Id: core.I32(monster.ID)},
+	)
+	return monster
+}
+
 // Reassemble 让骨堆 pile 重新站起来：原地刷出模板 pile.Tmpl.Revive 的怪（同一个房间，盯着 target），
 // 骨堆本身塌掉，下个 tick 由 spawn 移走。返回站起来的怪；模板没配 revive 时返回 nil。
 func (sys *System) Reassemble(pile *core.Entity, target int) *core.Entity {

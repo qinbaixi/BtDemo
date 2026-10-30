@@ -26,6 +26,7 @@ type System struct {
 	summon SummonFunc                 // summon 节点用的召唤，由场景设置；nil 时召唤失败
 	// reassemble 节点用的骨堆重组，由场景设置；nil 时重组失败
 	reassemble ReassembleFunc
+	raise      RaiseFunc // raise_bones 节点用的，由场景设置；nil 时失败
 }
 
 // New 加载所有导出的行为树，检查每棵树用到的节点类型都有对应的处理器，

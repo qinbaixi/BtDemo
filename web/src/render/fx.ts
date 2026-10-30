@@ -442,6 +442,31 @@ export class FX {
         this.effects.push({ ...base, kind: 'rain', cx, cy, radius, x0, y0, arrows, life: 1400 });
         return RAIN_FALL_FROM + RAIN_FALL_MS;
       }
+      case 'quake':
+        // 震地的起跳：预警圈在 game/events.ts 里画（telegraph），这里蹬地扬一圈土
+        this.footDust(src.x - 10, src.y, -1, now);
+        this.footDust(src.x + 10, src.y, 1, now);
+        return 0;
+      case 'quake_go': {
+        // 震地落地：落点炸一团土、镜头重震，然后一圈一圈冲击环往外扩（和服务端同样的时刻和速度，环碰到脚就挨打）
+        const cx = ev.x ?? src.x;
+        const cy = ev.y ?? src.y;
+        const radius = ev.radius || 400;
+        const speed = ev.ringSpeed || 300;
+        const gap = (ev.ringGap || 0.5) * 1000;   // 协议层已经换成秒
+        const life = (radius / speed) * 1000;
+        for (let ring = 0; ring < (ev.rings || 1); ring++) {
+          this.effects.push({ ...base, kind: 'shock', cx, cy, radius, born: now + ring * gap, life, first: ring === 0 });
+          this.scheduledShake.push({ at: now + ring * gap, shake: ring === 0 ? 14 : 6 });
+        }
+        for (let i = 0; i < 30; i++) {
+          const a = rand(0, TAU);
+          const sp = rand(0.1, 0.32);
+          this.spawn({ x: cx + Math.cos(a) * 16, y: cy + Math.sin(a) * 8, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.5 - rand(0.05, 0.15),
+            drag: 0.975, life: rand(420, 800), size: rand(3, 6), color: i % 3 ? '#7a6a58' : '#b8a488', kind: 'dust', born: now });
+        }
+        return 0;
+      }
       case 'pounce':
         // 扑杀的出招：预警带在 game/events.ts 里画（chargeWarn），这里只在出发时扬一点土
         return 0;
@@ -471,6 +496,7 @@ export class FX {
           }
           this.effects.push({ ...base, kind: 'ring', x: x1 + dir * 10, y: y1, radius: 40, life: 380, born: now + dur });
           this.scheduledShake.push({ at: now + dur, shake: 8 });
+          if (ev.dst) this.rubble(ev.dst, now + dur);   // 撞碎了献祭坑的石柱
         }
         return dur;
       }
@@ -856,6 +882,50 @@ export class FX {
         life: rand(240, 420), size: rand(1.4, 2.8), color: i % 3 ? '#b8b0a0' : '#fff2cc', kind: 'spark', born: now });
     }
     this.effects.push({ kind: 'ring', x, y, radius: 18, life: 240, born: now, color: '#d8d0c0', rgb: rgbOf('#d8d0c0') });
+  }
+
+  // rubble 是石柱被撞碎：大块碎石往四周飞、落地，一团灰土升起来。
+  rubble(id: number, now: number) {
+    const p = this.pos(id, null);
+    if (!p) return;
+    for (let i = 0; i < 26; i++) {
+      const a = rand(-Math.PI, 0);
+      const sp = rand(0.08, 0.3);
+      this.spawn({ x: p.x + rand(-14, 14), y: p.y - rand(10, 70), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6,
+        drag: 0.985, life: rand(500, 900), size: rand(3, 7), color: i % 3 ? '#8a8f9c' : '#c8ccd4', kind: 'spark', born: now });
+    }
+    for (let i = 0; i < 14; i++) {
+      this.spawn({ x: p.x + rand(-24, 24), y: p.y - rand(0, 30), vx: rand(-0.03, 0.03), vy: -rand(0.02, 0.06),
+        drag: 0.98, life: rand(700, 1200), size: rand(6, 11), color: '#6e6a66', kind: 'dust', born: now + rand(0, 160) });
+    }
+    this.effects.push({ kind: 'ring', x: p.x, y: p.y, radius: 56, life: 420, born: now, color: '#c8ccd4', rgb: rgbOf('#c8ccd4') });
+  }
+
+  // shockGround 画震地的一圈冲击环：扩到哪、多厚和服务端一样（地上压扁一半），前沿亮、后面拖一圈暗红，
+  // 快扩到头时淡掉。
+  shockGround(ctx, f, t) {
+    const r = f.radius * t;
+    const fade = 1 - clamp01((t - 0.8) / 0.2);
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.translate(f.cx, f.cy);
+    ctx.scale(1, 0.5);
+    ctx.lineWidth = 30;
+    ctx.strokeStyle = `rgba(40,8,4,${0.4 * fade})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.max(1, r - 14), 0, TAU);
+    ctx.stroke();
+    ctx.lineWidth = 16;
+    ctx.strokeStyle = rgba(f.rgb, 0.55 * fade);
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.max(1, r - 8), 0, TAU);
+    ctx.stroke();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = rgba(whiten(f.rgb, 0.6), 0.95 * fade);
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.max(1, r), 0, TAU);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // cancel 收掉 id 还没落下的出招：预警圈、等着出手时才放的刀光（前摇被打断时）。
@@ -1261,6 +1331,7 @@ export class FX {
         case 'rain': this.rainArrows(ctx, f, now - f.born); break;
         case 'warn': this.warnGround(ctx, f, now); break;
         case 'band': this.bandGround(ctx, f, now); break;
+        case 'shock': if (t < 1) this.shockGround(ctx, f, t); break;
         case 'dizzy': this.dizzyStars(ctx, f, now); break;
       }
     }
@@ -1288,6 +1359,7 @@ export class FX {
           break;
         }
         case 'dizzy': { const p = this.pos(f.src, null); if (p) add(p.x, p.y, (p.r || 14) * 1.5, (p.r || 14) * 3.4, 0); break; }
+        case 'shock': add(f.cx, f.cy, f.radius + 20, f.radius * 0.5 + 20, f.radius * 0.5 + 20); break;
         case 'arrow': {
           const sp = this.pos(f.src, { x: f.sx, y: f.sy });
           const dp = this.pos(f.dst, { x: f.dx, y: f.dy });

@@ -34,6 +34,7 @@ hostile:
   villager: []
   wild: []           # 能砍的东西（荆棘丛、灵火盆）：谁也不打
   trap: [player]     # 机关（骨箭雕像）：只打玩家，玩家也打不动它
+  scenery: []        # 场景里的东西（献祭坑的石柱）：谁也不打、谁也打不了，只有首领冲撞撞得碎
 
 # 玩家模板：每个连接创建一个新角色
 player:
@@ -116,7 +117,7 @@ player:
 #   class_bias: 只从击杀者职业能用的物品（本职业或通用）里抽的概率（万分比），其余时候从所有物品里抽
 loot:
   chance: 3000
-  bosses: { ogre_chief: 10000, wolf_king: 10000, alpha_wolf: 5000, skeleton_knight: 10000 }
+  bosses: { ogre_chief: 10000, wolf_king: 10000, alpha_wolf: 5000, skeleton_knight: 10000, blood_hammer: 10000 }
   rarity: { common: 6, rare: 3, epic: 1 }
   class_bias: 7000
 

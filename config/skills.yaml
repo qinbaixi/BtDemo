@@ -125,3 +125,11 @@ skills:
                 desc: 弱攻击，骚扰敌人 }
   pet_mend:     { name: 愈合,   kind: ally,   range: 170, cooldown: 6000, heal: 2500, fx: heal, color: "#7dff9b",
                 desc: 给主人回复 25% 最大生命 }
+
+  # 第二关首领「血槌」（行为树 blood_hammer）
+  hammer_charge: { weight: heavy, windup: 900, name: 冲撞, kind: charge, range: 380, distance: 420, self_stun: 2500, cooldown: 6000,
+                   damage: physical, ratio: 17000, base: 10, knock: 90, fx: pounce, color: "#ff7a3a" }
+  bone_knock:    { weight: heavy, windup: 700, name: 敲地, kind: aoe, radius: 110, cooldown: 2000, damage: physical, ratio: 12000, base: 6, fx: circle, color: "#e8e3d0" }
+  # 震地：跳起来砸地（前摇 1.1 秒），落点放出三圈冲击环，每圈隔 0.55 秒，每秒扩 300 像素，扩到 420 消失
+  blood_quake:   { weight: medium, windup: 1100, name: 震地, kind: quake, radius: 420, rings: 3, ring_gap: 550, ring_speed: 300, cooldown: 9000,
+                   damage: physical, ratio: 10000, base: 8, fx: quake, color: "#ff5a3a" }

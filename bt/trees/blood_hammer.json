@@ -1,0 +1,372 @@
+{
+  "type": "Selector",
+  "label": "食人魔首领·血槌",
+  "childNodes": [
+    {
+      "type": "Sequence",
+      "label": "进入第二阶段",
+      "decorators": [
+        {
+          "type": "HpBelow",
+          "properties": [
+            {
+              "name": "Percent",
+              "value": 60
+            }
+          ]
+        },
+        {
+          "type": "PhaseAtLeast",
+          "properties": [
+            {
+              "name": "Phase",
+              "value": 2
+            }
+          ],
+          "inverseCheckCondition": true
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "SetPhase",
+          "properties": [
+            {
+              "name": "Phase",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "type": "Say",
+          "properties": [
+            {
+              "name": "Text",
+              "value": "骨头们，起来干活！"
+            }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "狂暴",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "进入第三阶段",
+      "decorators": [
+        {
+          "type": "HpBelow",
+          "properties": [
+            {
+              "name": "Percent",
+              "value": 30
+            }
+          ]
+        },
+        {
+          "type": "PhaseAtLeast",
+          "properties": [
+            {
+              "name": "Phase",
+              "value": 3
+            }
+          ],
+          "inverseCheckCondition": true
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "SetPhase",
+          "properties": [
+            {
+              "name": "Phase",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "type": "Say",
+          "properties": [
+            {
+              "name": "Text",
+              "value": "这坑……就是你的坟！"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Selector",
+      "label": "战斗",
+      "decorators": [
+        {
+          "type": "HasTarget"
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "Sequence",
+          "label": "敲地叫弓手",
+          "decorators": [
+            {
+              "type": "PhaseAtLeast",
+              "properties": [
+                {
+                  "name": "Phase",
+                  "value": 2
+                }
+              ]
+            },
+            {
+              "type": "Cooldown",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 15
+                }
+              ]
+            }
+          ],
+          "childNodes": [
+            {
+              "type": "CastSkill",
+              "label": "敲地",
+              "properties": [
+                {
+                  "name": "Slot",
+                  "value": 5
+                }
+              ]
+            },
+            {
+              "type": "RaiseBones",
+              "label": "左边台子",
+              "properties": [
+                {
+                  "name": "Template",
+                  "value": "skeleton_archer"
+                },
+                {
+                  "name": "X",
+                  "value": 500
+                },
+                {
+                  "name": "Y",
+                  "value": 3600
+                }
+              ]
+            },
+            {
+              "type": "RaiseBones",
+              "label": "右边台子",
+              "properties": [
+                {
+                  "name": "Template",
+                  "value": "skeleton_archer"
+                },
+                {
+                  "name": "X",
+                  "value": 1100
+                },
+                {
+                  "name": "Y",
+                  "value": 3600
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Sequence",
+          "label": "震地",
+          "decorators": [
+            {
+              "type": "PhaseAtLeast",
+              "properties": [
+                {
+                  "name": "Phase",
+                  "value": 3
+                }
+              ]
+            },
+            {
+              "type": "SkillReady",
+              "properties": [
+                {
+                  "name": "Slot",
+                  "value": 6
+                }
+              ]
+            }
+          ],
+          "childNodes": [
+            {
+              "type": "Say",
+              "properties": [
+                {
+                  "name": "Text",
+                  "value": "趴下！"
+                }
+              ]
+            },
+            {
+              "type": "CastSkill",
+              "label": "震地",
+              "properties": [
+                {
+                  "name": "Slot",
+                  "value": 6
+                }
+              ]
+            },
+            {
+              "type": "Wait",
+              "label": "看着环扩出去",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 1.2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "狂暴",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 3
+            }
+          ],
+          "decorators": [
+            {
+              "type": "PhaseAtLeast",
+              "properties": [
+                {
+                  "name": "Phase",
+                  "value": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "冲撞",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 4
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 110
+                }
+              ],
+              "inverseCheckCondition": true
+            },
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 380
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "旋风斩",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 2
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 90
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "重锤",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 1
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 70
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "ChaseTarget",
+          "label": "追击",
+          "properties": [
+            {
+              "name": "StopRange",
+              "value": 55
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Wait",
+      "label": "守着献祭坑",
+      "properties": [
+        {
+          "name": "Seconds",
+          "value": 1
+        }
+      ]
+    }
+  ],
+  "comment": "三阶段：冲撞（撞碎石柱自晕）→ 60% 狂暴、每 15 秒敲地叫两个骷髅弓手 → 30% 震地放三圈冲击环",
+  "services": [
+    {
+      "type": "UpdateTarget",
+      "label": "刷新仇恨",
+      "properties": [
+        {
+          "name": "Range",
+          "value": 520
+        }
+      ],
+      "timeBetweenTicks": 0.5
+    }
+  ]
+}

@@ -39,6 +39,9 @@ GATES = [  # id, rect, after, to, breakable, key
   ('g_r6_out', (750, 3884, 100, 16), 'r6', 'r7', '', ''),
   ('g_shortcut', (984, 200, 16, 80), 'r4', '', '', ''),
 ]
+# 6 献祭坑的四根石柱：没有 after / to 的门，里面站着石柱（stone_pillar），首领冲撞撞碎了门就开
+PILLARS = [(620, 3480), (980, 3480), (620, 3720), (980, 3720)]
+GATES += [(f'g_pillar{i + 1}', (x - 22, y - 22, 44, 44), '', '', 'stone_pillar', '') for i, (x, y) in enumerate(PILLARS)]
 WATER = [(880, 1760, 500, 140), (880, 1980, 260, 240), (1220, 2040, 160, 180)]  # 3B 的积水
 C = 20
 cols, rows = W // C, H // C
@@ -113,9 +116,7 @@ props += [point('tomb', 1300, 1700, v=1), point('tomb', 950, 1680), point('colum
 props += [point('column', 560, 2420), point('column', 1040, 2420), point('brazier', 700, 2400), point('brazier', 900, 2400), point('tomb', 800, 2390, v=2, s=1.3)]
 # 5 墓穴守卫：两边墓碑当掩体
 props += [point('tomb', 560, 2960), point('tomb', 1040, 2960), point('tomb', 620, 3100, v=1), point('tomb', 980, 3100, v=1), point('bones', 800, 2880)]
-# 6 献祭坑：四根石柱（首领冲撞会撞碎，P3），坑边骨头台子
-for x, y in [(620, 3480), (980, 3480), (620, 3720), (980, 3720)]:
-  props.append(point('column', x, y, s=1.6))
+# 6 献祭坑：四根石柱是门里的实体（见 PILLARS），坑边两处骨头台子（首领敲地时站起骷髅弓手）
 props += [point('bones', 500, 3600, v=2), point('bones', 1100, 3600, v=2), point('totem', 800, 3360)]
 # 7 出口
 props += [point('brazier', 740, 4060), point('brazier', 860, 4060)]

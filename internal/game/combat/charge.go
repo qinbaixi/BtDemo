@@ -18,6 +18,7 @@ import (
 //     打它一下（技能的伤害和击退）；没碰到人但被障碍物挡住了，就是撞墙，自己晕 self_stun 毫秒。
 //     冲刺用击退的位移来走（core.Knock），行为树在冲刺和晕眩期间暂停。
 //     再发一个 CAST（fx 加 "_go"，x、y → tx、ty 是实际路线，dur 是冲刺毫秒数，撞墙时 wall、stun 有值）。
+//     撞上的是石柱（模板 charge_break）时石柱碎掉，dst 是石柱，见 quake.go 的 breakObstacle。
 
 // chargeSpeed 是冲锋的速度（像素 / 秒）。
 const chargeSpeed = 900
@@ -89,6 +90,9 @@ func (sys *System) charge(entity *core.Entity, windup *core.Windup) {
 		entity.StunUntil = max(entity.StunUntil, now+duration+skill.SelfStun)
 		event.Wall = proto.Bool(true)
 		event.Stun = core.I32(int(skill.SelfStun))
+		if broken := sys.breakObstacle(entity, end); broken != nil {
+			event.Dst = core.I32(broken.ID) // 客户端在撞碎的石柱上放碎石
+		}
 	}
 	sys.state.Events.Emit(entity, event)
 	if victim != nil {

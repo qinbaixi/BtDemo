@@ -56,7 +56,7 @@ function entity(e: any): EntityInfo {
 function event(ev: any): GameEvent {
   const out = { ...ev, k: EVENT_KIND[ev.kind] || String(ev.kind).toLowerCase() };
   if (ev.value !== undefined) out.v = ev.value;
-  for (const key of ['dur', 'knockTime', 'stun', 'hitAt']) {
+  for (const key of ['dur', 'knockTime', 'stun', 'hitAt', 'ringGap']) {
     if (ev[key] !== undefined) out[key] = sec(ev[key]);
   }
   if (ev.result !== undefined) out.result = String(ev.result).toLowerCase();   // HIT / BLOCK / PARRY / GUARD_BREAK / IMMUNE
@@ -184,7 +184,7 @@ export function createProtocol(): Protocol {
             rooms: (w.scene.rooms || []).map((r: any) => ({
               id: r.id, title: r.title, x: r.x, y: r.y, w: r.w, h: r.h, waves: r.waves || 0, reward: r.reward || '', dark: !!r.dark, key: r.key || '',
             })),
-            gates: (w.scene.gates || []).map((g: any) => ({ id: g.id, x: g.x, y: g.y, w: g.w, h: g.h, to: g.to || '', key: g.key || '' })),
+            gates: (w.scene.gates || []).map((g: any) => ({ id: g.id, x: g.x, y: g.y, w: g.w, h: g.h, to: g.to || '', key: g.key || '', bare: !!g.bare })),
           } : null,
         };
       }

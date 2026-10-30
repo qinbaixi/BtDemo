@@ -27,6 +27,7 @@ export const MODEL_BOX: Record<string, [number, number, number]> = {
   hunter: [3.6, 3.6, 1.8],
   skeleton_soldier: [3.2, 4.2, 1.8],   // 劈之前剑举过头顶
   skeleton_knight: [3.2, 4.2, 1.8],
+  stone_pillar: [1.6, 5.4, 1.4],   // 又高又细
   // 宠物画的时候放大了 1.35 倍（models.ts PET_DRAW_SCALE）
   wolf_pup: [3.8, 3.4, 1.8],
   ember: [3.4, 5.4, 1.8],    // 飘在半空，胀大时更高
@@ -39,7 +40,7 @@ export function modelBox(model: string, r: number): number[] {
 // 半径 16 时每个模型的绘制高度，用来把名字放在头顶上方
 export const MODEL_H: Record<string, number> = {
   knight: 46, ranger: 46, guard: 50, villager: 42, slime: 26, wolf: 30, alpha_wolf: 32, wolf_king: 34, hunter: 44, bramble: 30, skeleton_archer: 46, ogre_chief: 54,
-  skeleton_soldier: 46, skeleton_knight: 50, bone_pile: 18, bone_statue: 52, brazier: 30, cracked_wall: 48,
+  skeleton_soldier: 46, skeleton_knight: 50, bone_pile: 18, bone_statue: 52, brazier: 30, cracked_wall: 48, stone_pillar: 92,
   wolf_pup: 40, ember: 54, sprout: 40,
 };
 export const ACT_NAMES: Record<string, string> = {
@@ -63,6 +64,7 @@ export const ACT_NAMES: Record<string, string> = {
   lower_shield: '放盾',
   flank_shield: '绕到盾侧面',
   reassemble: '重组',
+  raise_bones: '叫骷髅',
   warn_line: '预警',
   fire_line: '射击',
 };

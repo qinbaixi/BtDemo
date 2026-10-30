@@ -151,6 +151,9 @@ export interface GameEvent {
   stun?: number;     // dmg：目标硬直秒数
   wall?: boolean;    // dmg：被打到撞墙
   hitAt?: number;    // cast：有前摇时命中的服务端时间（秒）
+  rings?: number;     // cast（震地落地 quake_go）：从 x、y 往外扩几圈冲击环，扩到 radius
+  ringGap?: number;   // cast（震地）：两圈之间隔几秒
+  ringSpeed?: number; // cast（震地）：每圈每秒扩多少像素
   // dmg：怎么挨的这一下，没有就是正常命中。parry（完美格挡）时 kx / ky / knockTime / stun 说的是被弹开的攻击者（src）
   result?: 'hit' | 'block' | 'parry' | 'guard_break' | 'immune' | 'cover';   // cover：远程打在了掩体上，tx、ty 是停下的地方
 }
@@ -287,7 +290,7 @@ export interface RoomInfo { id: string; title: string; x: number; y: number; w: 
 
 // GateInfo 是房间之间的门：关着时挡路；to 是它通往的房间（门上画那个房间的奖励）。
 // key 是开门要的钥匙（拿到以前门上画一把锁）。
-export interface GateInfo { id: string; x: number; y: number; w: number; h: number; to: string; key: string }
+export interface GateInfo { id: string; x: number; y: number; w: number; h: number; to: string; key: string; bare: boolean }   // bare：不画栅栏（献祭坑的石柱）
 
 // RoomPhase：idle 还没人进来、fight 打着（门关着）、clear 清完、skipped 岔路选了另一边。
 export type RoomPhase = 'idle' | 'fight' | 'clear' | 'skipped';

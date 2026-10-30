@@ -156,7 +156,7 @@ scenes:
       # 献祭坑：首领食人魔·血槌（三阶段在 P3 做，现在先用野外的食人魔首领）
       - id: r6
         waves:
-          - [{ template: ogre_chief, count: 1, x: 800, y: 3600, spread: 0 }]
+          - [{ template: blood_hammer, count: 1, x: 800, y: 3600, spread: 0 }]
       # 坑底出口
       - id: r7
     boons:

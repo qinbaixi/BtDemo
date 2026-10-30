@@ -305,6 +305,29 @@
       ]
     },
     {
+      "name": "RaiseBones",
+      "icon": "street-view",
+      "color": "#d8d2bc",
+      "description": "让 ({{X}}, {{Y}}) 的骨堆台子站起一只 {{Template}}（算进所在房间，盯着我的目标）",
+      "properties": [
+        {
+          "name": "Template",
+          "type": "string",
+          "default": "skeleton_archer"
+        },
+        {
+          "name": "X",
+          "type": "number",
+          "default": 0
+        },
+        {
+          "name": "Y",
+          "type": "number",
+          "default": 0
+        }
+      ]
+    },
+    {
       "name": "WarnLine",
       "icon": "exclamation-triangle",
       "color": "#ff5a5a",

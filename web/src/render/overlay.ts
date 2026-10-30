@@ -188,11 +188,15 @@ function drawGuard(e: ClientEntity, x: number, y: number, w: number, now: number
   return true;
 }
 
+// 不画头顶名字和血条的模型：场景里的东西，玩家打不了
+const UNLABELLED = new Set(['stone_pillar']);
+
 // drawLabels draws name, level, HP bar, behaviour and aggro mark over a head.
 function drawLabels(e: ClientEntity, p: Point, now: number): void {
   const dead = e.dead;
   const isSelf = e.id === state.myId;
   if (dead && !isSelf && e.id !== state.target) return;   // corpses stay unlabelled
+  if (UNLABELLED.has(e.model)) return;                     // 场景里的东西（石柱）不挂名字和血条
   const top = headY(e, p);
   ctx.save();
   ctx.textAlign = 'center';

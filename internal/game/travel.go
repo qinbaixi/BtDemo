@@ -223,13 +223,14 @@ func (scene *Scene) SceneInfo() *pb.SceneInfo {
 		}
 		for _, gate := range template.Layout.Gates {
 			info.Gates = append(info.Gates, &pb.GateInfo{
-				Id:  proto.String(gate.ID),
-				X:   core.I32(gate.X),
-				Y:   core.I32(gate.Y),
-				W:   core.I32(gate.W),
-				H:   core.I32(gate.H),
-				To:  proto.String(gate.To),
-				Key: proto.String(gate.Key),
+				Id:   proto.String(gate.ID),
+				X:    core.I32(gate.X),
+				Y:    core.I32(gate.Y),
+				W:    core.I32(gate.W),
+				H:    core.I32(gate.H),
+				To:   proto.String(gate.To),
+				Key:  proto.String(gate.Key),
+				Bare: proto.Bool(gate.Bare()),
 			})
 		}
 	}

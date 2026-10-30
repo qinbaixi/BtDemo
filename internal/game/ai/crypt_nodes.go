@@ -18,6 +18,7 @@ import (
 //   - flank_shield 绕到目标的盾侧面去，从盾挡不住的方向打；
 //   - skill_ready 第 Slot 个技能冷却好了（先确认能出手再放盾，不然盾放下又举起来）；
 //   - reassemble 骨堆重新站起来变回骷髅兵，由场景接到关卡系统上；
+//   - raise_bones 首领敲地，让坑边 (X, Y) 的骨堆台子站起一只 Template（血槌叫骷髅弓手），由场景接到关卡系统上；
 //   - warn_line / fire_line 骨箭雕像：沿一条直线（往两头）先画预警，再射一排穿透的骨箭。
 //     机关本身就是一棵树（等待 → 预警 → 射击），行为树不只是给怪用的。
 
@@ -38,6 +39,13 @@ type ReassembleFunc func(pile *core.Entity, target int) *core.Entity
 
 // SetReassemble 设置 reassemble 节点用的函数（场景把关卡系统的 Reassemble 接进来）。
 func (sys *System) SetReassemble(reassemble ReassembleFunc) { sys.reassemble = reassemble }
+
+// RaiseFunc 在 (x, y) 刷出一只模板 template 的怪，和 owner 同一个房间、盯着 owner 的目标；
+// 返回刷出来的怪，那里站不下返回 nil。由场景设置。
+type RaiseFunc func(owner *core.Entity, template string, x, y float64) *core.Entity
+
+// SetRaise 设置 raise_bones 节点用的函数（场景把关卡系统的 SummonAt 接进来）。
+func (sys *System) SetRaise(raise RaiseFunc) { sys.raise = raise }
 
 // registerCrypt 注册骷髅兵和骨堆的节点。
 func (sys *System) registerCrypt() {
@@ -156,6 +164,23 @@ func (sys *System) registerCrypt() {
 			return bt.Failure
 		}
 		ctx.Explain("骨头拼回去了，站起来的是 %s", who(risen))
+		return bt.Success
+	})
+
+	reg.Task("raise_bones", func(ctx *bt.Ctx) bt.Status {
+		entity := ctx.Agent.(*Agent).Entity
+		template := ctx.Node.Str("Template", "")
+		if sys.raise == nil || sys.state.Cfg.Templates[template] == nil {
+			ctx.Explain("叫不起 %q", template)
+			return bt.Failure
+		}
+		x, y := ctx.Node.Num("X", entity.X), ctx.Node.Num("Y", entity.Y)
+		risen := sys.raise(entity, template, x, y)
+		if risen == nil {
+			ctx.Explain("(%.0f, %.0f) 站不下", x, y)
+			return bt.Failure
+		}
+		ctx.Explain("(%.0f, %.0f) 的骨堆站起来了：%s", x, y, who(risen))
 		return bt.Success
 	})
 

@@ -68,8 +68,11 @@ export function onEvent(ev: GameEvent, now: number): void {
           sfxAt('cast.bow.heavy', src.id, now, true);
           break;
         }
+        // 震地：脚下画出冲击环最远扩到哪的预警圈，站到圈外就不挨打
+        const quake = ev.fx === 'quake';
+        if (quake && windupMs > 0) addFloat(now, src.id, '要震地了！', '#ff7a3a', 16, windupMs);
         if (windupMs > 0 && src.kind !== 'player') {
-          fx.telegraph(src.id, ev.dst || 0, ev.radius || 0, ev.weight === 'heavy' && !charge, windupMs, now);
+          fx.telegraph(src.id, ev.dst || 0, ev.radius || 0, (ev.weight === 'heavy' && !charge) || quake, windupMs, now);
         }
         const dst = ev.dst && ev.dst !== ev.src ? state.ents.get(ev.dst) : null;
         if (dst) { const dp = posOf(dst, now); faceToward(src, dp.x, dp.y, now); }
@@ -219,6 +222,11 @@ export function onEvent(ev: GameEvent, now: number): void {
       // 骷髅兵倒下变成骨堆、骨堆重新站起来：不放复活的光柱，骨头一拼就站起来了
       const model = state.ents.get(ev.id ?? 0)?.model;
       if (model === 'bone_pile') break;
+      if (model === 'skeleton_archer' && state.scene?.dungeon) {
+        // 血槌敲地，坑边骨堆台子上站起骷髅弓手
+        fx.boneRise(ev.id, now);
+        break;
+      }
       if (model === 'skeleton_soldier') {
         fx.boneRise(ev.id, now);
         addFloat(now, ev.id, '骨头拼回去了', '#9fe8ff', 15, 1000);

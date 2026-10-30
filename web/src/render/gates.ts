@@ -45,6 +45,7 @@ export class GateLayer {
     this.stakes.clear();
     this.sceneKey = key;
     for (const gate of gates) {
+      if (gate.bare) continue;   // 献祭坑的石柱：石柱自己就是样子，不立栅栏
       const across = gate.w >= gate.h;
       const length = across ? gate.w : gate.h;
       const count = Math.max(2, Math.round(length / STAKE_GAP));

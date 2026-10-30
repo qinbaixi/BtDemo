@@ -3018,8 +3018,9 @@ type GateInfo struct {
 	Y             *int32                 `protobuf:"varint,3,req,name=y" json:"y,omitempty"`
 	W             *int32                 `protobuf:"varint,4,req,name=w" json:"w,omitempty"`
 	H             *int32                 `protobuf:"varint,5,req,name=h" json:"h,omitempty"`
-	To            *string                `protobuf:"bytes,6,opt,name=to" json:"to,omitempty"`   // RoomInfo.id it leads into (show that room's reward on it)
-	Key           *string                `protobuf:"bytes,7,opt,name=key" json:"key,omitempty"` // the key it needs (a lock is drawn until LevelState.keys has it)
+	To            *string                `protobuf:"bytes,6,opt,name=to" json:"to,omitempty"`      // RoomInfo.id it leads into (show that room's reward on it)
+	Key           *string                `protobuf:"bytes,7,opt,name=key" json:"key,omitempty"`    // the key it needs (a lock is drawn until LevelState.keys has it)
+	Bare          *bool                  `protobuf:"varint,8,opt,name=bare" json:"bare,omitempty"` // no fence: the thing standing in it is all there is to see (a pillar in the boss pit)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3101,6 +3102,13 @@ func (x *GateInfo) GetKey() string {
 		return *x.Key
 	}
 	return ""
+}
+
+func (x *GateInfo) GetBare() bool {
+	if x != nil && x.Bare != nil {
+		return *x.Bare
+	}
+	return false
 }
 
 // LevelState is the whole progress of a dungeon.
@@ -3769,10 +3777,13 @@ type Event struct {
 	Kx            *int32                 `protobuf:"varint,26,opt,name=kx" json:"kx,omitempty"`        // DAMAGE: the target is knocked back to (kx, ky) over knock_time ms
 	Ky            *int32                 `protobuf:"varint,27,opt,name=ky" json:"ky,omitempty"`
 	KnockTime     *int32                 `protobuf:"varint,28,opt,name=knock_time,json=knockTime" json:"knock_time,omitempty"`
-	Stun          *int32                 `protobuf:"varint,29,opt,name=stun" json:"stun,omitempty"`                           // DAMAGE: the target is staggered (cannot move or act) for this many ms
-	Wall          *bool                  `protobuf:"varint,30,opt,name=wall" json:"wall,omitempty"`                           // DAMAGE: the knockback slammed the target into an obstacle
-	HitAt         *int64                 `protobuf:"varint,31,opt,name=hit_at,json=hitAt" json:"hit_at,omitempty"`            // CAST with a windup: Frame.time when the hit lands
-	Result        *HitResult             `protobuf:"varint,32,opt,name=result,enum=btdemo.HitResult" json:"result,omitempty"` // DAMAGE: how the hit was received (absent = HIT)
+	Stun          *int32                 `protobuf:"varint,29,opt,name=stun" json:"stun,omitempty"`                            // DAMAGE: the target is staggered (cannot move or act) for this many ms
+	Wall          *bool                  `protobuf:"varint,30,opt,name=wall" json:"wall,omitempty"`                            // DAMAGE: the knockback slammed the target into an obstacle
+	HitAt         *int64                 `protobuf:"varint,31,opt,name=hit_at,json=hitAt" json:"hit_at,omitempty"`             // CAST with a windup: Frame.time when the hit lands
+	Result        *HitResult             `protobuf:"varint,32,opt,name=result,enum=btdemo.HitResult" json:"result,omitempty"`  // DAMAGE: how the hit was received (absent = HIT)
+	Rings         *int32                 `protobuf:"varint,33,opt,name=rings" json:"rings,omitempty"`                          // CAST of a quake skill (fx ends with _go): how many shock rings spread out from (x, y)
+	RingGap       *int32                 `protobuf:"varint,34,opt,name=ring_gap,json=ringGap" json:"ring_gap,omitempty"`       // CAST of a quake skill: ms between rings (the first starts at once)
+	RingSpeed     *int32                 `protobuf:"varint,35,opt,name=ring_speed,json=ringSpeed" json:"ring_speed,omitempty"` // CAST of a quake skill: how fast each ring grows (px / s), up to radius
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4029,6 +4040,27 @@ func (x *Event) GetResult() HitResult {
 		return *x.Result
 	}
 	return HitResult_HIT
+}
+
+func (x *Event) GetRings() int32 {
+	if x != nil && x.Rings != nil {
+		return *x.Rings
+	}
+	return 0
+}
+
+func (x *Event) GetRingGap() int32 {
+	if x != nil && x.RingGap != nil {
+		return *x.RingGap
+	}
+	return 0
+}
+
+func (x *Event) GetRingSpeed() int32 {
+	if x != nil && x.RingSpeed != nil {
+		return *x.RingSpeed
+	}
+	return 0
 }
 
 type Attrs struct {
@@ -5389,7 +5421,7 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x06reward\x18\b \x01(\tR\x06reward\x12\x12\n" +
 	"\x04dark\x18\t \x01(\bR\x04dark\x12\x10\n" +
 	"\x03key\x18\n" +
-	" \x01(\tR\x03key\"t\n" +
+	" \x01(\tR\x03key\"\x88\x01\n" +
 	"\bGateInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x02(\tR\x02id\x12\f\n" +
 	"\x01x\x18\x02 \x02(\x05R\x01x\x12\f\n" +
@@ -5397,7 +5429,8 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x01w\x18\x04 \x02(\x05R\x01w\x12\f\n" +
 	"\x01h\x18\x05 \x02(\x05R\x01h\x12\x0e\n" +
 	"\x02to\x18\x06 \x01(\tR\x02to\x12\x10\n" +
-	"\x03key\x18\a \x01(\tR\x03key\"]\n" +
+	"\x03key\x18\a \x01(\tR\x03key\x12\x12\n" +
+	"\x04bare\x18\b \x01(\bR\x04bare\"]\n" +
 	"\n" +
 	"LevelState\x12'\n" +
 	"\x05rooms\x18\x01 \x03(\v2\x11.btdemo.RoomStateR\x05rooms\x12\x12\n" +
@@ -5451,7 +5484,7 @@ const file_btdemo_proto_rawDesc = "" +
 	" \x01(\x05R\x06shield\x12\x1a\n" +
 	"\bblocking\x18\v \x01(\bR\bblocking\x12\x14\n" +
 	"\x05looks\x18\f \x01(\x05R\x05looks\x12\x14\n" +
-	"\x05guard\x18\r \x01(\x05R\x05guard\"\xb1\x05\n" +
+	"\x05guard\x18\r \x01(\x05R\x05guard\"\x81\x06\n" +
 	"\x05Event\x12%\n" +
 	"\x04kind\x18\x01 \x02(\x0e2\x11.btdemo.EventKindR\x04kind\x12\x10\n" +
 	"\x03src\x18\x02 \x01(\x05R\x03src\x12\x10\n" +
@@ -5486,7 +5519,11 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x04stun\x18\x1d \x01(\x05R\x04stun\x12\x12\n" +
 	"\x04wall\x18\x1e \x01(\bR\x04wall\x12\x15\n" +
 	"\x06hit_at\x18\x1f \x01(\x03R\x05hitAt\x12)\n" +
-	"\x06result\x18  \x01(\x0e2\x11.btdemo.HitResultR\x06result\"O\n" +
+	"\x06result\x18  \x01(\x0e2\x11.btdemo.HitResultR\x06result\x12\x14\n" +
+	"\x05rings\x18! \x01(\x05R\x05rings\x12\x19\n" +
+	"\bring_gap\x18\" \x01(\x05R\aringGap\x12\x1d\n" +
+	"\n" +
+	"ring_speed\x18# \x01(\x05R\tringSpeed\"O\n" +
 	"\x05Attrs\x12\x10\n" +
 	"\x03str\x18\x01 \x01(\x05R\x03str\x12\x10\n" +
 	"\x03agi\x18\x02 \x01(\x05R\x03agi\x12\x10\n" +

@@ -42,6 +42,8 @@ type System struct {
 	attr  *attr.System
 	nav   *nav.Map     // 闪现和投掷物要知道障碍物在哪
 	items *item.System // 玩家打死怪物时掉落装备
+
+	quakes []*quake // 还在往外扩的震地冲击环，见 quake.go
 }
 
 // New 创建战斗系统。
@@ -61,9 +63,10 @@ func New(
 	}
 }
 
-// Tick 结算前摇到点的出招，清除已过期的 Buff，并结算装备的持续回血（regen）。
+// Tick 结算前摇到点的出招和震地的冲击环，清除已过期的 Buff，并结算装备的持续回血（regen）。
 func (sys *System) Tick() {
 	sys.resolveWindups()
+	sys.tickQuakes()
 	sys.state.Ents.Each(func(entity *core.Entity) {
 		if !entity.Dead {
 			sys.UpdateBuffs(entity)
@@ -303,6 +306,8 @@ func (sys *System) CastAimed(
 		}
 	case "rally":
 		sys.rally(entity, skill)
+	case "quake":
+		sys.startQuake(entity, skill)
 	case "self":
 		sys.state.Events.Emit(entity, castEvent(entity, entity, skill))
 		if skill.Heal > 0 {

@@ -282,3 +282,36 @@ templates:
     exp: 5
     poise: 0
     mass: 10000
+  # 第二关首领：食人魔首领·血槌（献祭坑）。三阶段见行为树 blood_hammer，外观用食人魔首领的
+  blood_hammer:
+    name: 食人魔首领·血槌
+    kind: monster
+    faction: monster
+    tree: blood_hammer
+    model: ogre_chief
+    level: 9
+    attrs: { str: 24, agi: 7, int: 4, vit: 60 }
+    speed: 105
+    radius: 28
+    color: "#c0392b"
+    skills: [smash, boss_whirl, enrage, hammer_charge, bone_knock, blood_quake]
+    respawn: 6000
+    exp: 500
+    poise: 220
+    mass: 30000
+  # 献祭坑的石柱：玩家打不动（scenery 阵营），首领冲撞撞上就碎。挡路靠地图 gates 图层里 breakable 是它的门
+  stone_pillar:
+    name: 石柱
+    kind: npc
+    faction: scenery
+    level: 1
+    attrs: { str: 1, agi: 1, int: 1, vit: 1 }
+    speed: 0
+    radius: 22
+    color: "#8a8f9c"
+    skills: []
+    respawn: 86400000
+    exp: 0
+    poise: 100000
+    mass: 1000000
+    charge_break: true

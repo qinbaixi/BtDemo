@@ -11,6 +11,7 @@ const BOSS_RANGE = 620;
 // 每个首领模型的阶段分界（剩余血量的比例），见 bt/trees 里首领的行为树
 const BOSS_PHASES: Record<string, number[]> = {
   wolf_king: [0.6, 0.25],
+  ogre_chief: [0.6, 0.3],   // 血槌（行为树 blood_hammer）
 };
 const GHOST_DELAY = 450;   // 残影停多久再开始缩（毫秒）
 const GHOST_SPEED = 0.6;   // 残影每秒缩掉最大血量的多少

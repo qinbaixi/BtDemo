@@ -325,6 +325,7 @@ message GateInfo {
   required int32 h = 5;
   optional string to = 6;             // RoomInfo.id it leads into (show that room's reward on it)
   optional string key = 7;            // the key it needs (a lock is drawn until LevelState.keys has it)
+  optional bool bare = 8;             // no fence: the thing standing in it is all there is to see (a pillar in the boss pit)
 }
 
 enum RoomPhase {
@@ -472,6 +473,9 @@ message Event {
   optional bool wall = 30;      // DAMAGE: the knockback slammed the target into an obstacle
   optional int64 hit_at = 31;   // CAST with a windup: Frame.time when the hit lands
   optional HitResult result = 32; // DAMAGE: how the hit was received (absent = HIT)
+  optional int32 rings = 33;      // CAST of a quake skill (fx ends with _go): how many shock rings spread out from (x, y)
+  optional int32 ring_gap = 34;   // CAST of a quake skill: ms between rings (the first starts at once)
+  optional int32 ring_speed = 35; // CAST of a quake skill: how fast each ring grows (px / s), up to radius
 }
 
 // HitResult is how a hit was received.

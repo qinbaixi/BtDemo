@@ -198,7 +198,7 @@ type Skill struct {
 	ID       string      `yaml:"-"`
 	Name     string      `yaml:"name"`
 	Desc     string      `yaml:"desc"`     // 选技能面板上的一句话说明
-	Kind     string      `yaml:"kind"`     // target | aoe | self | ally 友方 | dash 位移 | line 直线投掷 | zone 放回血区 | rain 范围落箭 | charge 冲锋 | rally 给周围同伴加 Buff
+	Kind     string      `yaml:"kind"`     // target | aoe | self | ally 友方 | dash 位移 | line 直线投掷 | zone 放回血区 | rain 范围落箭 | charge 冲锋 | rally 给周围同伴加 Buff | quake 震地（冲击环）
 	Range    int         `yaml:"range"`    // 射程（像素）
 	Radius   int         `yaml:"radius"`   // 范围半径（像素）
 	Cooldown Millis      `yaml:"cooldown"` // 冷却毫秒数
@@ -215,7 +215,7 @@ type Skill struct {
 	Color    string      `yaml:"color"`
 	// Weight 是命中的分量：light | medium | heavy（默认 light），决定击退、硬直和打掉的韧性（见 world.yaml 的 hit）。
 	Weight string `yaml:"weight"`
-	// Windup 是前摇毫秒数：出招后过这么久才结算命中，期间可以被打断、可以被躲开。只有 target 和 aoe 技能能有前摇。
+	// Windup 是前摇毫秒数：出招后过这么久才结算命中，期间可以被打断、可以被躲开。只有 target、aoe、charge 和 quake 技能能有前摇。
 	Windup Millis `yaml:"windup"`
 	// Knock、Stun、PoiseDmg 覆盖 weight 档位的击退距离（像素）、硬直毫秒数和打掉的韧性（0 = 用档位的）
 	Knock    int    `yaml:"knock"`
@@ -223,6 +223,11 @@ type Skill struct {
 	PoiseDmg int    `yaml:"poise_dmg"`
 	// SelfStun 只有 charge 用：冲锋撞到墙、石头这些障碍物时，自己晕多少毫秒（玩家的输出窗口）
 	SelfStun Millis `yaml:"self_stun"`
+	// Rings、RingGap、RingSpeed 只有 quake 用：前摇结束时从脚下放出 Rings 圈冲击环，
+	// 每隔 RingGap 毫秒放一圈，每圈以 RingSpeed 像素 / 秒往外扩，扩到 Radius 消失；环扫过谁就打谁一下
+	Rings     int    `yaml:"rings"`
+	RingGap   Millis `yaml:"ring_gap"`
+	RingSpeed int    `yaml:"ring_speed"`
 }
 
 // Template 是 config/monsters.yaml 中的怪物或 NPC 模板。
@@ -257,6 +262,9 @@ type Template struct {
 	BreakStun Millis `yaml:"break_stun"`
 	// Hits 是打几下就倒（不看伤害，0 = 按血量算）：灵火盆挨一下就点着。
 	Hits int `yaml:"hits"`
+	// ChargeBreak：被冲锋（kind: charge）撞上就碎（献祭坑的石柱）。和地图 gates 图层里 breakable 是它的门配合：
+	// 门挡路，柱子碎了门就开
+	ChargeBreak bool `yaml:"charge_break"`
 }
 
 // Spawn 在 (X, Y) 周围放置 Count 份模板副本。
@@ -411,7 +419,7 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 	for id, skill := range cfg.Skills {
 		skill.ID = id
 		switch skill.Kind {
-		case "target", "aoe", "self", "ally", "dash", "line", "zone", "rain", "charge", "rally":
+		case "target", "aoe", "self", "ally", "dash", "line", "zone", "rain", "charge", "rally", "quake":
 		default:
 			return fmt.Errorf("skills.yaml: skill %s has unknown kind %q", id, skill.Kind)
 		}
@@ -423,6 +431,13 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		chargeIncomplete := skill.Range <= 0 || skill.Distance <= 0 || skill.Windup <= 0
 		if skill.Kind == "charge" && chargeIncomplete {
 			return fmt.Errorf("skills.yaml: charge skill %s needs a range, distance and windup", id)
+		}
+		quakeIncomplete := skill.Radius <= 0 || skill.Rings <= 0 || skill.RingSpeed <= 0 || skill.Windup <= 0
+		if skill.Kind == "quake" && quakeIncomplete {
+			return fmt.Errorf(
+				"skills.yaml: quake skill %s needs a radius, rings, ring_speed and windup",
+				id,
+			)
 		}
 		if skill.Kind == "rally" && (skill.Radius <= 0 || skill.Buff == nil) {
 			return fmt.Errorf("skills.yaml: rally skill %s needs a radius and a buff", id)

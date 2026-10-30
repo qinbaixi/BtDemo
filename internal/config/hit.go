@@ -33,10 +33,10 @@ var defaultHitWeights = map[string]HitWeight{
 	WeightHeavy:  {Knock: 50, Stun: 450, Poise: 45, Guard: 40},
 }
 
-// Ranged 报告技能是不是远程的（投射物、直线投掷、箭雨）：远程能被格挡，但不能完美格挡弹开。
+// Ranged 报告技能是不是远程的（投射物、直线投掷、箭雨、震地的冲击环）：远程能被格挡，但不能完美格挡弹开。
 func (skill *Skill) Ranged() bool {
 	switch skill.Kind {
-	case "line", "rain":
+	case "line", "rain", "quake":
 		return true
 	}
 	switch skill.FX {
@@ -55,7 +55,7 @@ func (skill *Skill) NeedsSight() bool {
 
 // Smashes 报告技能砸不砸得碎骨堆（模板 heavy_only 的怪）：重击，或者范围技能（旋风斩、箭雨）。
 func (skill *Skill) Smashes() bool {
-	return skill.Weight == WeightHeavy || skill.Kind == "aoe" || skill.Kind == "rain"
+	return skill.Weight == WeightHeavy || skill.Kind == "aoe" || skill.Kind == "rain" || skill.Kind == "quake"
 }
 
 // Hit 返回技能命中的效果：weight 档位的默认值，被技能自己的 knock / stun / poise 覆盖。
@@ -113,10 +113,11 @@ func (cfg *Config) validateHits() error {
 		if skill.Windup < 0 || skill.Knock < 0 || skill.Stun < 0 || skill.PoiseDmg < 0 {
 			return fmt.Errorf("skills.yaml: skill %s: windup, knock, stun and poise_dmg must be >= 0", id)
 		}
-		// 前摇只给单体、自身范围技能和冲锋：投掷、位移、箭雨的轨迹在出手时就要算好
-		if skill.Windup > 0 && skill.Kind != "target" && skill.Kind != "aoe" && skill.Kind != "charge" {
+		// 前摇只给单体、自身范围技能、冲锋和震地：投掷、位移、箭雨的轨迹在出手时就要算好
+		if skill.Windup > 0 && skill.Kind != "target" && skill.Kind != "aoe" && skill.Kind != "charge" &&
+			skill.Kind != "quake" {
 			return fmt.Errorf(
-				"skills.yaml: skill %s has a windup but kind %q (only target, aoe and charge)",
+				"skills.yaml: skill %s has a windup but kind %q (only target, aoe, charge and quake)",
 				id,
 				skill.Kind,
 			)

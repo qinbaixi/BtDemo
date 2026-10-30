@@ -27,7 +27,7 @@ const TAU = Math.PI * 2;
 const PI = Math.PI;
 const OUTLINE = '#0b0710';
 
-export const MODELS = ['knight', 'ranger', 'slime', 'wolf', 'alpha_wolf', 'wolf_king', 'skeleton_archer', 'skeleton_soldier', 'skeleton_knight', 'bone_pile', 'bone_statue', 'brazier', 'cracked_wall', 'ogre_chief', 'guard', 'villager', 'hunter', 'bramble', 'wolf_pup', 'ember', 'sprout'];
+export const MODELS = ['knight', 'ranger', 'slime', 'wolf', 'alpha_wolf', 'wolf_king', 'skeleton_archer', 'skeleton_soldier', 'skeleton_knight', 'bone_pile', 'bone_statue', 'brazier', 'cracked_wall', 'stone_pillar', 'ogre_chief', 'guard', 'villager', 'hunter', 'bramble', 'wolf_pup', 'ember', 'sprout'];
 
 /* ------------------------------ colour ------------------------------ */
 
@@ -3392,6 +3392,42 @@ function drawCrackedWall(ctx, q) {
   if (hurt > 0) line(ctx, [-3, -26, -11, -22, -14, -14], OUTLINE, 1.6);
 }
 
+// drawStonePillar 是献祭坑的石柱（首领冲撞撞上就碎）：和地图上的石柱一个样子，柱身上缠着褪色的红布；
+// 撞碎以后剩半截断柱和一地碎石。
+function drawStonePillar(ctx, q) {
+  const stone = '#d8ccb0';
+  const dark = '#9d907a';
+  ctx.scale(LX, 1);
+  flat(ctx, (c) => pEll(c, 0, 0, 16, 5), 'rgba(0,0,0,0.35)');
+  cel(ctx, (c) => c.rect(-13, -7, 26, 7), '#b9ac90', { sd: 1.4, lw: 1.3 });
+  cel(ctx, (c) => c.rect(-10.5, -11, 21, 5), '#cfc2a4', { sd: 1.2, lw: 1.2 });
+  if (q.dead >= 0) {
+    // 断柱：参差的断口，脚下一圈碎石（倒下那一下碎石往外散开）
+    const d = ease(clamp01(q.dead / 0.4));
+    cel(ctx, (c) => {
+      c.moveTo(-8.5, -11); c.lineTo(-8, -34); c.lineTo(-4, -40); c.lineTo(-1, -33); c.lineTo(3, -44); c.lineTo(8, -36); c.lineTo(8.5, -11);
+      c.closePath();
+    }, stone, { sd: 1.6, lw: 1.5 });
+    flat(ctx, (c) => c.rect(3, -34, 4.5, 22), dark);
+    for (const [x, y, r] of [[-17, -2, 5], [15, -3, 6], [-9, 3, 4], [9, 4, 4.5], [22, 1, 3.5], [-22, 2, 3]] as [number, number, number][]) {
+      cel(ctx, (c) => pEll(c, x * (0.6 + 0.4 * d), y, r, r * 0.65), '#b9ac90', { sd: 1.2, lw: 1.1 });
+    }
+    return;
+  }
+  const H = 82;
+  const shiver = q.hit >= 0 && q.hit < 1 ? Math.sin(q.hit * 40) * (1 - q.hit) * 1.5 : 0;
+  ctx.translate(shiver, 0);
+  cel(ctx, (c) => { c.moveTo(-8.5, -11); c.lineTo(-7.8, -H); c.lineTo(7.8, -H); c.lineTo(8.5, -11); c.closePath(); }, stone, { sd: 1.8, lw: 1.6 });
+  flat(ctx, (c) => c.rect(3, -H + 4, 4.6, H - 15), dark);
+  for (const x of [-4, -0.5, 2.8]) line(ctx, [x, -13, x, -H + 5], 'rgba(70,55,40,0.5)', 0.9);
+  // 柱头
+  cel(ctx, (c) => c.rect(-11.5, -H - 7, 23, 7), '#cfc2a4', { sd: 1.2, lw: 1.3 });
+  cel(ctx, (c) => { pEll(c, -10.5, -H - 3.5, 2.8, 2.8); pEll(c, 10.5, -H - 3.5, 2.8, 2.8); }, '#b9ac90', { sd: 0.8, lw: 1.1 });
+  // 缠着的旧红布和一道裂纹
+  cel(ctx, (c) => { c.moveTo(-8, -52); c.lineTo(8, -58); c.lineTo(8, -50); c.lineTo(-8, -44); c.closePath(); }, '#8a2a24', { sd: 1, lw: 1.1 });
+  line(ctx, [-5, -30, -2, -26, -4, -21, 0, -16], 'rgba(40,30,24,0.8)', 1);
+}
+
 // SPECS: how each model is drawn and how it falls when it dies (fall is the
 // direction it topples: -1 backward, +1 forward, 0 handles death itself).
 const SPECS = {
@@ -3412,6 +3448,7 @@ const SPECS = {
   bone_statue: { draw: drawBoneStatue, fall: 0 },
   brazier: { draw: drawBrazier, fall: 0, keep: true },
   cracked_wall: { draw: drawCrackedWall, fall: 0 },
+  stone_pillar: { draw: drawStonePillar, fall: 0, keep: true },
   ogre_chief: { draw: drawOgre, fall: 1 },
   wolf_pup: { draw: drawWolfPup, fall: 0 },
   ember: { draw: drawEmber, fall: 0 },
