@@ -53,6 +53,11 @@ func (skill *Skill) NeedsSight() bool {
 	return skill.Kind == "target" && skill.Ranged()
 }
 
+// Smashes 报告技能砸不砸得碎骨堆（模板 heavy_only 的怪）：重击，或者范围技能（旋风斩、箭雨）。
+func (skill *Skill) Smashes() bool {
+	return skill.Weight == WeightHeavy || skill.Kind == "aoe" || skill.Kind == "rain"
+}
+
 // Hit 返回技能命中的效果：weight 档位的默认值，被技能自己的 knock / stun / poise 覆盖。
 func (rules *HitRules) Hit(skill *Skill) HitWeight {
 	hit := rules.Weights[skill.Weight]

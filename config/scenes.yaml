@@ -33,7 +33,7 @@ scenes:
     spawn: { x: 170, y: 870, spread: 40 }
     spawns:
       - { template: skeleton_archer, x: 480, y: 800,  count: 4, spread: 200 }
-      - { template: ogre_chief,      x: 930, y: 1300, count: 1, spread: 0 }
+      - { template: skeleton_knight, x: 930, y: 1300, count: 1, spread: 0 }
     heal_zones:
       - { name: 守夜人之泉, x: 170, y: 870, radius: 90, heal: 500, interval: 1000, faction: player, look: spring, color: "#7dffc4" }
 

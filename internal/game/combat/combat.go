@@ -532,7 +532,7 @@ func (sys *System) damage(
 	if proc != "" {
 		event.Proc = proto.String(proc)
 	}
-	if dst.Invulnerable() {
+	if dst.Invulnerable() || sys.shrugsOff(dst, skillID, proc) {
 		event.Value = core.I32(0)
 		event.Immune = proto.Bool(true)
 		event.Result = pb.HitResult_IMMUNE.Enum()
@@ -543,7 +543,7 @@ func (sys *System) damage(
 		src.AmbushUntil = 0 // 伏击的必暴用掉了
 	}
 	result := damageResult{event: event, outcome: pb.HitResult_HIT}
-	if dst.Blocking && sys.shieldCovers(dst, src) {
+	if dst.Blocking && sys.ShieldCovers(dst, src) {
 		result.outcome = sys.guard(dst, sys.state.Cfg.Skills[skillID], proc)
 		if result.outcome == pb.HitResult_PARRY {
 			result.blocked = dmg // 完美格挡：一点都不掉
@@ -570,6 +570,16 @@ func (sys *System) damage(
 		sys.Kill(dst, src)
 	}
 	return result
+}
+
+// shrugsOff 报告 dst 是不是只怕重击（骨堆）而这一下不够重：不是重击、不是范围技能、或者是装备特效打的。
+// 这样的一下按免疫处理，客户端在骨堆身上飘「要重击」。
+func (sys *System) shrugsOff(dst *core.Entity, skillID string, proc string) bool {
+	if dst.Tmpl == nil || !dst.Tmpl.HeavyOnly {
+		return false
+	}
+	skill := sys.state.Cfg.Skills[skillID]
+	return proc != "" || skill == nil || !skill.Smashes()
 }
 
 // absorb 用 entity 身上的护盾吸收至多 dmg 点伤害，返回吸收了多少；吸收完的护盾 Buff 被移除。

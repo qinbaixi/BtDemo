@@ -24,6 +24,8 @@ type System struct {
 	labels map[*bt.Node]string        // 追踪标签，首次使用时构建
 	defs   map[*bt.Tree]*pb.AiTreeDef // 发给调试面板的树结构，首次使用时构建
 	summon SummonFunc                 // summon 节点用的召唤，由场景设置；nil 时召唤失败
+	// reassemble 节点用的骨堆重组，由场景设置；nil 时重组失败
+	reassemble ReassembleFunc
 }
 
 // New 加载所有导出的行为树，检查每棵树用到的节点类型都有对应的处理器，

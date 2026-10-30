@@ -29,9 +29,13 @@ const (
 	lostTargetFactor               = 2.0  // 距离超过 Range*lostTargetFactor 的目标会被丢弃
 )
 
-// step 返回本 tick 内 agent 以给定速度倍率可以移动的距离。
+// step 返回本 tick 内 agent 以给定速度倍率可以移动的距离；举着盾时和玩家一样走得慢。
 func (agent *Agent) step(mult float64) float64 {
-	return float64(agent.Entity.Attr.Speed) * mult * agent.sys.state.Clock.DtSeconds()
+	speed := float64(agent.Entity.Attr.Speed) * mult * agent.sys.state.Clock.DtSeconds()
+	if agent.Entity.Blocking {
+		speed = speed * float64(agent.sys.state.Cfg.World.Player.Block.Speed) / config.OneHundredPercent
+	}
+	return speed
 }
 
 // seconds 把游戏时钟的毫秒换成行为树用的秒（行为树运行时和编辑器里的参数都按秒算）。
@@ -220,6 +224,7 @@ func (sys *System) register() {
 	sys.registerPet()
 	sys.registerPack()
 	sys.registerSight()
+	sys.registerCrypt()
 
 	reg.Condition("has_target", func(ctx *bt.Ctx) bool {
 		target := ctx.Agent.(*Agent).target()

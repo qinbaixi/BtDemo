@@ -8,17 +8,20 @@ import (
 // 随附的 pets.yaml 和 world.yaml 的 pet 段能通过校验，内容和设计一致。
 func TestShippedPets(t *testing.T) {
 	cfg, err := Load("../../config", map[string]bool{
-		"monster_melee":  true,
-		"monster_ranged": true,
-		"monster_boss":   true,
-		"monster_pack":   true,
-		"alpha_wolf":     true,
-		"wolf_king":      true,
-		"npc_guard":      true,
-		"npc_villager":   true,
-		"pet_melee":      true,
-		"pet_caster":     true,
-		"pet_healer":     true,
+		"monster_melee":    true,
+		"monster_ranged":   true,
+		"monster_boss":     true,
+		"monster_pack":     true,
+		"alpha_wolf":       true,
+		"wolf_king":        true,
+		"skeleton_soldier": true,
+		"skeleton_knight":  true,
+		"bone_pile":        true,
+		"npc_guard":        true,
+		"npc_villager":     true,
+		"pet_melee":        true,
+		"pet_caster":       true,
+		"pet_healer":       true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -51,17 +54,20 @@ func TestPetValidation(t *testing.T) {
 	}
 	for name, test := range cases {
 		cfg, err := Load("../../config", map[string]bool{
-			"monster_melee":  true,
-			"monster_ranged": true,
-			"monster_boss":   true,
-			"monster_pack":   true,
-			"alpha_wolf":     true,
-			"wolf_king":      true,
-			"npc_guard":      true,
-			"npc_villager":   true,
-			"pet_melee":      true,
-			"pet_caster":     true,
-			"pet_healer":     true,
+			"monster_melee":    true,
+			"monster_ranged":   true,
+			"monster_boss":     true,
+			"monster_pack":     true,
+			"alpha_wolf":       true,
+			"wolf_king":        true,
+			"skeleton_soldier": true,
+			"skeleton_knight":  true,
+			"bone_pile":        true,
+			"npc_guard":        true,
+			"npc_villager":     true,
+			"pet_melee":        true,
+			"pet_caster":       true,
+			"pet_healer":       true,
 		})
 		if err != nil {
 			t.Fatal(err)

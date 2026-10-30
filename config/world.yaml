@@ -115,7 +115,7 @@ player:
 #   class_bias: 只从击杀者职业能用的物品（本职业或通用）里抽的概率（万分比），其余时候从所有物品里抽
 loot:
   chance: 3000
-  bosses: { ogre_chief: 10000, wolf_king: 10000, alpha_wolf: 5000 }
+  bosses: { ogre_chief: 10000, wolf_king: 10000, alpha_wolf: 5000, skeleton_knight: 10000 }
   rarity: { common: 6, rare: 3, epic: 1 }
   class_bias: 7000
 

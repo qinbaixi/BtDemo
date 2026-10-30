@@ -245,6 +245,16 @@ type Template struct {
 	Poise int `yaml:"poise"`
 	// Mass 是重量（万分比，默认 10000 = 1 倍）：击退距离 × 10000 / Mass。
 	Mass BasisPoints `yaml:"mass"`
+	// Pile 是副本房间里的怪死后留下的骨堆模板（骷髅兵碎成骨堆），尸体移除时在原地刷出来。野外的怪照常复活，不留骨堆。
+	Pile string `yaml:"pile"`
+	// Revive 是骨堆重组成的模板：骨堆的行为树（reassemble 节点）到点把自己换成它。
+	Revive string `yaml:"revive"`
+	// HeavyOnly：只有重击（weight: heavy）和范围技能（aoe、rain）打得动，别的打上去是免疫（骨堆）。
+	HeavyOnly bool `yaml:"heavy_only"`
+	// Guard 是怪物举盾时的架势上限（0 = 和玩家一样，world.yaml 的 player.block.guard）；
+	// BreakStun 是架势被打空后的硬直毫秒数（0 = 和玩家一样）。精英骷髅骑士用。
+	Guard     int    `yaml:"guard"`
+	BreakStun Millis `yaml:"break_stun"`
 }
 
 // Spawn 在 (X, Y) 周围放置 Count 份模板副本。
@@ -523,6 +533,14 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 				id,
 				template.Tree,
 			)
+		}
+		for field, other := range map[string]string{"pile": template.Pile, "revive": template.Revive} {
+			if other != "" && cfg.Templates[other] == nil {
+				return fmt.Errorf("monsters.yaml: template %s: %s %q is not a template", id, field, other)
+			}
+		}
+		if template.Guard < 0 || template.BreakStun < 0 {
+			return fmt.Errorf("monsters.yaml: template %s: guard and break_stun must be >= 0", id)
 		}
 		if _, ok := world.Hostile[template.Faction]; !ok {
 			return fmt.Errorf(

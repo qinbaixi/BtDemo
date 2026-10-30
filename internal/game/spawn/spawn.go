@@ -20,6 +20,9 @@ type System struct {
 	grid  *aoi.Grid
 	move  *move.System
 	aiSys *ai.System
+
+	// Adopt 在副本房间里冒出新怪（骷髅兵倒下变成的骨堆）时调用，由关卡系统设置，把它算进房间。
+	Adopt func(entity *core.Entity)
 }
 
 // New 创建生成系统。
@@ -132,6 +135,7 @@ func (sys *System) skills(ids []string) []*config.Skill {
 }
 
 // Tick 复活复活时间已到的死亡实体（宠物由 pet 包复活）；副本房间刷出来的怪不复活，到时间就移除尸体。
+// 模板配了 pile 的（骷髅兵），尸体移走时在原地留下一堆骨头，还算在同一个房间里。
 func (sys *System) Tick() {
 	now := sys.state.Now()
 	var corpses []*core.Entity
@@ -147,6 +151,22 @@ func (sys *System) Tick() {
 	})
 	for _, corpse := range corpses {
 		sys.Remove(corpse)
+		if corpse.Tmpl != nil && corpse.Tmpl.Pile != "" {
+			sys.leavePile(corpse)
+		}
+	}
+}
+
+// leavePile 在 corpse 倒下的地方放一堆骨头（模板 corpse.Tmpl.Pile），和它同一个房间。
+func (sys *System) leavePile(corpse *core.Entity) {
+	pile := sys.Template(sys.state.Cfg.Templates[corpse.Tmpl.Pile], corpse.X, corpse.Y)
+	pile.Room = corpse.Room
+	sys.state.Events.Emit(
+		pile,
+		&core.Event{Kind: pb.EventKind_RESPAWN.Enum(), Id: core.I32(pile.ID)},
+	)
+	if sys.Adopt != nil {
+		sys.Adopt(pile)
 	}
 }
 

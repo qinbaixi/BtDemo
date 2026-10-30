@@ -68,8 +68,8 @@ func entityDelta(entity *core.Entity, dirty core.Dirty) *pb.EntityState {
 	if dirty&core.DirtyLooks != 0 {
 		delta.Looks = core.I32(int(entity.Looks()))
 	}
-	// 只有玩家会格挡，怪物和 NPC 不发架势
-	if dirty&core.DirtyGuard != 0 && entity.Kind == core.KindPlayer {
+	// 玩家和配了架势（guard）的怪会格挡，其余的不发架势
+	if dirty&core.DirtyGuard != 0 && (entity.Kind == core.KindPlayer || entity.Tmpl != nil && entity.Tmpl.Guard > 0) {
 		delta.Guard = core.I32(core.GuardShown(entity.GuardSpent))
 	}
 	return delta

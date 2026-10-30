@@ -88,6 +88,11 @@ skills:
   guard_hit:  { weight: medium, windup: 300, name: 长枪突刺, kind: target, range: 70, cooldown: 1000, damage: physical, ratio: 11000, base: 5, fx: melee, color: "#9ad0ff" }
   guard_heal: { name: 包扎,   kind: self,   cooldown: 12000, heal: 4000, fx: heal, color: "#7dff9b" }
 
+  # 第二关「亡者地穴」的骷髅兵和精英骷髅骑士（出手前要先放下盾）
+  bone_slash:    { weight: light, windup: 350, name: 骨刃,   kind: target, range: 60, cooldown: 1400, damage: physical, ratio: 10000, base: 3, fx: melee, color: "#e8e3d0" }
+  knight_cleave: { weight: medium, windup: 550, name: 劈砍,  kind: target, range: 72, cooldown: 1800, damage: physical, ratio: 13000, base: 6, fx: melee, color: "#cfd8e6" }
+  knight_bash:   { weight: heavy, windup: 750, name: 盾击,   kind: target, range: 70, cooldown: 6000, damage: physical, ratio: 15000, base: 8, knock: 60, fx: melee, color: "#ffd27a" }
+
   # 第一关「黑松林道」的头狼和灰鬃狼王
   #   charge 冲锋：前摇 windup 毫秒（地上画预警带），然后朝目标方向冲 distance 像素；撞到第一个敌人就停下打它，
   #     没撞到人却撞上墙、石头就自己晕 self_stun 毫秒。range 是能对多远（圆心距离）的目标出招

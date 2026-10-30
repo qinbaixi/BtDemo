@@ -14,9 +14,9 @@ import (
 // 这个文件是格挡 2.0：盾只挡正面；挡一下扣架势，架势扣空就破防；
 // 刚举盾的一小段时间里挡住近战是完美格挡，攻击者被弹开。参数在 world.yaml 的 player.block。
 
-// shieldFacing 是 entity 的盾朝着的方向：选了敌对目标时朝着目标（和客户端格挡时转身的规则一样），
+// ShieldFacing 是 entity 的盾朝着的方向：选了敌对目标时朝着目标（和客户端格挡时转身的规则一样），
 // 否则朝着举盾时面向的那一侧。
-func (sys *System) shieldFacing(entity *core.Entity) nav.Vec {
+func (sys *System) ShieldFacing(entity *core.Entity) nav.Vec {
 	target := sys.state.Ents.Get(entity.Target)
 	if target.Alive() && sys.state.Hostile(entity, target) {
 		if direction, ok := unit(target.X-entity.X, target.Y-entity.Y); ok {
@@ -29,14 +29,14 @@ func (sys *System) shieldFacing(entity *core.Entity) nav.Vec {
 	return nav.Vec{X: 1}
 }
 
-// shieldCovers 报告举着盾的 dst 挡不挡得住从 src 那边来的攻击：在盾正面 block.arc 度以内才挡得住。
+// ShieldCovers 报告举着盾的 dst 挡不挡得住从 src 那边来的攻击：在盾正面 block.arc 度以内才挡得住。
 // 贴在一起分不出方向时算挡住。
-func (sys *System) shieldCovers(dst, src *core.Entity) bool {
+func (sys *System) ShieldCovers(dst, src *core.Entity) bool {
 	toward, ok := unit(src.X-dst.X, src.Y-dst.Y)
 	if !ok {
 		return true
 	}
-	facing := sys.shieldFacing(dst)
+	facing := sys.ShieldFacing(dst)
 	halfArc := float64(sys.state.Cfg.World.Player.Block.Arc) / 2 * math.Pi / 180
 	return toward.X*facing.X+toward.Y*facing.Y >= math.Cos(halfArc)-1e-9
 }
@@ -54,9 +54,8 @@ func (sys *System) guard(dst *core.Entity, skill *config.Skill, proc string) pb.
 	if skill != nil && proc == "" {
 		weight = skill.Weight
 	}
-	block := &sys.state.Cfg.World.Player.Block
 	// 扣掉的架势换算成上限的万分比
-	cost := sys.state.Cfg.World.Hit.Weights[weight].Guard * config.OneHundredPercent / max(1, block.Guard)
+	cost := sys.state.Cfg.World.Hit.Weights[weight].Guard * config.OneHundredPercent / sys.guardMax(dst)
 	dst.GuardHitAt = now
 	dst.SetGuardSpent(dst.GuardSpent + cost)
 	if dst.GuardSpent >= config.OneHundredPercent {
@@ -87,6 +86,9 @@ func (sys *System) breakGuard(entity, attacker *core.Entity, event *core.Event) 
 	entity.PoiseTaken = 0
 	_, mass := sys.poise(entity)
 	stun := block.BreakStun
+	if entity.Tmpl != nil && entity.Tmpl.BreakStun > 0 {
+		stun = entity.Tmpl.BreakStun // 精英怪破防后硬直更久，是给玩家的输出窗口
+	}
 	entity.GuardBroken = true
 	if sys.push(entity, attacker, knockDistance(block.BreakKnock, mass), event) {
 		event.Wall = proto.Bool(true)
@@ -110,7 +112,7 @@ func (sys *System) regenGuard(entity *core.Entity) {
 		rate = block.GuardRegenHeld
 	}
 	numerator := int64(rate)*config.OneHundredPercent*sys.state.Clock.Dt + entity.GuardCarry
-	denominator := int64(max(1, block.Guard)) * 1000
+	denominator := int64(sys.guardMax(entity)) * 1000
 	entity.GuardCarry = numerator % denominator
 	entity.SetGuardSpent(entity.GuardSpent - int(numerator/denominator))
 	if entity.GuardSpent == 0 {
@@ -119,6 +121,14 @@ func (sys *System) regenGuard(entity *core.Entity) {
 	if entity.GuardBroken && entity.GuardSpent <= GuardRecovered {
 		entity.GuardBroken = false
 	}
+}
+
+// guardMax 是 entity 的架势上限：模板配了 guard 的怪物用自己的，其余和玩家一样。
+func (sys *System) guardMax(entity *core.Entity) int {
+	if entity.Tmpl != nil && entity.Tmpl.Guard > 0 {
+		return entity.Tmpl.Guard
+	}
+	return max(1, sys.state.Cfg.World.Player.Block.Guard)
 }
 
 // GuardRecovered：破防后扣掉的架势（万分比）回到这么多以下才能再举盾（客户端 input.ts 用同样的规则）

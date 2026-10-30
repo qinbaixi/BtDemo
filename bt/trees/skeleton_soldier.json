@@ -1,0 +1,192 @@
+{
+  "type": "Selector",
+  "label": "骷髅兵",
+  "comment": "持盾逼近；目标举盾正对着我就绕到侧面；技能好了才放盾出手",
+  "services": [
+    {
+      "type": "UpdateTarget",
+      "label": "刷新仇恨",
+      "properties": [
+        {
+          "name": "Range",
+          "value": 260
+        }
+      ],
+      "timeBetweenTicks": 0.5
+    }
+  ],
+  "childNodes": [
+    {
+      "type": "Sequence",
+      "label": "脱战回家",
+      "decorators": [
+        {
+          "type": "FarFromHome",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 450
+            }
+          ]
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "LowerShield"
+        },
+        {
+          "type": "ClearTarget"
+        },
+        {
+          "type": "ReturnHome"
+        }
+      ]
+    },
+    {
+      "type": "Selector",
+      "label": "战斗",
+      "decorators": [
+        {
+          "type": "HasTarget"
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "Sequence",
+          "label": "绕到盾侧面",
+          "decorators": [
+            {
+              "type": "FacingShield"
+            },
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 140
+                }
+              ]
+            },
+            {
+              "type": "Cooldown",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 4
+                }
+              ]
+            }
+          ],
+          "childNodes": [
+            {
+              "type": "RaiseShield"
+            },
+            {
+              "type": "FlankShield",
+              "properties": [
+                {
+                  "name": "Distance",
+                  "value": 12
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Sequence",
+          "label": "放盾出手",
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 60
+                }
+              ]
+            },
+            {
+              "type": "SkillReady",
+              "properties": [
+                {
+                  "name": "Slot",
+                  "value": 1
+                }
+              ]
+            }
+          ],
+          "childNodes": [
+            {
+              "type": "LowerShield"
+            },
+            {
+              "type": "CastSkill",
+              "label": "骨刃",
+              "properties": [
+                {
+                  "name": "Slot",
+                  "value": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Sequence",
+          "label": "举盾逼近",
+          "childNodes": [
+            {
+              "type": "RaiseShield"
+            },
+            {
+              "type": "ChaseTarget",
+              "properties": [
+                {
+                  "name": "StopRange",
+                  "value": 40
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "ChaseTarget",
+          "label": "追击（破防了举不起盾）",
+          "properties": [
+            {
+              "name": "StopRange",
+              "value": 40
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "闲逛",
+      "childNodes": [
+        {
+          "type": "LowerShield"
+        },
+        {
+          "type": "Wander",
+          "properties": [
+            {
+              "name": "Radius",
+              "value": 80
+            }
+          ]
+        },
+        {
+          "type": "Wait",
+          "properties": [
+            {
+              "name": "Seconds",
+              "value": 2
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

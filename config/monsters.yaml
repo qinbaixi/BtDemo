@@ -7,6 +7,10 @@
 #   faction: 阵营，敌对关系见 world.yaml 的 hostile
 #   poise:  韧性，挨打时按技能的分量被打掉，打空了才会被击退和硬直（0 = 每下都会）；2 秒没挨打回满
 #   mass:   重量（万分比，默认 10000 = 1 倍），击退距离 × 10000 / mass
+#   pile:   副本房间里倒下后尸体变成的模板（骷髅兵 → 骨堆），还算在同一个房间里
+#   revive: 骨堆重新站起来时变成的模板（行为树的 Reassemble 节点）
+#   heavy_only: 只怕重击：只有 heavy 分量的技能和范围技能（aoe、rain）打得动，别的一下按免疫算
+#   guard / break_stun: 举盾的怪的架势上限和破防硬直毫秒数（不写和玩家一样，见 world.yaml 的 player.block）
 templates:
   slime:
     name: 史莱姆
@@ -146,6 +150,59 @@ templates:
     exp: 0
     poise: 20
     mass: 12000
+  # 第二关「亡者地穴」：骷髅兵持盾，正面会格挡；在副本房间里倒下变成骨堆，6 秒后站起来，除非被重击或范围技能砸碎
+  skeleton_soldier:
+    name: 骷髅兵
+    kind: monster
+    faction: monster
+    tree: skeleton_soldier
+    level: 5
+    attrs: { str: 9, agi: 6, int: 1, vit: 9 }
+    speed: 90
+    radius: 15
+    color: "#e8e3d0"
+    skills: [bone_slash]
+    respawn: 1200
+    exp: 40
+    poise: 20
+    mass: 10000
+    guard: 60
+    pile: bone_pile
+  bone_pile:
+    name: 骨堆
+    kind: monster
+    faction: monster
+    tree: bone_pile
+    level: 5
+    attrs: { str: 1, agi: 1, int: 1, vit: 3 }
+    speed: 0
+    radius: 16
+    color: "#d8d2bc"
+    skills: []
+    respawn: 600
+    exp: 10
+    poise: 100000
+    mass: 1000000
+    heavy_only: true
+    revive: skeleton_soldier
+  # 精英骷髅骑士：大一号的骷髅兵，架势很厚，打空了硬直 2 秒（墓穴守卫房和野外墓园营地）
+  skeleton_knight:
+    name: 骷髅骑士
+    kind: monster
+    faction: monster
+    tree: skeleton_knight
+    level: 8
+    attrs: { str: 18, agi: 8, int: 2, vit: 34 }
+    speed: 95
+    radius: 22
+    color: "#cfd8e6"
+    skills: [knight_cleave, knight_bash]
+    respawn: 20000
+    exp: 280
+    poise: 140
+    mass: 22000
+    guard: 200
+    break_stun: 2000
   # 挡住秘密房入口的荆棘丛：不会动，砍掉门才开（地图 gates 图层的 breakable）
   bramble:
     name: 荆棘丛

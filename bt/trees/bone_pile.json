@@ -1,0 +1,27 @@
+{
+  "type": "Sequence",
+  "label": "骨堆",
+  "comment": "等 6 秒重新站起来；期间被重击或范围技能砸碎就没了",
+  "childNodes": [
+    {
+      "type": "Wait",
+      "label": "等骨头拼回去",
+      "properties": [
+        {
+          "name": "Seconds",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "type": "Reassemble",
+      "label": "站起来",
+      "properties": [
+        {
+          "name": "Range",
+          "value": 400
+        }
+      ]
+    }
+  ]
+}

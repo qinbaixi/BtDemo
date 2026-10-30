@@ -120,6 +120,7 @@ func New(
 		byID:   map[string]*room{},
 	}
 	state.Level = core.Level{}
+	spawnSys.Adopt = sys.adopt
 	if scene == nil || !scene.Dungeon() {
 		return sys
 	}
@@ -278,7 +279,7 @@ func (sys *System) fight(current *room, alive []*core.Entity, now config.Millis)
 	}
 	monstersLeft := 0
 	for _, monster := range current.monsters {
-		if monster.Alive() {
+		if sys.standing(monster) {
 			monstersLeft++
 		}
 	}
@@ -303,7 +304,6 @@ func (sys *System) fight(current *room, alive []*core.Entity, now config.Millis)
 // 叫来的怪和 owner 同一个房间（算进房间这一波，死光了房间才清完），一出来就盯上 owner 的目标。
 func (sys *System) Summon(owner *core.Entity, template string, count int, radius float64) int {
 	cfg := sys.state.Cfg.Templates[template]
-	current := sys.byID[owner.Room]
 	made := 0
 	for range count {
 		x, y, ok := sys.ringSpot(owner, radius)
@@ -313,9 +313,7 @@ func (sys *System) Summon(owner *core.Entity, template string, count int, radius
 		monster := sys.spawn.Template(cfg, x, y)
 		monster.Room = owner.Room
 		monster.SetTarget(owner.Target)
-		if current != nil {
-			current.monsters = append(current.monsters, monster)
-		}
+		sys.adopt(monster)
 		sys.state.Events.Emit(
 			monster,
 			&core.Event{Kind: pb.EventKind_RESPAWN.Enum(), Id: core.I32(monster.ID)},
@@ -323,6 +321,41 @@ func (sys *System) Summon(owner *core.Entity, template string, count int, radius
 		made++
 	}
 	return made
+}
+
+// Reassemble 让骨堆 pile 重新站起来：原地刷出模板 pile.Tmpl.Revive 的怪（同一个房间，盯着 target），
+// 骨堆本身塌掉，下个 tick 由 spawn 移走。返回站起来的怪；模板没配 revive 时返回 nil。
+func (sys *System) Reassemble(pile *core.Entity, target int) *core.Entity {
+	if pile.Tmpl == nil || pile.Tmpl.Revive == "" || !pile.Alive() {
+		return nil
+	}
+	risen := sys.spawn.Template(sys.state.Cfg.Templates[pile.Tmpl.Revive], pile.X, pile.Y)
+	risen.Room = pile.Room
+	risen.SetTarget(target)
+	sys.adopt(risen)
+	sys.state.Events.Emit(
+		risen,
+		&core.Event{Kind: pb.EventKind_RESPAWN.Enum(), Id: core.I32(risen.ID)},
+	)
+	// 骨堆没被打碎，只是变成了骷髅兵：不发死亡事件、不给经验，到点直接移走
+	pile.SetDead(true)
+	pile.RespawnAt = sys.state.Now()
+	return risen
+}
+
+// adopt 把房间里新冒出来的怪（召唤、骨堆、骨堆站起来的骷髅兵）算进它所在房间的怪物列表。
+func (sys *System) adopt(monster *core.Entity) {
+	if current := sys.byID[monster.Room]; current != nil {
+		current.monsters = append(current.monsters, monster)
+	}
+}
+
+// standing 报告 monster 还算不算房间里剩下的怪：活着，或者是倒下以后会变成骨堆、还没变的骷髅兵。
+func (sys *System) standing(monster *core.Entity) bool {
+	if monster.Alive() {
+		return true
+	}
+	return monster.Tmpl != nil && monster.Tmpl.Pile != "" && sys.state.Ents.Get(monster.ID) == monster
 }
 
 // ringSpot 在 owner 周围 radius 的圆上找一个能站的地方（试几个随机角度）。

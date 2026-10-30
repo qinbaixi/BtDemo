@@ -261,6 +261,48 @@
           "default": 240
         }
       ]
+    },
+    {
+      "name": "RaiseShield",
+      "icon": "shield",
+      "color": "#9aa7b8",
+      "description": "举盾：和玩家格挡同一套规则，只挡正面、扣架势，破防后举不起来",
+      "properties": []
+    },
+    {
+      "name": "LowerShield",
+      "icon": "shield",
+      "color": "#9aa7b8",
+      "description": "放下盾（举着盾不能出手）",
+      "properties": []
+    },
+    {
+      "name": "FlankShield",
+      "icon": "share",
+      "color": "#9aa7b8",
+      "description": "目标举盾正对着我时，绕到盾的侧面（离目标 {{Distance}}），从挡不住的方向打",
+      "properties": [
+        {
+          "name": "Distance",
+          "type": "number",
+          "min": 0,
+          "default": 50
+        }
+      ]
+    },
+    {
+      "name": "Reassemble",
+      "icon": "repeat",
+      "color": "#d8d2bc",
+      "description": "骨堆重新站起来变回骷髅兵，盯上 {{Range}} 内最近的敌人",
+      "properties": [
+        {
+          "name": "Range",
+          "type": "number",
+          "min": 0,
+          "default": 400
+        }
+      ]
     }
   ],
   "decorators": [
@@ -412,6 +454,25 @@
       "icon": "eye",
       "description": "看得见目标（中间没有墓碑、墙挡着）",
       "properties": []
+    },
+    {
+      "name": "FacingShield",
+      "icon": "shield",
+      "description": "目标举着盾，盾正对着我",
+      "properties": []
+    },
+    {
+      "name": "SkillReady",
+      "icon": "clock-o",
+      "description": "第 {{Slot}} 个技能冷却好了",
+      "properties": [
+        {
+          "name": "Slot",
+          "type": "number",
+          "min": 1,
+          "default": 1
+        }
+      ]
     }
   ],
   "services": [
