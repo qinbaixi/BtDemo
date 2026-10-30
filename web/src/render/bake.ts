@@ -21,6 +21,9 @@ const CHARACTERS: Record<string, { r: number; color: string }> = {
   villager: { r: 13, color: '#f4c27a' },
   slime: { r: 14, color: '#6ccf6c' },
   wolf: { r: 15, color: '#9a9a9a' },
+  alpha_wolf: { r: 18, color: '#6d6a73' },
+  wolf_king: { r: 26, color: '#c8c4bc' },
+  hunter: { r: 15, color: '#8a6a3a' },
   skeleton_archer: { r: 14, color: '#e8e3d0' },
   ogre_chief: { r: 26, color: '#c0392b' },
 };

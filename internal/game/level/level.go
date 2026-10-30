@@ -69,13 +69,16 @@ type room struct {
 	// alive 和 progressAt：这一波还活着几只、最近一次有怪倒下的时刻，用来发现卡住的怪（见 unstick）
 	alive      int
 	progressAt config.Millis
+	// alliesSpawned 记下友方 NPC 刷过了没有（只刷一次）
+	alliesSpawned bool
 }
 
 // gate 是一扇门：地图上的矩形，关着时是寻路图里第 shape 个障碍物。
 type gate struct {
-	cfg    config.Gate
-	shape  int
-	status *core.GateStatus
+	cfg       config.Gate
+	shape     int
+	status    *core.GateStatus
+	breakable *core.Entity // 挡在门里、砍掉门才开的东西（cfg.Breakable），没有为 nil
 }
 
 // GateShapes 把场景地图里的门换算成障碍物，接在地图物件的障碍物后面交给 nav.New；
@@ -127,7 +130,15 @@ func New(
 	}
 	for i, cfg := range scene.Layout.Gates {
 		status := &core.GateStatus{ID: cfg.ID}
-		sys.gates = append(sys.gates, &gate{cfg: cfg, shape: firstGate + i, status: status})
+		created := &gate{cfg: cfg, shape: firstGate + i, status: status}
+		if cfg.Breakable != "" {
+			// 放在门正中（门的碰撞挡着它，所以不找空地），死了不复活
+			x, y := cfg.Center()
+			created.breakable = spawnSys.Template(state.Cfg.Templates[cfg.Breakable], x, y)
+			created.breakable.Room = "gate:" + cfg.ID
+			moveSys.PlaceExact(created.breakable, x, y)
+		}
+		sys.gates = append(sys.gates, created)
 		state.Level.Gates = append(state.Level.Gates, status)
 	}
 	sys.updateGates()
@@ -191,6 +202,15 @@ func (sys *System) enter(current *room) {
 		}
 	}
 	sys.state.Level.Version++
+	if current.cfg != nil && !current.alliesSpawned {
+		current.alliesSpawned = true
+		for _, ally := range current.cfg.Allies {
+			for range ally.Count {
+				x, y := sys.state.Scatter(float64(ally.X), float64(ally.Y), float64(ally.Spread))
+				sys.spawn.Template(sys.state.Cfg.Templates[ally.Template], x, y)
+			}
+		}
+	}
 	if current.cfg == nil || len(current.cfg.Waves) == 0 {
 		sys.clear(current)
 		return
@@ -243,6 +263,47 @@ func (sys *System) fight(current *room, alive []*core.Entity, now config.Millis)
 	sys.clear(current)
 }
 
+// Summon 在 owner 周围 radius 处召唤 count 个模板 template 的怪（首领叫狼），返回叫出来几个。
+// 叫来的怪和 owner 同一个房间（算进房间这一波，死光了房间才清完），一出来就盯上 owner 的目标。
+func (sys *System) Summon(owner *core.Entity, template string, count int, radius float64) int {
+	cfg := sys.state.Cfg.Templates[template]
+	current := sys.byID[owner.Room]
+	made := 0
+	for range count {
+		x, y, ok := sys.ringSpot(owner, radius)
+		if !ok {
+			break
+		}
+		monster := sys.spawn.Template(cfg, x, y)
+		monster.Room = owner.Room
+		monster.SetTarget(owner.Target)
+		if current != nil {
+			current.monsters = append(current.monsters, monster)
+		}
+		sys.state.Events.Emit(
+			monster,
+			&core.Event{Kind: pb.EventKind_RESPAWN.Enum(), Id: core.I32(monster.ID)},
+		)
+		made++
+	}
+	return made
+}
+
+// ringSpot 在 owner 周围 radius 的圆上找一个能站的地方（试几个随机角度）。
+func (sys *System) ringSpot(owner *core.Entity, radius float64) (float64, float64, bool) {
+	for range 12 {
+		angle := sys.state.Rand.Float64() * 2 * math.Pi
+		x := owner.X + math.Cos(angle)*radius
+		y := owner.Y + math.Sin(angle)*radius
+		spot := nav.Vec{X: x, Y: y}
+		from := nav.Vec{X: owner.X, Y: owner.Y}
+		if sys.nav.Free(spot, 16) && sys.nav.Clear(from, spot, 4) {
+			return x, y, true
+		}
+	}
+	return 0, 0, false
+}
+
 // unstick 在一波怪很久没有倒下时调用：活着的怪可能卡在玩家走不到的角落（门关着，玩家出不去，
 // 房间就永远清不完），把它们挪到离玩家近一点的地方重新盯上玩家。
 func (sys *System) unstick(current *room) {
@@ -277,6 +338,9 @@ func (sys *System) spawnWave(current *room, number int) {
 		template := sys.state.Cfg.Templates[group.Template]
 		for range group.Count {
 			x, y := sys.spawnSpot(current.area, inside)
+			if group.At() {
+				x, y = sys.state.Scatter(float64(group.X), float64(group.Y), float64(group.Spread))
+			}
 			monster := sys.spawn.Template(template, x, y)
 			monster.Room = current.area.ID
 			if nearest := nearestOf(monster, inside); nearest != nil {
@@ -409,6 +473,9 @@ func (sys *System) updateGates() bool {
 		}
 		if to := sys.byID[current.cfg.To]; to != nil &&
 			(to.status.Phase == core.RoomFight || to.status.Phase == core.RoomSkipped) {
+			open = false
+		}
+		if current.breakable.Alive() {
 			open = false
 		}
 		if current.status.Open != open {

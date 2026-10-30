@@ -57,8 +57,13 @@ export function onEvent(ev: GameEvent, now: number): void {
         }
         lead = action ? action.lead : windupMs > 0 ? windupMs - 40 : 0;
         if (predicted) lead = Math.max(0, lead - (now - src.attackAt));
+        // 冲锋（扑杀）：地上画一条从起点到预计终点的预警带，不画目标脚下的圈
+        const charge = ev.fx === 'pounce' && typeof ev.tx === 'number';
+        if (charge && windupMs > 0) {
+          fx.chargeWarn(src.id, ev.x ?? src.x, ev.y ?? src.y, ev.tx!, ev.ty ?? src.y, (ev.radius || src.r || 14) * 2, windupMs, now);
+        }
         if (windupMs > 0 && src.kind !== 'player') {
-          fx.telegraph(src.id, ev.dst || 0, ev.radius || 0, ev.weight === 'heavy', windupMs, now);
+          fx.telegraph(src.id, ev.dst || 0, ev.radius || 0, ev.weight === 'heavy' && !charge, windupMs, now);
         }
         const dst = ev.dst && ev.dst !== ev.src ? state.ents.get(ev.dst) : null;
         if (dst) { const dp = posOf(dst, now); faceToward(src, dp.x, dp.y, now); }
@@ -67,6 +72,7 @@ export function onEvent(ev: GameEvent, now: number): void {
         }
         if (ev.fx === 'blink' && typeof ev.tx === 'number') blinkTo(src, ev, now);
         if (ev.fx === 'roll' && typeof ev.tx === 'number') rollTo(src, ev, now, action ? action.ms : 400);
+        if (ev.fx === 'pounce_go' && typeof ev.tx === 'number') pounceTo(src, ev, now);
         // 火球从剑尖、飞斧从手里飞出去：动作出手那一刻的位置（相对脚底的世界坐标偏移）
         const muzzle = action ? muzzleOffset(src.action) : null;
         if (muzzle) {
@@ -281,6 +287,25 @@ function rollTo(e: ClientEntity, ev: GameEvent, now: number, ms: number): void {
   e.x = e.px = ev.tx!;
   e.y = e.py = ev.ty ?? e.y;
   e.t0 = now;
+}
+
+// pounceTo 让冲锋的怪在 dur 毫秒里从起点扑到终点（服务端也是这么快冲过去的），扑的时候摆出咬的姿势；
+// 撞墙时头顶冒星星、报“晕眩”，直到服务端的硬直结束。
+function pounceTo(e: ClientEntity, ev: GameEvent, now: number): void {
+  const dur = Math.max(1, (ev.dur || 0) * 1000);   // 协议层已经换成秒
+  e.slide = { x0: ev.x ?? e.x, y0: ev.y ?? e.y, x1: ev.tx!, y1: ev.ty ?? e.y, at: now, ms: dur };
+  e.x = e.px = ev.tx!;
+  e.y = e.py = ev.ty ?? e.y;
+  e.t0 = now;
+  e.attackAt = now;
+  e.attackMs = Math.max(ATTACK_MS, dur + 160);
+  e.windupFrom = 0;
+  if (ev.wall && ev.stun) {
+    const stunMs = ev.stun * 1000;
+    state.fx!.dizzy(e.id, stunMs, now + dur);
+    e.stunUntil = Math.max(e.stunUntil, now + dur + stunMs);
+    addFloat(now + dur, e.id, '撞晕了！', '#ffe066', 16, 1200, { rise: 30, pop: true });
+  }
 }
 
 // blinkTo 让闪现的人直接出现在终点（不做插值滑过去），并记下起点画残影。

@@ -83,6 +83,84 @@ templates:
     exp: 0
     poise: 40
     mass: 14000
+  # —— 第一关「黑松林道」 ——
+  # 副本房间里的灰狼：和野外的灰狼一样，行为树会包抄（几只狼平均分开围住你）
+  pack_wolf:
+    name: 灰狼
+    kind: monster
+    faction: monster
+    tree: monster_pack
+    model: wolf
+    level: 3
+    attrs: { str: 8, agi: 10, int: 1, vit: 6 }
+    speed: 135
+    radius: 15
+    color: "#9a9a9a"
+    skills: [bite, heavy_bite]
+    respawn: 4000
+    exp: 45
+    poise: 10
+    mass: 10000
+  alpha_wolf:
+    name: 头狼
+    kind: monster
+    faction: monster
+    tree: alpha_wolf
+    level: 5
+    attrs: { str: 12, agi: 12, int: 1, vit: 12 }
+    speed: 140
+    radius: 18
+    color: "#6d6a73"
+    skills: [bite, heavy_bite, pack_howl]
+    respawn: 4000
+    exp: 120
+    poise: 40
+    mass: 14000
+  wolf_king:
+    name: 灰鬃狼王
+    kind: monster
+    faction: monster
+    tree: wolf_king
+    level: 7
+    attrs: { str: 18, agi: 12, int: 2, vit: 34 }
+    speed: 135
+    radius: 26
+    color: "#c8c4bc"
+    skills: [bite, heavy_bite, pounce, king_roar, frenzy_pounce, bloodlust]
+    respawn: 6000
+    exp: 400
+    poise: 140
+    mass: 26000
+  hunter:
+    name: 猎人老陈
+    kind: npc
+    faction: guard
+    tree: npc_guard
+    level: 4
+    attrs: { str: 10, agi: 10, int: 3, vit: 12 }
+    speed: 120
+    radius: 15
+    color: "#8a6a3a"
+    skills: [guard_hit, guard_heal]
+    respawn: 10000
+    exp: 0
+    poise: 20
+    mass: 12000
+  # 挡住秘密房入口的荆棘丛：不会动，砍掉门才开（地图 gates 图层的 breakable）
+  bramble:
+    name: 荆棘丛
+    kind: npc
+    faction: wild
+    level: 1
+    attrs: { str: 1, agi: 1, int: 1, vit: 6 }
+    speed: 0
+    radius: 18
+    color: "#4a6a2e"
+    skills: []
+    respawn: 1500
+    exp: 0
+    poise: 100000
+    mass: 1000000
   villager:
     name: 村民
     kind: npc

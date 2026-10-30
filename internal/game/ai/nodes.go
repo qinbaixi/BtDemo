@@ -218,6 +218,7 @@ func (sys *System) register() {
 	})
 
 	sys.registerPet()
+	sys.registerPack()
 
 	reg.Condition("has_target", func(ctx *bt.Ctx) bool {
 		target := ctx.Agent.(*Agent).target()

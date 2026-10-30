@@ -1,6 +1,8 @@
 {
   "types": {
-    "seconds": { "type": "number" }
+    "seconds": {
+      "type": "number"
+    }
   },
   "nodes": [
     {
@@ -21,7 +23,15 @@
       "isComposite": true,
       "description": "同时执行所有子节点（{{Policy}}）",
       "properties": [
-        { "name": "Policy", "type": "enum", "values": ["RequireOne", "RequireAll"], "default": "RequireAll" }
+        {
+          "name": "Policy",
+          "type": "enum",
+          "values": [
+            "RequireOne",
+            "RequireAll"
+          ],
+          "default": "RequireAll"
+        }
       ]
     },
     {
@@ -35,7 +45,15 @@
       "name": "FindTarget",
       "icon": "eye",
       "description": "在 {{Range}} 范围内寻找最近的敌对目标",
-      "properties": [{ "name": "Range", "type": "number", "min": 0, "default": 250, "description": "索敌半径（像素）" }]
+      "properties": [
+        {
+          "name": "Range",
+          "type": "number",
+          "min": 0,
+          "default": 250,
+          "description": "索敌半径（像素）"
+        }
+      ]
     },
     {
       "name": "ClearTarget",
@@ -46,19 +64,42 @@
       "name": "ChaseTarget",
       "icon": "person-running",
       "description": "追击目标直到距离 {{StopRange}} 以内",
-      "properties": [{ "name": "StopRange", "type": "number", "min": 0, "default": 40 }]
+      "properties": [
+        {
+          "name": "StopRange",
+          "type": "number",
+          "min": 0,
+          "default": 40
+        }
+      ]
     },
     {
       "name": "CastSkill",
       "icon": "wand-magic-sparkles",
       "description": "释放技能槽 {{Slot}} 的技能（由 YAML 模板配置）",
-      "properties": [{ "name": "Slot", "type": "number", "min": 1, "max": 8, "default": 1, "description": "怪物模板 skills 列表中的序号，从 1 开始" }]
+      "properties": [
+        {
+          "name": "Slot",
+          "type": "number",
+          "min": 1,
+          "max": 8,
+          "default": 1,
+          "description": "怪物模板 skills 列表中的序号，从 1 开始"
+        }
+      ]
     },
     {
       "name": "Wander",
       "icon": "shoe-prints",
       "description": "在出生点 {{Radius}} 范围内随机走动",
-      "properties": [{ "name": "Radius", "type": "number", "min": 0, "default": 120 }]
+      "properties": [
+        {
+          "name": "Radius",
+          "type": "number",
+          "min": 0,
+          "default": 120
+        }
+      ]
     },
     {
       "name": "ReturnHome",
@@ -70,26 +111,53 @@
       "icon": "person-running",
       "color": "#c65c8a",
       "description": "远离目标或攻击者 {{Distance}} 像素",
-      "properties": [{ "name": "Distance", "type": "number", "min": 0, "default": 160 }]
+      "properties": [
+        {
+          "name": "Distance",
+          "type": "number",
+          "min": 0,
+          "default": 160
+        }
+      ]
     },
     {
       "name": "Wait",
       "icon": "hourglass",
       "description": "等待 {{Seconds}} 秒",
-      "properties": [{ "name": "Seconds", "type": "seconds", "min": 0, "default": 1 }]
+      "properties": [
+        {
+          "name": "Seconds",
+          "type": "seconds",
+          "min": 0,
+          "default": 1
+        }
+      ]
     },
     {
       "name": "Say",
       "icon": "comment",
       "description": "说：{{Text}}",
-      "properties": [{ "name": "Text", "type": "string", "default": "" }]
+      "properties": [
+        {
+          "name": "Text",
+          "type": "string",
+          "default": ""
+        }
+      ]
     },
     {
       "name": "FollowOwner",
       "icon": "paw",
       "color": "#5fae7a",
       "description": "宠物：走到主人身边 {{Distance}} 以内（超过传送距离直接瞬移）",
-      "properties": [{ "name": "Distance", "type": "number", "min": 0, "default": 60 }]
+      "properties": [
+        {
+          "name": "Distance",
+          "type": "number",
+          "min": 0,
+          "default": 60
+        }
+      ]
     },
     {
       "name": "KeepDistance",
@@ -97,8 +165,18 @@
       "color": "#5fae7a",
       "description": "宠物：和目标保持 {{Min}} 到 {{Max}} 的距离（太近后退，太远靠近）",
       "properties": [
-        { "name": "Min", "type": "number", "min": 0, "default": 120 },
-        { "name": "Max", "type": "number", "min": 0, "default": 220 }
+        {
+          "name": "Min",
+          "type": "number",
+          "min": 0,
+          "default": 120
+        },
+        {
+          "name": "Max",
+          "type": "number",
+          "min": 0,
+          "default": 220
+        }
       ]
     },
     {
@@ -116,6 +194,59 @@
           "description": "宠物模板 skills 列表中的序号，从 1 开始"
         }
       ]
+    },
+    {
+      "name": "Flank",
+      "icon": "arrows-split-up-and-left",
+      "color": "#c98a4a",
+      "description": "包抄：盯着同一个目标的同类按 ID 排队，围着目标平均分站位，绕到离目标 {{Distance}} 处",
+      "properties": [
+        {
+          "name": "Distance",
+          "type": "number",
+          "min": 0,
+          "default": 80
+        }
+      ]
+    },
+    {
+      "name": "Summon",
+      "icon": "users",
+      "color": "#c0392b",
+      "description": "召唤 {{Count}} 只 {{Template}}，出现在周围 {{Radius}} 处（算进所在房间）",
+      "properties": [
+        {
+          "name": "Template",
+          "type": "string",
+          "default": "pack_wolf"
+        },
+        {
+          "name": "Count",
+          "type": "number",
+          "min": 1,
+          "default": 2
+        },
+        {
+          "name": "Radius",
+          "type": "number",
+          "min": 0,
+          "default": 200
+        }
+      ]
+    },
+    {
+      "name": "SetPhase",
+      "icon": "flag",
+      "color": "#c0392b",
+      "description": "进入第 {{Phase}} 阶段",
+      "properties": [
+        {
+          "name": "Phase",
+          "type": "number",
+          "min": 1,
+          "default": 2
+        }
+      ]
     }
   ],
   "decorators": [
@@ -128,25 +259,54 @@
       "name": "TargetInRange",
       "icon": "ruler",
       "description": "目标在 {{Range}} 以内",
-      "properties": [{ "name": "Range", "type": "number", "min": 0, "default": 60 }]
+      "properties": [
+        {
+          "name": "Range",
+          "type": "number",
+          "min": 0,
+          "default": 60
+        }
+      ]
     },
     {
       "name": "HpBelow",
       "icon": "heart-crack",
       "description": "生命低于 {{Percent}}%",
-      "properties": [{ "name": "Percent", "type": "number", "min": 0, "max": 100, "default": 30 }]
+      "properties": [
+        {
+          "name": "Percent",
+          "type": "number",
+          "min": 0,
+          "max": 100,
+          "default": 30
+        }
+      ]
     },
     {
       "name": "FarFromHome",
       "icon": "route",
       "description": "离出生点超过 {{Distance}}",
-      "properties": [{ "name": "Distance", "type": "number", "min": 0, "default": 400 }]
+      "properties": [
+        {
+          "name": "Distance",
+          "type": "number",
+          "min": 0,
+          "default": 400
+        }
+      ]
     },
     {
       "name": "WasAttacked",
       "icon": "burst",
       "description": "最近 {{Seconds}} 秒内被攻击过",
-      "properties": [{ "name": "Seconds", "type": "seconds", "min": 0, "default": 3 }]
+      "properties": [
+        {
+          "name": "Seconds",
+          "type": "seconds",
+          "min": 0,
+          "default": 3
+        }
+      ]
     },
     {
       "name": "ForceSuccess",
@@ -157,27 +317,81 @@
       "name": "Cooldown",
       "icon": "clock",
       "description": "成功后冷却 {{Seconds}} 秒",
-      "properties": [{ "name": "Seconds", "type": "seconds", "min": 0, "default": 5 }]
+      "properties": [
+        {
+          "name": "Seconds",
+          "type": "seconds",
+          "min": 0,
+          "default": 5
+        }
+      ]
     },
     {
       "name": "OwnerFar",
       "icon": "route",
       "color": "#5fae7a",
       "description": "宠物：离主人超过 {{Distance}}",
-      "properties": [{ "name": "Distance", "type": "number", "min": 0, "default": 350 }]
+      "properties": [
+        {
+          "name": "Distance",
+          "type": "number",
+          "min": 0,
+          "default": 350
+        }
+      ]
     },
     {
       "name": "OwnerHpBelow",
       "icon": "heart-crack",
       "color": "#5fae7a",
       "description": "宠物：主人生命低于 {{Percent}}%",
-      "properties": [{ "name": "Percent", "type": "number", "min": 0, "max": 100, "default": 60 }]
+      "properties": [
+        {
+          "name": "Percent",
+          "type": "number",
+          "min": 0,
+          "max": 100,
+          "default": 60
+        }
+      ]
     },
     {
       "name": "OwnerInCombat",
       "icon": "burst",
       "color": "#5fae7a",
       "description": "宠物：主人最近 5 秒内攻击过或被攻击过"
+    },
+    {
+      "name": "AlliesNear",
+      "icon": "people-group",
+      "description": "{{Range}} 以内至少有 {{Count}} 个同伴",
+      "properties": [
+        {
+          "name": "Range",
+          "type": "number",
+          "min": 0,
+          "default": 200
+        },
+        {
+          "name": "Count",
+          "type": "number",
+          "min": 1,
+          "default": 2
+        }
+      ]
+    },
+    {
+      "name": "PhaseAtLeast",
+      "icon": "flag-checkered",
+      "description": "已到第 {{Phase}} 阶段",
+      "properties": [
+        {
+          "name": "Phase",
+          "type": "number",
+          "min": 1,
+          "default": 2
+        }
+      ]
     }
   ],
   "services": [
@@ -185,7 +399,14 @@
       "name": "UpdateTarget",
       "icon": "satellite-dish",
       "description": "定期在 {{Range}} 内刷新目标（当前目标无效时）",
-      "properties": [{ "name": "Range", "type": "number", "min": 0, "default": 250 }]
+      "properties": [
+        {
+          "name": "Range",
+          "type": "number",
+          "min": 0,
+          "default": 250
+        }
+      ]
     },
     {
       "name": "GuardOwner",
@@ -193,13 +414,27 @@
       "color": "#5fae7a",
       "description": "宠物：定期选目标守护主人（主人的目标 > 打主人的怪 > 主人 {{Range}} 内最近的敌人），目标离主人超过 {{Leash}} 时放弃",
       "properties": [
-        { "name": "Range", "type": "number", "min": 0, "default": 300 },
-        { "name": "Leash", "type": "number", "min": 0, "default": 450 }
+        {
+          "name": "Range",
+          "type": "number",
+          "min": 0,
+          "default": 300
+        },
+        {
+          "name": "Leash",
+          "type": "number",
+          "min": 0,
+          "default": 450
+        }
       ]
     }
   ],
   "export": {
     "subtrees": "inline",
-    "go": { "outDir": "../internal/ai/trees", "fileName": "{name}", "package": "trees" }
+    "go": {
+      "outDir": "../internal/ai/trees",
+      "fileName": "{name}",
+      "package": "trees"
+    }
   }
 }

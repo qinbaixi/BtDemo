@@ -274,6 +274,13 @@ export class FX {
         return 0;
       case 'buff':
         this.effects.push({ ...base, kind: 'buff', life: 1000 });
+        if (ev.radius) {
+          // 集结（头狼嚎叫、狼王号令）：声浪一圈一圈推到 radius，圈里的同伴都加上 Buff
+          for (let i = 0; i < 3; i++) {
+            this.effects.push({ ...base, kind: 'ring', x: src.x, y: src.y, radius: ev.radius, life: 700, born: now + i * 160 });
+          }
+          this.shake = Math.max(this.shake, ev.radius > 300 ? 5 : 3);
+        }
         for (let i = 0; i < 22; i++) {
           const a = rand(0, TAU);
           this.spawn({ anchor: ev.src, ox: Math.cos(a) * rand(10, 20), oy: Math.sin(a) * rand(4, 8),
@@ -434,6 +441,38 @@ export class FX {
         arrows.sort((a, b) => a.at - b.at);
         this.effects.push({ ...base, kind: 'rain', cx, cy, radius, x0, y0, arrows, life: 1400 });
         return RAIN_FALL_FROM + RAIN_FALL_MS;
+      }
+      case 'pounce':
+        // 扑杀的出招：预警带在 game/events.ts 里画（chargeWarn），这里只在出发时扬一点土
+        return 0;
+      case 'pounce_go': {
+        // 扑出去：起点蹬地扬土，路上拖一串土和残影火星；撞墙时终点碎石四溅、镜头一震
+        const x0 = ev.x ?? src.x;
+        const y0 = ev.y ?? src.y;
+        const x1 = ev.tx ?? x0;
+        const y1 = ev.ty ?? y0;
+        const dir = Math.sign(x1 - x0) || 1;
+        const dur = Math.max(60, (ev.dur || 0.2) * 1000);   // 协议层已经换成秒
+        this.footDust(x0, y0, dir, now);
+        this.footDust(x0 - dir * 8, y0 + 2, dir, now + 30);
+        for (let i = 0; i < 14; i++) {
+          const k = i / 13;
+          this.spawn({ x: x0 + (x1 - x0) * k + rand(-6, 6), y: y0 + (y1 - y0) * k - rand(0, 6), vx: -dir * rand(0.01, 0.05), vy: -rand(0.01, 0.04),
+            drag: 0.97, life: rand(320, 560), size: rand(3, 6), color: '#b8a488', kind: 'dust', born: now + dur * k });
+          this.spawn({ x: x0 + (x1 - x0) * k, y: y0 + (y1 - y0) * k - rand(8, 22), vx: rand(-0.02, 0.02), vy: -rand(0.01, 0.03),
+            life: rand(160, 280), size: rand(1.6, 2.6), color, kind: 'spark', born: now + dur * k });
+        }
+        if (ev.wall) {
+          for (let i = 0; i < 18; i++) {
+            const a = rand(-Math.PI, 0);
+            const sp = rand(0.08, 0.26);
+            this.spawn({ x: x1 + dir * 12, y: y1 - rand(4, 20), vx: Math.cos(a) * sp - dir * 0.08, vy: Math.sin(a) * sp,
+              drag: 0.985, life: rand(380, 700), size: rand(2, 4), color: i % 3 ? '#8a8478' : '#d8d0c0', kind: 'spark', born: now + dur });
+          }
+          this.effects.push({ ...base, kind: 'ring', x: x1 + dir * 10, y: y1, radius: 40, life: 380, born: now + dur });
+          this.scheduledShake.push({ at: now + dur, shake: 8 });
+        }
+        return dur;
       }
       case 'roll': {
         // 翻滚：起点扬一团土（人在 game/events.ts 里滑过去）
@@ -696,9 +735,109 @@ export class FX {
     this.effects.push({ kind: 'warn', src: srcId, dst: dstId, radius, born: now, life: ms + 80, fill: ms, rgb: rgbOf('#ff4a3a') });
   }
 
+  // chargeWarn 是冲锋（狼王扑杀）的预警：从起点到预计终点的一条红色宽带，ms 后从起点往前填满，
+  // 填满那一刻冲出去。width 是冲锋者的直径，带子比它宽一点。
+  chargeWarn(srcId: number, x0: number, y0: number, x1: number, y1: number, width: number, ms: number, now: number) {
+    this.effects.push({ kind: 'band', src: srcId, x0, y0, x1, y1, width, born: now, life: ms + 120, fill: ms, rgb: rgbOf('#ff4a3a') });
+  }
+
+  // bandGround 画冲锋预警带：深色描边 + 红边，里面从起点往终点填满，快满时闪，终点一道横线。
+  bandGround(ctx, f, now) {
+    const k = clamp01((now - f.born) / f.fill);
+    const after = clamp01((now - f.born - f.fill) / 120);
+    const len = Math.hypot(f.x1 - f.x0, f.y1 - f.y0);
+    if (len < 4) return;
+    const angle = Math.atan2(f.y1 - f.y0, f.x1 - f.x0);
+    const half = f.width * 0.65;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1 - after;
+    ctx.translate(f.x0, f.y0);
+    // 地面是斜着看的：竖直方向压扁一半
+    ctx.scale(1, 0.5);
+    const ex = Math.cos(angle) * len;
+    const ey = Math.sin(angle) * len * 2;
+    const flatAngle = Math.atan2(ey, ex);
+    const flatLen = Math.hypot(ex, ey);
+    ctx.rotate(flatAngle);
+    const outline = () => {
+      ctx.beginPath();
+      ctx.moveTo(0, -half);
+      ctx.lineTo(flatLen, -half);
+      ctx.arc(flatLen, 0, half, -Math.PI / 2, Math.PI / 2);
+      ctx.lineTo(0, half);
+      ctx.arc(0, 0, half, Math.PI / 2, Math.PI * 1.5);
+      ctx.closePath();
+    };
+    outline();
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(40,6,4,0.55)';
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = rgba(whiten(f.rgb, 0.3 * k), 0.7 + 0.3 * k);
+    ctx.stroke();
+    const pulse = k > 0.7 ? 0.5 + 0.5 * Math.sin(now * 0.05) : 0;
+    ctx.save();
+    outline();
+    ctx.clip();
+    ctx.fillStyle = rgba(f.rgb, 0.18 + 0.2 * k + 0.12 * pulse);
+    ctx.fillRect(-half, -half, (flatLen + half * 2) * easeOutCubic(k), half * 2);
+    // 往前指的箭头纹
+    ctx.strokeStyle = rgba(f.rgb, 0.35 + 0.3 * k);
+    ctx.lineWidth = 3;
+    const step = 34;
+    const shift = ((now - f.born) * 0.12) % step;
+    for (let x = shift; x < flatLen; x += step) {
+      ctx.beginPath();
+      ctx.moveTo(x - half * 0.45, -half * 0.55);
+      ctx.lineTo(x, 0);
+      ctx.lineTo(x - half * 0.45, half * 0.55);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.restore();
+  }
+
+  // dizzy 是撞墙以后头顶转圈的几颗星星，跟着 srcId，持续 ms 毫秒。
+  dizzy(srcId: number, ms: number, now: number) {
+    this.effects.push({ kind: 'dizzy', src: srcId, born: now, life: ms });
+  }
+
+  // dizzyStars 画头顶转圈的星星（在头顶画一个压扁的圆，星星沿着转，转到后面时变暗变小）。
+  dizzyStars(ctx, f, now) {
+    const p = this.pos(f.src, null);
+    if (!p) return;
+    const r = p.r || 14;
+    const cy = p.y - r * 2.6;
+    const fade = Math.min(1, (f.life - (now - f.born)) / 200);
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    for (let i = 0; i < 3; i++) {
+      const a = (now - f.born) * 0.006 + (i / 3) * TAU;
+      const depth = Math.sin(a);
+      const x = p.x + Math.cos(a) * r * 0.9;
+      const y = cy + depth * r * 0.25;
+      const size = 3.4 + depth * 0.9;
+      ctx.globalAlpha = fade * (0.65 + 0.35 * depth);
+      ctx.beginPath();
+      for (let j = 0; j < 10; j++) {
+        const rr = j % 2 ? size * 0.45 : size;
+        const aa = (j / 10) * TAU - Math.PI / 2;
+        ctx.lineTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr);
+      }
+      ctx.closePath();
+      ctx.fillStyle = '#ffe066';
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = '#5a3a00';
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // cancel 收掉 id 还没落下的出招：预警圈、等着出手时才放的刀光（前摇被打断时）。
   cancel(id: number) {
-    this.effects = this.effects.filter((f) => !(f.kind === 'warn' && f.src === id));
+    this.effects = this.effects.filter((f) => !((f.kind === 'warn' || f.kind === 'band') && f.src === id));
     this.scheduled = this.scheduled.filter((f) => f.src !== id);
   }
 
@@ -1083,6 +1222,8 @@ export class FX {
         case 'bolt': this.bolt(ctx, f, now - f.born); break;
         case 'rain': this.rainArrows(ctx, f, now - f.born); break;
         case 'warn': this.warnGround(ctx, f, now); break;
+        case 'band': this.bandGround(ctx, f, now); break;
+        case 'dizzy': this.dizzyStars(ctx, f, now); break;
       }
     }
     this.shieldAuras(ctx, now);
@@ -1102,6 +1243,13 @@ export class FX {
       if (t < 0 || t >= 1) continue;
       switch (f.kind) {
         case 'warn': { const at = this.warnPos(f); if (at) add(at.x, at.y, at.r + 4, at.r * 0.5 + 4, at.r * 0.5 + 4); break; }
+        case 'band': {
+          const pad = f.width + 8;
+          add(Math.min(f.x0, f.x1), Math.min(f.y0, f.y1), pad, pad, pad);
+          add(Math.max(f.x0, f.x1), Math.max(f.y0, f.y1), pad, pad, pad);
+          break;
+        }
+        case 'dizzy': { const p = this.pos(f.src, null); if (p) add(p.x, p.y, (p.r || 14) * 1.5, (p.r || 14) * 3.4, 0); break; }
         case 'arrow': {
           const sp = this.pos(f.src, { x: f.sx, y: f.sy });
           const dp = this.pos(f.dst, { x: f.dx, y: f.dy });

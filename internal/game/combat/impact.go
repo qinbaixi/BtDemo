@@ -40,7 +40,12 @@ func (sys *System) resolveWindups() {
 			continue // 前面结算的一下把它打出了硬直，前摇被打断了
 		}
 		entity.Windup = nil
-		if entity.Alive() {
+		if !entity.Alive() {
+			continue
+		}
+		if windup.Skill.Kind == "charge" {
+			sys.charge(entity, windup)
+		} else {
 			sys.strike(entity, windup.Skill, windup.Target, true)
 		}
 	}

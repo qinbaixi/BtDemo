@@ -45,7 +45,7 @@ export const KILL = { hitStopMs: 90, knockScale: 1.5, zoom: 0.03, rumble: 0.5 };
 // 环境声压低；cooldownMs 内只放一次（一群小怪接连倒下时不会一直慢）。设置里能关（SETTINGS.slowmo）。
 export const CLEAR = { scale: 0.3, slowMs: 380, zoom: 0.05, duck: 0.8, rumble: 0.8, cooldownMs: 4000, viewMargin: 60 };
 // 首领模型：打死它们算清场（不管周围还有没有怪）
-export const BOSS_MODELS = new Set(['ogre_chief']);
+export const BOSS_MODELS = new Set(['ogre_chief', 'wolf_king']);
 
 // 每个技能的档位和武器种类（技能 id 见 config/skills.yaml）。没列出的按 fx 猜，见 skillFeel()。
 export const SKILL_FEEL: Record<string, { tier: Tier; weapon: Weapon }> = {
@@ -82,6 +82,10 @@ export const MODEL_MATERIAL: Record<string, Material> = {
   skeleton_archer: 'bone',
   slime: 'goo',
   wolf: 'beast',
+  alpha_wolf: 'beast',
+  wolf_king: 'beast',
+  hunter: 'flesh',
+  bramble: 'wood',
   wolf_pup: 'beast',
   ogre_chief: 'flesh',
   ember: 'wood',

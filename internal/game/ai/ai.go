@@ -23,6 +23,7 @@ type System struct {
 	trees  map[string]*bt.Tree
 	labels map[*bt.Node]string        // 追踪标签，首次使用时构建
 	defs   map[*bt.Tree]*pb.AiTreeDef // 发给调试面板的树结构，首次使用时构建
+	summon SummonFunc                 // summon 节点用的召唤，由场景设置；nil 时召唤失败
 }
 
 // New 加载所有导出的行为树，检查每棵树用到的节点类型都有对应的处理器，
@@ -53,6 +54,9 @@ func New(state *core.State, combatSys *combat.System, moveSys *move.System) (*Sy
 	}
 	for _, tmpl := range state.Cfg.Templates {
 		tree := sys.trees[tmpl.Tree]
+		if tree == nil {
+			continue // 没有行为树的模板
+		}
 		if err := checkSlots(tree, "monsters.yaml: template", tmpl.ID, tmpl.Skills); err != nil {
 			return nil, err
 		}
@@ -103,6 +107,10 @@ func (sys *System) Registry() *bt.Registry { return sys.reg }
 
 // Attach 为 entity 分配一个指定行为树的新实例。
 func (sys *System) Attach(entity *core.Entity, tree string) {
+	if tree == "" {
+		entity.AI = nil // 没有行为树：不会动（比如可以砍掉的灌木）
+		return
+	}
 	entity.AI = sys.Instance(entity, sys.trees[tree])
 }
 

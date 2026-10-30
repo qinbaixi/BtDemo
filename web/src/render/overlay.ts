@@ -310,6 +310,7 @@ function drawFloats(now: number): void {
   state.floats = state.floats.filter((f) => now - f.born < f.life);
   for (const f of state.floats) {
     const t = (now - f.born) / f.life;
+    if (t < 0) continue;   // 排在以后才冒出来的字（比如撞墙那一刻的“撞晕了”）
     const e = state.ents.get(f.anchor);
     const base = e ? posOf(e, now) : { x: f.x, y: f.y };
     // 横向：快速抛出然后停住；纵向：先升起，后半段略微下落（抛物线）

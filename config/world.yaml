@@ -28,10 +28,11 @@ hit:
 
 # 阵营敌对关系：key 会主动攻击 / 可以攻击 value 中的阵营
 hostile:
-  player: [monster]
+  player: [monster, wild]
   monster: [player, guard, villager]
   guard: [monster]
   villager: []
+  wild: []           # 能砍的东西（荆棘丛）：谁也不打
 
 # 玩家模板：每个连接创建一个新角色
 player:
@@ -114,7 +115,7 @@ player:
 #   class_bias: 只从击杀者职业能用的物品（本职业或通用）里抽的概率（万分比），其余时候从所有物品里抽
 loot:
   chance: 3000
-  bosses: { ogre_chief: 10000 }
+  bosses: { ogre_chief: 10000, wolf_king: 10000, alpha_wolf: 5000 }
   rarity: { common: 6, rare: 3, epic: 1 }
   class_bias: 7000
 

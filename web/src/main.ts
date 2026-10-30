@@ -32,6 +32,7 @@ import { initBag } from './ui/bag';
 import { initSettingsPanel } from './ui/settings';
 import { initPicker } from './ui/picker';
 import { initLines } from './ui/lines';
+import { initBossBar, renderBossBar } from './ui/boss';
 import { initLevel, renderLevelHud } from './ui/level';
 
 declare global {
@@ -86,6 +87,7 @@ function frame(): void {
   renderDeath(now);
   renderBuffTimes(now);
   renderLevelHud();
+  renderBossBar(dt);
 }
 
 // realFrameMs 是这一帧的真实时长（帧率监测要真实时间：慢放、暂停时演出时钟的 dt 不准）。
@@ -137,6 +139,7 @@ async function init(): Promise<void> {
   initSettingsPanel();
   initLines(conn.send);
   initLevel();
+  initBossBar();
   await loadArt();   // 美术资源要在建场景、建角色之前就绪
   await initWorld(canvas, document.getElementById('overlay') as HTMLCanvasElement);
   state.fx = new FX(fxResolve, fxAuras);

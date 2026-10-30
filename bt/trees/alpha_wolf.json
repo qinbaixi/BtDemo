@@ -1,0 +1,155 @@
+{
+  "type": "Selector",
+  "label": "头狼",
+  "comment": "身边同伴够多就先嚎叫给大家加攻速，再上去咬",
+  "services": [
+    {
+      "type": "UpdateTarget",
+      "label": "刷新仇恨",
+      "properties": [
+        {
+          "name": "Range",
+          "value": 280
+        }
+      ],
+      "timeBetweenTicks": 0.5
+    }
+  ],
+  "childNodes": [
+    {
+      "type": "Sequence",
+      "label": "脱战回家",
+      "decorators": [
+        {
+          "type": "FarFromHome",
+          "properties": [
+            {
+              "name": "Distance",
+              "value": 600
+            }
+          ]
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "ClearTarget"
+        },
+        {
+          "type": "ReturnHome"
+        }
+      ]
+    },
+    {
+      "type": "Selector",
+      "label": "战斗",
+      "decorators": [
+        {
+          "type": "HasTarget"
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "CastSkill",
+          "label": "狼嚎",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 3
+            }
+          ],
+          "decorators": [
+            {
+              "type": "AlliesNear",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 260
+                },
+                {
+                  "name": "Count",
+                  "value": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "猛扑",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 2
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 60
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "撕咬",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 1
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 60
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "ChaseTarget",
+          "label": "追击",
+          "properties": [
+            {
+              "name": "StopRange",
+              "value": 45
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "闲逛",
+      "childNodes": [
+        {
+          "type": "Wander",
+          "properties": [
+            {
+              "name": "Radius",
+              "value": 80
+            }
+          ]
+        },
+        {
+          "type": "Wait",
+          "properties": [
+            {
+              "name": "Seconds",
+              "value": 2
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

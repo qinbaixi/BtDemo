@@ -154,6 +154,7 @@ type Windup struct {
 	Skill  *config.Skill
 	Target int // target 技能的目标；aoe 为 0
 	HitAt  config.Millis
+	Aim    nav.Vec // charge 冲锋的方向（单位向量），出招时就定死了
 }
 
 // Knock 是一段击退位移：从 From 在 Start 开始，Duration 毫秒内缓出地走到 To。
@@ -204,6 +205,8 @@ type Brain struct {
 	AI      *bt.Instance // 玩家为 nil
 	Action  string       // 实体当前正在做的事，用于显示
 	AITicks []*pb.AiTick // 被观察期间，自上次同步以来记录的追踪 tick
+	// Phase 是首领打到第几阶段（行为树的 set_phase 设、phase_at_least 读），从 1 开始；0 表示还没设过
+	Phase int
 }
 
 // Inventory 是玩家的背包和身上的装备（由 item 管理）。怪物和 NPC 没有物品。

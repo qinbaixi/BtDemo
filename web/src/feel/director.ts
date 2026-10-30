@@ -361,6 +361,7 @@ const CAST_SOUND: Record<string, string> = {
   enchant: 'cast.enchant',
   blink: 'cast.blink',
   roll: 'cast.roll',
+  pounce_go: 'swing.heavy',
   zone: 'cast.zone',
   focus: 'cast.focus',
   pet_summon: 'cast.summon',

@@ -293,6 +293,12 @@ func (sys *System) CastAimed(
 		if err := sys.castRain(entity, skill, targetID, aimX, aimY); err != nil {
 			return err
 		}
+	case "charge":
+		if err := sys.startCharge(entity, skill, targetID); err != nil {
+			return err
+		}
+	case "rally":
+		sys.rally(entity, skill)
 	case "self":
 		sys.state.Events.Emit(entity, castEvent(entity, entity, skill))
 		if skill.Heal > 0 {

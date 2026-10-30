@@ -82,11 +82,11 @@ cfg, err := config.Load("config", game.TreeNames())
 
 ## skills.yaml 的字段
 
-- `kind`：`target` 单体、`aoe` 范围、`self` 自身、`dash` 位移（用 `distance`）、`line` 直线投掷（用 `range`；`pierce: true` 时穿透，命中直线上所有敌人）、`rain` 箭雨（用 `range`、`radius`、`distance`）、`zone` 在脚下放回血区（用 `zone`，见 [zone](zone.md)）。
+- `kind`：`target` 单体、`aoe` 范围、`self` 自身、`dash` 位移（用 `distance`）、`line` 直线投掷（用 `range`；`pierce: true` 时穿透，命中直线上所有敌人）、`rain` 箭雨（用 `range`、`radius`、`distance`）、`zone` 在脚下放回血区（用 `zone`，见 [zone](zone.md)）、`charge` 冲锋（用 `range`、`distance`、`windup`，撞到障碍物自己晕 `self_stun` 毫秒）、`rally` 给周围同伴加 Buff（用 `radius`、`buff`）。
 - `desc`：选技能面板上的一句话说明。
 - `debuff`：命中时加在目标身上的效果，格式同 `buff`。没被免疫、也没被打死才会加上。
 - `weight`：命中分量 `light` / `medium` / `heavy`（默认 light），效果在 `world.yaml` 的 `hit.weights`。`knock`、`stun`、`poise_dmg` 可以单独覆盖这一档的击退距离、硬直毫秒数和打掉的韧性。
-- `windup`：前摇毫秒数，只能给 `target` 和 `aoe` 技能（启动时检查）。出招后过这么久才结算，期间可以被打断、可以被躲开。
+- `windup`：前摇毫秒数，只能给 `target`、`aoe` 和 `charge` 技能（启动时检查，`charge` 必须有）。出招后过这么久才结算，期间可以被打断、可以被躲开。
 - `buff` 的新字段：`invulnerable`（期间不受任何伤害）、`bonus_magic`（物理技能每次命中额外造成法术伤害）、`look`（客户端外观）。`look` 只能是 `haste`、`holy`、`fire`、`frost`，对应 `config.Looks` 里的位。
 
 这些字段的作用见 [attr 和 combat](attr-combat.md)。

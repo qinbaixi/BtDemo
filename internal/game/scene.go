@@ -162,6 +162,7 @@ func newScene(
 		template,
 		firstGate,
 	)
+	scene.AI.SetSummon(scene.Level.Summon)
 	scene.Sessions.SetHost(scene)
 	scene.Spawn.SpawnConfigured()
 	return scene, nil

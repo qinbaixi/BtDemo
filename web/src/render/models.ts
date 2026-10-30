@@ -27,7 +27,7 @@ const TAU = Math.PI * 2;
 const PI = Math.PI;
 const OUTLINE = '#0b0710';
 
-export const MODELS = ['knight', 'ranger', 'slime', 'wolf', 'skeleton_archer', 'ogre_chief', 'guard', 'villager', 'wolf_pup', 'ember', 'sprout'];
+export const MODELS = ['knight', 'ranger', 'slime', 'wolf', 'alpha_wolf', 'wolf_king', 'skeleton_archer', 'ogre_chief', 'guard', 'villager', 'hunter', 'bramble', 'wolf_pup', 'ember', 'sprout'];
 
 /* ------------------------------ colour ------------------------------ */
 
@@ -1872,7 +1872,16 @@ function drawSlime(ctx, q) {
 // A lean hellhound: jointed legs that gallop, a spiky mane, a snapping jaw
 // and ember eyes.
 
-function drawWolf(ctx, q) {
+// 狼的几种长相：普通灰狼、头狼（颈毛 + 额头白斑 + 一道伤疤）、灰鬃狼王（大圈银色鬃毛、
+// 背上一排高鬃、身上三道爪痕、撕裂的耳朵、颈上一串狼牙、冰蓝色的眼睛）。体型由碰撞半径决定。
+interface WolfStyle { ruff: number; ridge: number; blaze: boolean; scars: number; tornEar: boolean; fangs: boolean; eye: string; rage: string; vein: [number, number, number] }
+const WOLF_STYLES: Record<string, WolfStyle> = {
+  wolf: { ruff: 0, ridge: 1, blaze: false, scars: 0, tornEar: false, fangs: false, eye: '#ffb02a', rage: '#ff3b20', vein: [255, 90, 20] },
+  alpha_wolf: { ruff: 0.65, ridge: 1.25, blaze: true, scars: 1, tornEar: false, fangs: false, eye: '#ffd24a', rage: '#ff3b20', vein: [255, 90, 20] },
+  wolf_king: { ruff: 1, ridge: 1.7, blaze: false, scars: 3, tornEar: true, fangs: true, eye: '#9fe8ff', rage: '#ff4a3a', vein: [80, 190, 255] },
+};
+
+function drawWolf(ctx, q, style: WolfStyle = WOLF_STYLES.wolf) {
   const color = safeColor(q.color, '#9a9a9a');
   const dark = shade(color, -0.4);
   const light = shade(color, 0.35);
@@ -1954,24 +1963,36 @@ function drawWolf(ctx, q) {
   }, color, { sd: 3 });
   // belly fur and mane spikes
   flat(ctx, (c) => { c.moveTo(-6, by + 3.6); c.quadraticCurveTo(2, by + 1.2, 9, by + 5.4); c.quadraticCurveTo(2, by + 5.2, -6, by + 3.6); c.closePath(); }, light);
+  const ridge = style.ridge;
+  const ridgeColor = style.ruff >= 1 ? shade(color, 0.25) : dark;
   cel(ctx, (c) => {
     c.moveTo(-8, by - 7.5);
     for (let i = 0; i < 5; i++) {
       const x = -8 + i * 4.4;
-      c.lineTo(x + 1.6, by - 12.5 - (i === 3 ? 2 : 0) + Math.sin(t * 3 + i) * 0.4);
+      const tall = (4.6 + (i === 3 ? 2 : 0) + i * 0.3 * (ridge - 1)) * ridge;
+      c.lineTo(x + 1.6, by - 8 - tall + Math.sin(t * 3 + i) * 0.4 * ridge);
       c.lineTo(x + 4.4, by - 8.6 - i * 0.3);
     }
     c.lineTo(12, by - 6);
     c.closePath();
-  }, dark, { sd: 1.4, lw: 1.3 });
-  // 冥犬身上的熔岩裂纹：随呼吸明暗，扑咬时更亮
+  }, ridgeColor, { sd: 1.4, lw: 1.3 });
+  // 身上的旧爪痕（头狼一道，狼王三道）：浅色的疤，两边一圈暗色
+  for (let i = 0; i < style.scars; i++) {
+    const sx = -7 + i * 3.2;
+    line(ctx, [sx, by - 5.6, sx + 3.4, by + 1.6], shade(color, -0.35), 1.6);
+    line(ctx, [sx, by - 5.6, sx + 3.4, by + 1.6], 'rgba(255,225,210,0.8)', 0.7);
+  }
+  // 冥犬身上的裂纹：随呼吸明暗，扑咬时更亮
   if (q.dead < 0) {
     const pulse = 0.55 + 0.3 * Math.sin(t * 3.2) + (ap ? 0.3 : 0);
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     const veins = [[-10, by - 3, -6, by - 5, -3, by - 2.5, 1, by - 4.5], [3, by - 1, 6, by - 4, 9, by - 2.2], [-8, by + 1.5, -4, by + 0.5]];
-    for (const [wd, col] of [[2.6, `rgba(255,90,20,${0.35 * pulse})`], [1, `rgba(255,190,90,${pulse})`]] as [number, string][]) {
+    // 狼王的裂纹是冰蓝色的（和眼睛一样），其他狼是熔岩色
+    const [vr, vg, vb] = style.vein;
+    const core = `rgba(${Math.min(255, vr + 60)},${Math.min(255, vg + 100)},${Math.min(255, vb + 70)},${pulse})`;
+    for (const [wd, col] of [[2.6, `rgba(${vr},${vg},${vb},${0.35 * pulse})`], [1, core]] as [number, string][]) {
       for (const v of veins) line(ctx, v, col, wd);
     }
     ctx.restore();
@@ -1983,17 +2004,57 @@ function drawWolf(ctx, q) {
   leg(-6, (-g * gl + 0.05 + rearK) * deadLegs + deadK * 1.4, true, color, 2.6);
   leg(11, (g * gl - 0.15 + frontK) * deadLegs + deadK * 1.3, false, color, 2.4);
 
+  // 颈毛：脖子一圈炸开的鬃毛，压在身体上、头的后面；狼王的又大又亮，挂一串狼牙
+  if (style.ruff > 0) {
+    const ruffK = style.ruff;
+    const ruffColor = ruffK >= 1 ? shade(color, 0.3) : shade(color, 0.12);
+    const cx = 9 + lunge * 0.3;
+    const cy = by - 3.5 - bite;
+    const spikes = 9;
+    cel(ctx, (c) => {
+      for (let i = 0; i <= spikes; i++) {
+        const a = -PI * 0.95 + (i / spikes) * PI * 1.55;
+        const ripple = Math.sin(t * 4 + i * 1.7) * 0.5 + (ap ? crouch * 1.2 : 0);
+        const outer = (7.4 + (i % 2) * 2.4 + ripple) * (0.75 + ruffK * 0.45);
+        const inner = 4.2 * (0.8 + ruffK * 0.3);
+        const mid = a + (PI * 1.55) / spikes / 2;
+        if (i === 0) c.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+        c.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
+        if (i < spikes) c.lineTo(cx + Math.cos(mid) * inner * 1.25, cy + Math.sin(mid) * inner * 1.25);
+      }
+      c.closePath();
+    }, ruffColor, { sd: 2.2, lw: 1.4 });
+    // 鬃毛的走向
+    const strands = [];
+    for (let i = 1; i < spikes; i += 2) {
+      const a = -PI * 0.95 + (i / spikes) * PI * 1.55;
+      strands.push([cx + Math.cos(a) * 4, cy + Math.sin(a) * 4, cx + Math.cos(a) * 7.5 * ruffK, cy + Math.sin(a) * 7.5 * ruffK]);
+    }
+    folds(ctx, strands, shade(ruffColor, -0.35), 0.7);
+    if (style.fangs && q.dead < 0) {
+      // 一串狼牙：皮绳挂在颈毛下沿
+      line(ctx, [cx - 5, cy + 4.5, cx, cy + 7, cx + 5.5, cy + 5], '#3a2618', 0.9);
+      for (let i = 0; i < 4; i++) {
+        const fx = cx - 3.6 + i * 2.6;
+        const fy = cy + 5.8 + Math.sin(i * 1.3) * 0.6;
+        flat(ctx, (c) => pPoly(c, [fx - 0.8, fy, fx + 0.8, fy, fx, fy + 2.8]), '#efe6cf', 0.9);
+      }
+    }
+  }
+
   // head
   ctx.save();
   ctx.translate(13 + lunge * 0.4, by - 6 - crouch * 1.5 - bite * 1.5);
   ctx.rotate(pitch * 1.5 + (ap ? -0.15 * crouch : 0) + deadK * 0.4);
   // ears pinned back when attacking
   const earA = ap ? -0.5 : 0;
-  for (const [ex, c] of [[-3.2, dark], [0.6, color]]) {
+  for (const [ex, c] of [[-3.2, dark], [0.6, color]] as [number, string][]) {
     ctx.save();
     ctx.translate(ex, -4);
     ctx.rotate(earA);
-    cel(ctx, (cc) => pPoly(cc, [-2.4, 0, 0.4, -8.5, 2.8, 0]), c, { sd: 1, lw: 1.2 });
+    // 狼王近处那只耳朵缺了一个口子
+    const torn = style.tornEar && ex > 0;
+    cel(ctx, (cc) => pPoly(cc, torn ? [-2.4, 0, -0.6, -5.4, 0.8, -4.4, 0.4, -8.5, 2.8, 0] : [-2.4, 0, 0.4, -8.5, 2.8, 0]), c, { sd: 1, lw: 1.2 });
     ctx.restore();
   }
   cel(ctx, (c) => {
@@ -2015,14 +2076,158 @@ function drawWolf(ctx, q) {
   ctx.restore();
   flat(ctx, (c) => pEll(c, 13, -0.6, 1.5, 1.2), '#14101a');
   // ember eye with a slanted brow
-  const eye = q.dead >= 0 ? '#5a4a40' : ap ? '#ff3b20' : '#ffb02a';
+  const eye = q.dead >= 0 ? '#5a4a40' : ap ? style.rage : style.eye;
   flat(ctx, (c) => pPoly(c, [-0.4, -3.6, 4, -3.4, 3.6, -1.6, 0.2, -2]), eye, 1);
-  if (q.dead < 0) glint(ctx, 2, -2.8, 4, ap ? 'rgba(255,80,40,0.8)' : 'rgba(255,170,60,0.5)');
+  if (q.dead < 0) glint(ctx, 2, -2.8, 4, ap ? 'rgba(255,80,40,0.8)' : style.eye === '#9fe8ff' ? 'rgba(150,230,255,0.6)' : 'rgba(255,170,60,0.5)');
   line(ctx, [-1, -4.8, 4.6, -3.4], OUTLINE, 1.3);
   // 脸颊的毛和眼角的旧伤疤
   flat(ctx, (c) => pPoly(c, [-5.6, 0.6, -8, 2.6, -5, 2, -6.6, 4, -3, 2.6]), color, 1);
   line(ctx, [1.6, -6, 3.2, -1.2], 'rgba(255,220,200,0.55)', 0.6);
+  if (style.blaze) {
+    // 头狼额头到鼻梁的一道白斑
+    flat(ctx, (c) => pPoly(c, [-1.6, -5.6, 2.6, -5.4, 9, -1.8, 4.6, -2.4]), '#ece6da', 1);
+  }
+  if (style.scars >= 3) {
+    // 狼王一道从额头划过眼睛的长疤
+    line(ctx, [-0.6, -6.4, 5.2, 0.6], shade(color, -0.4), 1.5);
+    line(ctx, [-0.6, -6.4, 5.2, 0.6], 'rgba(255,225,210,0.85)', 0.6);
+  }
   ctx.restore();
+  ctx.restore();
+}
+
+/* ------------------------------ hunter ------------------------------ */
+// 猎人老陈：黑松林里的老猎人。皮袄加一圈毛领、护耳皮帽、背着弓和箭袋，手里一杆猎叉。
+
+function drawHunter(ctx, q) {
+  const color = safeColor(q.color, '#8a6a3a');
+  const leather = shade(color, -0.1);
+  const fur = '#d8c8a8';
+  const ph = q.ph;
+  const tilt = q.dead >= 0 ? lerp(PI / 2, PI * 0.97, q.dead) : PI / 2 + arc3(ph, 0.05, 0.25, -0.02);
+  humanoid(ctx, q, {
+    legs: '#5a4a36', boots: '#2e2016', body: leather, sleeve: shade(color, -0.2), skin: '#d6a27a',
+    shoulder: 8.4, waist: 6.6, headR: 7, stride: 0.5,
+    lean: () => (ph ? arc3(ph, 0, -0.1, 0.18) : 0),
+    arms(q, g) {
+      if (q.dead >= 0) return g.arms;
+      return [[0.5, -0.6], [arc3(ph, 1.1, 0.5, 1.6), arc3(ph, -1, -1.7, -0.1)]];
+    },
+    back(ctx, q, B) {
+      // 背上斜挎的长弓和箭袋
+      inkLine(ctx, [-B.sw - 2, B.sy - 6, -B.sw + 5, B.hipY + 6], '#6a4424', 1.8);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(240,230,210,0.7)';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(-B.sw - 1.4, B.sy - 5);
+      ctx.lineTo(-B.sw + 5.4, B.hipY + 4.6);
+      ctx.stroke();
+      ctx.restore();
+      cel(ctx, (c) => pRrect(c, -B.sw - 3, B.sy - 1, 5, 12, 1.6), '#5a3a20', { sd: 1.4 });
+      for (let i = 0; i < 3; i++) {
+        const fx = -B.sw - 2 + i * 1.6;
+        line(ctx, [fx, B.sy - 1, fx - 0.4, B.sy - 5], '#d8cdb8', 0.8);
+        flat(ctx, (c) => pPoly(c, [fx - 1.2, B.sy - 5, fx + 0.6, B.sy - 5.4, fx - 0.4, B.sy - 7.4]), i === 1 ? '#c8402c' : '#efe6d2', 0.8);
+      }
+    },
+    torsoDetail(ctx, q, B) {
+      // 毛领、皮带和挂在腰上的小刀
+      cel(ctx, (c) => {
+        c.moveTo(-B.sw + 0.5, B.sy + 1);
+        for (let i = 0; i <= 6; i++) {
+          const x = -B.sw + 0.5 + i * ((B.sw * 2 - 1) / 6);
+          c.lineTo(x, B.sy + (i % 2 ? 4.4 : 2.6));
+        }
+        c.lineTo(B.sw - 0.5, B.sy - 1);
+        c.closePath();
+      }, fur, { sd: 1.2, lw: 1.1 });
+      line(ctx, [-B.ww, B.hipY - 1.6, B.ww + 0.6, B.hipY - 2], '#2a1a10', 1.8);
+      flat(ctx, (c) => pRrect(c, -0.6, B.hipY - 2.8, 2.2, 2, 0.4), '#c8a24a');
+      inkLine(ctx, [B.ww - 1, B.hipY - 1, B.ww + 1, B.hipY + 5], '#3a2a1c', 1.4);
+      folds(ctx, [[-B.ww + 1.5, B.sy + 7, -B.ww + 1, B.hipY - 3], [2.5, B.sy + 8, 3.2, B.hipY - 3]], 'rgba(40,24,10,0.5)', 0.7);
+    },
+    head(ctx, q, B) {
+      const { hx, hy, hr } = B;
+      // 灰白的络腮胡、眼睛和护耳皮帽
+      flat(ctx, (c) => { c.moveTo(hx - 1, hy + 2); c.quadraticCurveTo(hx + 3, hy + 9, hx + hr, hy + 3); c.quadraticCurveTo(hx + 3, hy + 4.6, hx - 1, hy + 2); c.closePath(); }, '#cfc6b8', 1);
+      eyes(ctx, hx + 2.6, hy + 0.8);
+      line(ctx, [hx + 0.6, hy - 1.6, hx + 4.4, hy - 1.2], '#5a4a3a', 1);
+      cel(ctx, (c) => {
+        c.moveTo(hx - hr - 1, hy + 1);
+        c.arc(hx, hy - 0.6, hr + 1, PI, TAU);
+        c.lineTo(hx + hr + 1, hy - 1.4);
+        c.lineTo(hx - hr - 1, hy - 1.4);
+        c.closePath();
+      }, '#6a4a2a', { sd: 1.6 });
+      cel(ctx, (c) => pRrect(c, hx - hr - 1.5, hy - 2.6, hr * 2 + 3, 2.8, 1.2), fur, { sd: 0.8, lw: 1.1 });
+      cel(ctx, (c) => pRrect(c, hx - hr - 1.6, hy - 1.4, 3.4, 6.4, 1.4), fur, { sd: 0.8, lw: 1.1 });
+      glint(ctx, hx - 1.5, hy - 5.5, 2.4, 'rgba(255,230,190,0.45)');
+    },
+    weaponBehindHand: true,
+    weapon(ctx, q, B, h) {
+      const dx = Math.sin(tilt);
+      const dy = Math.cos(tilt);
+      const slide = arc3(ph, 0, -3, 6);
+      h = { x: h.x + dx * slide, y: h.y + dy * slide };
+      const x0 = h.x - dx * 13;
+      const y0 = h.y - dy * 13;
+      const x1 = h.x + dx * 17;
+      const y1 = h.y + dy * 17;
+      inkLine(ctx, [x0, y0, x1, y1], '#7a5230', 1.8);
+      // 两股叉头
+      const nx = dy;
+      const ny = -dx;
+      for (const side of [-1, 1]) {
+        const bx = x1 + nx * side * 1.6;
+        const by = y1 + ny * side * 1.6;
+        cel(ctx, (c) => pPoly(c, [bx - nx * 0.9, by - ny * 0.9, bx + dx * 7 + nx * side * 0.6, by + dy * 7 + ny * side * 0.6, bx + nx * 0.9, by + ny * 0.9]), '#d8dde4', { dark: '#8a94a2', sd: 0.6, lw: 1 });
+      }
+      line(ctx, [x1 - nx * 2.4, y1 - ny * 2.4, x1 + nx * 2.4, y1 + ny * 2.4], '#4a4a52', 1.4);
+    },
+  });
+}
+
+/* ------------------------------ bramble ----------------------------- */
+// 荆棘丛：挡在秘密房门口的一团带刺的藤，被打时抖，砍断后瘪下去只剩几截断茎。
+
+function drawBramble(ctx, q) {
+  const color = safeColor(q.color, '#4a6a2e');
+  const dark = shade(color, -0.4);
+  const t = q.time / 1000;
+  const deadK = q.dead >= 0 ? ease(q.dead) : 0;
+  const shiver = q.hit >= 0 && q.hit < 1 ? Math.sin(q.hit * 40) * (1 - q.hit) * 2 : 0;
+  ctx.save();
+  ctx.translate(shiver, 0);
+  ctx.scale(1, 1 - deadK * 0.7);
+  // 一团团叶子：后面暗、前面亮
+  const clumps = [[-10, -12, 9, dark], [9, -13, 9, dark], [0, -19, 10, color], [-8, -6, 8, color], [8, -6, 8.5, color], [0, -8, 9, shade(color, 0.1)]] as [number, number, number, string][];
+  for (const [x, y, r, c] of clumps) {
+    const sway = Math.sin(t * 1.3 + x) * 0.6;
+    cel(ctx, (cc) => {
+      for (let i = 0; i <= 10; i++) {
+        const a = (i / 10) * TAU;
+        const rr = r * (i % 2 ? 0.82 : 1);
+        if (i === 0) cc.moveTo(x + sway + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.85);
+        else cc.lineTo(x + sway + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.85);
+      }
+      cc.closePath();
+    }, c, { sd: 2, lw: 1.3 });
+  }
+  // 交错的藤条和尖刺
+  const vines = [[-15, -4, -4, -20, 8, -24], [14, -3, 4, -17, -9, -22], [-12, -14, 0, -10, 13, -16]];
+  for (const v of vines) {
+    inkLine(ctx, v, '#5a3a24', 1.6);
+    for (let i = 0; i < v.length - 2; i += 2) {
+      const mx = (v[i] + v[i + 2]) / 2;
+      const my = (v[i + 1] + v[i + 3]) / 2;
+      flat(ctx, (c) => pPoly(c, [mx - 1, my, mx + 1, my, mx + 0.2, my - 3.2]), '#e8d8b8', 0.8);
+    }
+  }
+  // 几颗暗红的浆果
+  if (q.dead < 0) {
+    for (const [x, y] of [[-5, -14], [6, -10], [2, -20]]) flat(ctx, (c) => pEll(c, x, y, 1.6, 1.6), '#8a1a2a', 1);
+  }
   ctx.restore();
 }
 
@@ -2770,6 +2975,10 @@ const SPECS = {
   villager: { draw: drawVillager, fall: -1 },
   slime: { draw: drawSlime, fall: 0 },
   wolf: { draw: drawWolf, fall: 0 },
+  alpha_wolf: { draw: (ctx, q) => drawWolf(ctx, q, WOLF_STYLES.alpha_wolf), fall: 0 },
+  wolf_king: { draw: (ctx, q) => drawWolf(ctx, q, WOLF_STYLES.wolf_king), fall: 0 },
+  hunter: { draw: drawHunter, fall: -1 },
+  bramble: { draw: drawBramble, fall: 0 },
   skeleton_archer: { draw: drawSkeleton, fall: 0 },
   ogre_chief: { draw: drawOgre, fall: 1 },
   wolf_pup: { draw: drawWolfPup, fall: 0 },

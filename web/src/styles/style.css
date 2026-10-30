@@ -165,7 +165,7 @@ h4 {
 
 /* top-center: selected target */
 .target {
-  top: 12px;
+  top: 76px;   /* 让开场景牌子和副本进度条 */
   left: 50%;
   transform: translateX(-50%);
   width: min(260px, 60vw);
@@ -971,11 +971,57 @@ h4 {
   white-space: nowrap;
   pointer-events: none;
 }
+/* 首领血条：技能栏上方，名字压在血条上沿；两道刻线是阶段分界，白色残影是刚掉的血 */
+.boss-bar {
+  position: absolute;
+  bottom: 156px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, 76vw);
+  pointer-events: none;
+  text-align: center;
+}
+.boss-bar-name {
+  font: 20px var(--display);
+  letter-spacing: 6px;
+  color: #fbe9c0;
+  text-shadow: 0 2px 0 #000, 0 0 14px rgba(224, 90, 60, 0.6);
+  margin-bottom: 3px;
+}
+.boss-bar-track {
+  position: relative;
+  height: 14px;
+  border: 2px solid #c8913e;
+  outline: 1px solid #000;
+  background: rgba(14, 6, 8, 0.9);
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.7);
+}
+.boss-bar-fill, .boss-bar-ghost { position: absolute; left: 0; top: 0; bottom: 0; }
+.boss-bar-ghost { background: #f4e6d0; }
+.boss-bar-fill {
+  background: linear-gradient(180deg, #ff6a52 0%, #c3221c 55%, #7a0e12 100%);
+  transition: width 0.08s linear;
+}
+.boss-bar.low .boss-bar-fill { animation: boss-low 0.9s ease-in-out infinite alternate; }
+@keyframes boss-low { to { filter: brightness(1.45); } }
+.boss-bar-marks span {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  background: #ffd98a;
+  box-shadow: 0 0 0 1px #000;
+}
 @media (prefers-reduced-motion: reduce) {
   .level-banner { animation: none; }
+  .boss-bar.low .boss-bar-fill { animation: none; }
 }
 @media (max-width: 700px) {
   .level-banner-title { font-size: 30px; letter-spacing: 6px; }
   .level-banner-sub { font-size: 13px; }
   .level-progress { top: 38px; font-size: 12px; }
+  .target { top: 64px; }
+  .boss-bar { bottom: 132px; }
+  .boss-bar-name { font-size: 15px; letter-spacing: 3px; }
 }

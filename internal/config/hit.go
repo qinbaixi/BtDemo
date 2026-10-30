@@ -101,9 +101,13 @@ func (cfg *Config) validateHits() error {
 		if skill.Windup < 0 || skill.Knock < 0 || skill.Stun < 0 || skill.PoiseDmg < 0 {
 			return fmt.Errorf("skills.yaml: skill %s: windup, knock, stun and poise_dmg must be >= 0", id)
 		}
-		// 前摇只给单体和自身范围技能：投掷、位移、箭雨的轨迹在出手时就要算好
-		if skill.Windup > 0 && skill.Kind != "target" && skill.Kind != "aoe" {
-			return fmt.Errorf("skills.yaml: skill %s has a windup but kind %q (only target and aoe)", id, skill.Kind)
+		// 前摇只给单体、自身范围技能和冲锋：投掷、位移、箭雨的轨迹在出手时就要算好
+		if skill.Windup > 0 && skill.Kind != "target" && skill.Kind != "aoe" && skill.Kind != "charge" {
+			return fmt.Errorf(
+				"skills.yaml: skill %s has a windup but kind %q (only target, aoe and charge)",
+				id,
+				skill.Kind,
+			)
 		}
 	}
 	player := &cfg.World.Player

@@ -198,7 +198,7 @@ type Skill struct {
 	ID       string      `yaml:"-"`
 	Name     string      `yaml:"name"`
 	Desc     string      `yaml:"desc"`     // 选技能面板上的一句话说明
-	Kind     string      `yaml:"kind"`     // target | aoe | self | ally 友方 | dash 位移 | line 直线投掷 | zone 放回血区 | rain 范围落箭
+	Kind     string      `yaml:"kind"`     // target | aoe | self | ally 友方 | dash 位移 | line 直线投掷 | zone 放回血区 | rain 范围落箭 | charge 冲锋 | rally 给周围同伴加 Buff
 	Range    int         `yaml:"range"`    // 射程（像素）
 	Radius   int         `yaml:"radius"`   // 范围半径（像素）
 	Cooldown Millis      `yaml:"cooldown"` // 冷却毫秒数
@@ -206,7 +206,7 @@ type Skill struct {
 	Ratio    BasisPoints `yaml:"ratio"`    // 攻击系数，万分比（12000 = 攻击 × 1.2）
 	Base     int         `yaml:"base"`     // 固定伤害
 	Heal     BasisPoints `yaml:"heal"`     // self：回复自身最大生命的万分比；ally：回复目标最大生命的万分比
-	Distance int         `yaml:"distance"` // dash：位移距离；rain：没有目标时落点在前方多远（像素）
+	Distance int         `yaml:"distance"` // dash、charge：位移距离；rain：没有目标时落点在前方多远（像素）
 	Pierce   bool        `yaml:"pierce"`   // line：穿透，命中直线上的每个敌人
 	Buff     *Buff       `yaml:"buff"`
 	Debuff   *Buff       `yaml:"debuff"` // 命中时加在目标身上的效果（比如减速）
@@ -221,6 +221,8 @@ type Skill struct {
 	Knock    int    `yaml:"knock"`
 	Stun     Millis `yaml:"stun"`
 	PoiseDmg int    `yaml:"poise_dmg"`
+	// SelfStun 只有 charge 用：冲锋撞到墙、石头这些障碍物时，自己晕多少毫秒（玩家的输出窗口）
+	SelfStun Millis `yaml:"self_stun"`
 }
 
 // Template 是 config/monsters.yaml 中的怪物或 NPC 模板。
@@ -397,7 +399,7 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 	for id, skill := range cfg.Skills {
 		skill.ID = id
 		switch skill.Kind {
-		case "target", "aoe", "self", "ally", "dash", "line", "zone", "rain":
+		case "target", "aoe", "self", "ally", "dash", "line", "zone", "rain", "charge", "rally":
 		default:
 			return fmt.Errorf("skills.yaml: skill %s has unknown kind %q", id, skill.Kind)
 		}
@@ -405,6 +407,13 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		case "", "physical", "magic":
 		default:
 			return fmt.Errorf("skills.yaml: skill %s has unknown damage %q", id, skill.Damage)
+		}
+		chargeIncomplete := skill.Range <= 0 || skill.Distance <= 0 || skill.Windup <= 0
+		if skill.Kind == "charge" && chargeIncomplete {
+			return fmt.Errorf("skills.yaml: charge skill %s needs a range, distance and windup", id)
+		}
+		if skill.Kind == "rally" && (skill.Radius <= 0 || skill.Buff == nil) {
+			return fmt.Errorf("skills.yaml: rally skill %s needs a radius and a buff", id)
 		}
 		if skill.Kind == "dash" && skill.Distance <= 0 {
 			return fmt.Errorf("skills.yaml: dash skill %s needs a distance", id)
@@ -508,7 +517,7 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 				template.Kind,
 			)
 		}
-		if !knownTrees[template.Tree] {
+		if template.Tree != "" && !knownTrees[template.Tree] { // 不写 tree 的是不会动的东西（可以砍掉的灌木）
 			return fmt.Errorf(
 				"monsters.yaml: template %s uses unknown behavior tree %q",
 				id,

@@ -122,6 +122,26 @@ var All = map[string]Exported{
 
 启动时 `checkSlots` 对宠物同样检查：树里 `cast_skill` / `cast_on_owner` 用到的槽位，`pets.yaml` 里的宠物都配了对应数量的技能。
 
+## 狼群和首领节点
+
+第一关「黑松林道」的狼群、头狼、灰鬃狼王用到的节点，在 `internal/game/ai/pack_nodes.go`。树是 `bt/trees/monster_pack.json`、`alpha_wolf.json`、`wolf_king.json`。
+
+| 类型 | sub_type（BtTree 里的名字） | 参数 | 做什么 |
+| --- | --- | --- | --- |
+| 任务 | `flank`（Flank） | `Distance`=70 | 包抄：盯着同一个目标的狼按 ID 排队，围着目标平均分角度，每只走到自己的站位（离目标 Distance），到了返回 Success。绕了 4 秒还没到（被挡住）也返回 Success，直接扑上去 |
+| 条件 | `allies_near`（AlliesNear） | `Range`=200，`Count`=2 | Range 以内同阵营、同类的活同伴至少 Count 个（头狼同伴够多才嚎叫） |
+| 任务 | `summon`（Summon） | `Template`、`Count`=1、`Radius`=200 | 在自己周围 Radius 处叫出 Count 只 Template。叫来的怪算进自己所在的房间（死光了房间才清完），一出来就盯上自己的目标。由场景接到关卡系统（`level.System.Summon`） |
+| 任务 | `set_phase`（SetPhase） | `Phase`=2 | 把首领的阶段设成 Phase（`Entity.Brain.Phase`） |
+| 条件 | `phase_at_least`（PhaseAtLeast） | `Phase`=2 | 阶段至少是 Phase。配合取反：“血量低于 60% 且还没到第 2 阶段”只进一次 |
+
+灰鬃狼王的树（`wolf_king.json`）：
+
+1. 血量低于 60% 且还没到第 2 阶段：设阶段 2，喊一句，叫两只狼，放狼王号令（集结）；
+2. 血量低于 25% 且还没到第 3 阶段：设阶段 3，喊一句，放嗜血（长时间加攻加速）；
+3. 打：第 2 阶段起每 20 秒再叫狼；第 3 阶段起每 9 秒连扑三次；260 以内扑杀；然后重咬、咬、追。
+
+模板可以不写 `tree`（比如荆棘丛），这样的实体没有行为树，站着不动。
+
 ## 以近战怪为例读一棵树
 
 ```text

@@ -47,6 +47,13 @@ func (sys *System) Place(entity *core.Entity, x, y float64) {
 	sys.grid.Moved(entity)
 }
 
+// PlaceExact 把 entity 直接放到 (x, y)，不找空地（关卡里挡在门里的灌木）。
+func (sys *System) PlaceExact(entity *core.Entity, x, y float64) {
+	entity.SetPos(x, y)
+	entity.HomeX, entity.HomeY = x, y
+	sys.grid.Moved(entity)
+}
+
 // FreeSpot 返回离 (x, y) 最近的、能放下 entity 的位置。
 func (sys *System) FreeSpot(entity *core.Entity, x, y float64) (float64, float64) {
 	point := sys.nav.NearestFree(nav.Vec{X: x, Y: y}, entity.Radius)

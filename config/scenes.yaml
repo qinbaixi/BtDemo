@@ -49,32 +49,58 @@ scenes:
     name: 黑松林道
     kind: dungeon
     map: wolf_trail.tmj
-    spawn: { x: 800, y: 2060, spread: 40 }
+    spawn: { x: 800, y: 3290, spread: 40 }
     heal_zones:
-      - { name: 林口篝火, x: 800, y: 2050, radius: 90, heal: 800, interval: 1000, faction: player, look: spring, color: "#7dffc4", checkpoint: true }
-      - { name: 猎人的泉水, x: 1190, y: 400, radius: 90, heal: 800, interval: 1000, faction: player, look: spring, color: "#7dffc4", checkpoint: true }
+      - { name: 林口篝火, x: 860, y: 3300, radius: 90, heal: 800, interval: 1000, faction: player, look: spring, color: "#7dffc4", checkpoint: true }
+      - { name: 猎人的泉水, x: 1320, y: 1560, radius: 90, heal: 800, interval: 1000, faction: player, look: spring, color: "#7dffc4", checkpoint: true }
     rooms:
+      # 落叶小径：热身，史莱姆两波
       - id: r1
         waves:
           - [{ template: slime, count: 3 }]
           - [{ template: slime, count: 4 }]
+      # 古树洞：秘密房，砍开荆棘进来，白给一件装备
+      - id: secret
+        reward: gear
+      # 狼迹空地：第一次见狼群包抄
       - id: r2
         reward: heal
         waves:
-          - [{ template: wolf, count: 2 }]
-          - [{ template: wolf, count: 3 }]
+          - [{ template: pack_wolf, count: 2 }]
+          - [{ template: pack_wolf, count: 3 }]
+      # 倒木隘口：窄道，狼从两头同时进来
       - id: r3a
         reward: boon
         excludes: [r3b]
         waves:
-          - [{ template: wolf, count: 2 }, { template: slime, count: 2 }]
-          - [{ template: wolf, count: 3 }]
+          - [{ template: pack_wolf, count: 2, x: 1010, y: 1900, spread: 30 }, { template: pack_wolf, count: 2, x: 1010, y: 2320, spread: 30 }]
+          - [{ template: pack_wolf, count: 2, x: 1010, y: 1900, spread: 30 }, { template: pack_wolf, count: 1, x: 1010, y: 2320, spread: 30 }]
+      # 蘑菇洼地：头狼第一次出现，嚎叫给狼群加攻
       - id: r3b
         reward: gear
         excludes: [r3a]
         waves:
-          - [{ template: slime, count: 5 }]
-          - [{ template: slime, count: 3 }, { template: wolf, count: 2 }]
+          - [{ template: slime, count: 2 }, { template: alpha_wolf, count: 1 }]
+          - [{ template: slime, count: 3 }, { template: pack_wolf, count: 2 }]
+      # 猎人小屋：救下被狼围住的猎人，清完开回林口的捷径
+      - id: r4
+        reward: heal
+        allies:
+          - { template: hunter, count: 1, x: 1080, y: 1540, spread: 10 }
+        waves:
+          - [{ template: pack_wolf, count: 3 }]
+      # 狼穴前：首领前的考试，三波越来越多头狼
+      - id: r5
+        waves:
+          - [{ template: pack_wolf, count: 3 }]
+          - [{ template: alpha_wolf, count: 1 }, { template: pack_wolf, count: 2 }]
+          - [{ template: alpha_wolf, count: 2 }]
+      # 灰鬃狼王：三阶段首领战，扑杀撞石头会晕
+      - id: r6
+        waves:
+          - [{ template: wolf_king, count: 1, x: 1200, y: 420, spread: 0 }]
+      # 狼穴深处：首领战之后的安全屋，通往第二关
+      - id: r7
     boons:
       - { name: 狼血, duration: 3600000, atk_pct: 2500, look: fire }
       - { name: 疾风, duration: 3600000, speed_pct: 2000, look: haste }

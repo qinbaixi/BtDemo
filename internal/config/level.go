@@ -43,13 +43,26 @@ type Gate struct {
 	X, Y, W, H int
 	After      string
 	To         string
+	// Breakable 是挡在门里的东西的怪物模板（比如灌木）：砍掉它门才开（秘密房的入口）
+	Breakable string
 }
 
-// Wave 是一波怪里的一种：模板和数量。
+// Center 是门的中心。
+func (gate *Gate) Center() (float64, float64) {
+	return float64(gate.X) + float64(gate.W)/2, float64(gate.Y) + float64(gate.H)/2
+}
+
+// Wave 是一波怪里的一种：模板和数量。写了 x、y 就刷在那附近（spread 以内），不写就在房间里离玩家远的地方随便刷。
 type Wave struct {
 	Template string `yaml:"template"`
 	Count    int    `yaml:"count"`
+	X        int    `yaml:"x"`
+	Y        int    `yaml:"y"`
+	Spread   int    `yaml:"spread"`
 }
+
+// At 报告这一种怪有没有指定刷怪点。
+func (wave *Wave) At() bool { return wave.X != 0 || wave.Y != 0 }
 
 // LevelRoom 是副本里一个房间的玩法（scenes.yaml 场景的 rooms）。
 type LevelRoom struct {
@@ -61,6 +74,8 @@ type LevelRoom struct {
 	Reward string `yaml:"reward"`
 	// Excludes 是走进这个房间以后再也去不了的房间（岔路的另一边），通往它们的门永远关上
 	Excludes []string `yaml:"excludes"`
+	// Allies 是第一次有人走进来时刷出的友方 NPC（比如被狼围住的猎人），和普通 NPC 一样会复活，房间重置也不移走
+	Allies []Wave `yaml:"allies"`
 
 	Area *RoomArea `yaml:"-"` // 地图上的范围，由 validateLevel 填上
 }
@@ -109,7 +124,11 @@ func parseLevelLayers(layers []tmjLayer, layout *Layout) error {
 			if gate.ID == "" {
 				gate.ID = fmt.Sprintf("gate%d", obj.ID)
 			}
-			props := map[string]*string{"after": &gate.After, "to": &gate.To}
+			props := map[string]*string{
+				"after":     &gate.After,
+				"to":        &gate.To,
+				"breakable": &gate.Breakable,
+			}
 			if err := stringProps(obj, props); err != nil {
 				return fmt.Errorf("gates object %d: %w", obj.ID, err)
 			}
@@ -185,6 +204,14 @@ func (cfg *Config) validateLevel(scene *Scene, label string) error {
 				return fmt.Errorf("%s: gate %s refers to unknown room %q", label, gate.ID, ref)
 			}
 		}
+		if gate.Breakable != "" && cfg.Templates[gate.Breakable] == nil {
+			return fmt.Errorf(
+				"%s: gate %s has unknown breakable template %q",
+				label,
+				gate.ID,
+				gate.Breakable,
+			)
+		}
 	}
 	needBoons := false
 	seen := map[string]bool{}
@@ -204,6 +231,15 @@ func (cfg *Config) validateLevel(scene *Scene, label string) error {
 		for _, excluded := range room.Excludes {
 			if areas[excluded] == nil || excluded == room.ID {
 				return fmt.Errorf("%s excludes unknown room %q", owner, excluded)
+			}
+		}
+		for _, ally := range room.Allies {
+			if cfg.Templates[ally.Template] == nil || ally.Count <= 0 {
+				return fmt.Errorf(
+					"%s: ally has unknown template %q or count <= 0",
+					owner,
+					ally.Template,
+				)
 			}
 		}
 		for i, wave := range room.Waves {

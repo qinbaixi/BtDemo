@@ -81,7 +81,7 @@ func TestDungeonIsAnInstancePerPlayer(t *testing.T) {
 	}
 	welcome := lastWelcome(sentMessages(t, first))
 	info := welcome.GetScene()
-	if !info.GetDungeon() || len(info.GetRooms()) != 6 || len(info.GetGates()) != 7 {
+	if !info.GetDungeon() || len(info.GetRooms()) != 10 || len(info.GetGates()) != 11 {
 		t.Fatalf("welcome scene = %v", info)
 	}
 }
@@ -92,13 +92,13 @@ func TestRoomLocksSpawnsWavesAndClears(t *testing.T) {
 	client, scene := enterDungeon(t, manager)
 	player := client.Player
 	sentMessages(t, client)
-	moveTo(scene, player, 460, 1560)
+	moveTo(scene, player, 460, 2840)
 	pump(manager, 1)
 	room := roomStatus(t, scene, "r1")
 	if room.Phase != core.RoomFight || room.Wave != 1 || gateOpen(t, scene, "g_r1_in") {
 		t.Fatalf("r1 = %+v, entrance open %v", room, gateOpen(t, scene, "g_r1_in"))
 	}
-	if !scene.Nav.Solid(len(scene.Nav.Shapes()) - 7) { // 第一扇门是 g_r1_in
+	if !scene.Nav.Solid(len(scene.Nav.Shapes()) - 11) { // 第一扇门是 g_r1_in
 		t.Fatal("the closed gate should block the way")
 	}
 	for wave := 1; wave <= 2; wave++ {
@@ -139,7 +139,7 @@ func TestForkExcludesTheOtherSideAndRewards(t *testing.T) {
 	player := client.Player
 	roomStatus(t, scene, "r1").Phase = core.RoomClear
 	roomStatus(t, scene, "r2").Phase = core.RoomClear
-	moveTo(scene, player, 1010, 870)
+	moveTo(scene, player, 1010, 2110)
 	pump(manager, 1)
 	if roomStatus(t, scene, "r3b").Phase != core.RoomSkipped || gateOpen(t, scene, "g_r2_b") {
 		t.Fatal("walking into r3a should close the way to r3b")
@@ -174,10 +174,10 @@ func TestWipeResetsRoomAndRespawnsAtCheckpoint(t *testing.T) {
 	client, scene := enterDungeon(t, manager)
 	player := client.Player
 	pump(manager, 2)
-	if player.Checkpoint == nil || player.Checkpoint.Y != 2050 {
+	if player.Checkpoint == nil || player.Checkpoint.Y != 3300 {
 		t.Fatalf("the camp spring should be the checkpoint, got %v", player.Checkpoint)
 	}
-	moveTo(scene, player, 460, 1560)
+	moveTo(scene, player, 460, 2840)
 	pump(manager, 1)
 	scene.Combat.Kill(player, nil)
 	pump(manager, 40)
@@ -187,7 +187,7 @@ func TestWipeResetsRoomAndRespawnsAtCheckpoint(t *testing.T) {
 		t.Fatalf("r1 should reset after the wipe: %+v", room)
 	}
 	pump(manager, 40)
-	if player.Dead || player.Y < 1900 {
+	if player.Dead || player.Y < 3100 {
 		t.Fatalf(
 			"player should respawn at the camp, at (%v, %v) dead=%v",
 			player.X,
@@ -197,15 +197,24 @@ func TestWipeResetsRoomAndRespawnsAtCheckpoint(t *testing.T) {
 	}
 }
 
-// 安全屋走进去就算清完，打开捷径；离开副本时存档点和祝福都清掉。
+// 安全屋走进去就算清完；猎人小屋清完打开回林口的捷径；离开副本时存档点和祝福都清掉。
 func TestSafeRoomOpensShortcutAndLeavingClears(t *testing.T) {
 	manager := shippedManager(t)
 	client, scene := enterDungeon(t, manager)
 	player := client.Player
-	moveTo(scene, player, 1190, 330)
+	moveTo(scene, player, 1200, 140)
 	pump(manager, 1)
+	if roomStatus(t, scene, "r7").Phase != core.RoomClear {
+		t.Fatal("walking into a room without waves should clear it")
+	}
+	moveTo(scene, player, 1190, 1560)
+	pump(manager, 1)
+	for _, monster := range roomMonsters(scene, "r4") {
+		scene.Combat.Kill(monster, player)
+	}
+	pump(manager, 40)
 	if roomStatus(t, scene, "r4").Phase != core.RoomClear || !gateOpen(t, scene, "g_shortcut") {
-		t.Fatal("walking into the hut should open the shortcut")
+		t.Fatal("clearing the hut should open the shortcut")
 	}
 	scene.Combat.AddBuff(player, scene.Template.Boons[0])
 	scene.Do(func() { scene.travel(client, "village", 0) })
@@ -227,13 +236,13 @@ func TestStuckMonstersAreMovedToThePlayer(t *testing.T) {
 	manager := shippedManager(t)
 	client, scene := enterDungeon(t, manager)
 	player := client.Player
-	moveTo(scene, player, 460, 1560)
+	moveTo(scene, player, 460, 2840)
 	pump(manager, 1)
 	monsters := roomMonsters(scene, "r1")
 	for _, monster := range monsters {
 		monster.Speed = 0 // 站着不动，模拟卡住
 		monster.AI = nil
-		moveTo(scene, monster, 200, 1400)
+		moveTo(scene, monster, 200, 2680)
 	}
 	pump(manager, 20*21) // 20 秒多一点
 	for _, monster := range monsters {

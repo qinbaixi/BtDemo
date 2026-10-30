@@ -1,0 +1,377 @@
+{
+  "type": "Selector",
+  "label": "灰鬃狼王",
+  "comment": "三阶段：60% 叫狼、25% 嗜血连扑；扑杀撞到石头会晕 2 秒",
+  "services": [
+    {
+      "type": "UpdateTarget",
+      "label": "刷新仇恨",
+      "properties": [
+        {
+          "name": "Range",
+          "value": 420
+        }
+      ],
+      "timeBetweenTicks": 0.5
+    }
+  ],
+  "childNodes": [
+    {
+      "type": "Sequence",
+      "label": "进入第二阶段",
+      "decorators": [
+        {
+          "type": "HpBelow",
+          "properties": [
+            {
+              "name": "Percent",
+              "value": 60
+            }
+          ]
+        },
+        {
+          "type": "PhaseAtLeast",
+          "inverseCheckCondition": true,
+          "properties": [
+            {
+              "name": "Phase",
+              "value": 2
+            }
+          ]
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "SetPhase",
+          "properties": [
+            {
+              "name": "Phase",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "type": "Say",
+          "properties": [
+            {
+              "name": "Text",
+              "value": "嗷呜——！孩子们！"
+            }
+          ]
+        },
+        {
+          "type": "Summon",
+          "label": "叫狼",
+          "properties": [
+            {
+              "name": "Template",
+              "value": "pack_wolf"
+            },
+            {
+              "name": "Count",
+              "value": 2
+            },
+            {
+              "name": "Radius",
+              "value": 220
+            }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "狼王号令",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "进入第三阶段",
+      "decorators": [
+        {
+          "type": "HpBelow",
+          "properties": [
+            {
+              "name": "Percent",
+              "value": 25
+            }
+          ]
+        },
+        {
+          "type": "PhaseAtLeast",
+          "inverseCheckCondition": true,
+          "properties": [
+            {
+              "name": "Phase",
+              "value": 3
+            }
+          ]
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "SetPhase",
+          "properties": [
+            {
+              "name": "Phase",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "type": "Say",
+          "properties": [
+            {
+              "name": "Text",
+              "value": "……血！"
+            }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "嗜血",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Selector",
+      "label": "战斗",
+      "decorators": [
+        {
+          "type": "HasTarget"
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "Sequence",
+          "label": "再叫狼",
+          "decorators": [
+            {
+              "type": "PhaseAtLeast",
+              "properties": [
+                {
+                  "name": "Phase",
+                  "value": 2
+                }
+              ]
+            },
+            {
+              "type": "Cooldown",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 20
+                }
+              ]
+            }
+          ],
+          "childNodes": [
+            {
+              "type": "Say",
+              "properties": [
+                {
+                  "name": "Text",
+                  "value": "嗷——"
+                }
+              ]
+            },
+            {
+              "type": "Summon",
+              "properties": [
+                {
+                  "name": "Template",
+                  "value": "pack_wolf"
+                },
+                {
+                  "name": "Count",
+                  "value": 2
+                },
+                {
+                  "name": "Radius",
+                  "value": 220
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Sequence",
+          "label": "连扑",
+          "decorators": [
+            {
+              "type": "PhaseAtLeast",
+              "properties": [
+                {
+                  "name": "Phase",
+                  "value": 3
+                }
+              ]
+            },
+            {
+              "type": "Cooldown",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 9
+                }
+              ]
+            },
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 240
+                }
+              ]
+            }
+          ],
+          "childNodes": [
+            {
+              "type": "CastSkill",
+              "label": "连扑",
+              "properties": [
+                {
+                  "name": "Slot",
+                  "value": 5
+                }
+              ]
+            },
+            {
+              "type": "Wait",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 0.15
+                }
+              ]
+            },
+            {
+              "type": "CastSkill",
+              "label": "连扑",
+              "properties": [
+                {
+                  "name": "Slot",
+                  "value": 5
+                }
+              ]
+            },
+            {
+              "type": "Wait",
+              "properties": [
+                {
+                  "name": "Seconds",
+                  "value": 0.15
+                }
+              ]
+            },
+            {
+              "type": "CastSkill",
+              "label": "连扑",
+              "properties": [
+                {
+                  "name": "Slot",
+                  "value": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "扑杀",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 3
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 260
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "猛扑",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 2
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 65
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "CastSkill",
+          "label": "撕咬",
+          "properties": [
+            {
+              "name": "Slot",
+              "value": 1
+            }
+          ],
+          "decorators": [
+            {
+              "type": "TargetInRange",
+              "properties": [
+                {
+                  "name": "Range",
+                  "value": 65
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "ChaseTarget",
+          "label": "追击",
+          "properties": [
+            {
+              "name": "StopRange",
+              "value": 50
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Wait",
+      "label": "守着狼穴",
+      "properties": [
+        {
+          "name": "Seconds",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}
