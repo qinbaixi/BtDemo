@@ -1,7 +1,7 @@
 # 地图：config/maps/*.tmj（Tiled）
 
 地图用 [Tiled 地图编辑器](https://www.mapeditor.org)（1.10 或更新版本）编辑，保存成 JSON 格式。每个场景一张（`config/scenes.yaml` 的 `map`，见 [场景与分线](scene.md)）：
-`config/maps/village.tmj`（晨曦村）和 `config/maps/graveyard.tmj`（亡者墓园），两张图用传送门连起来。
+`config/maps/village.tmj`（晨曦村）、`config/maps/graveyard.tmj`（亡者墓园）和副本 `config/maps/wolf_trail.tmj`（黑松林道），用传送门连起来。
 **前后端读的是同一个文件**：
 
 - 服务端启动时读它（`internal/config/layout.go`），把物件换算成碰撞体，用来做移动碰撞和 A* 寻路（见 [nav 和 move](nav-move.md)）。
@@ -30,6 +30,8 @@
 | `roads` | 折线 | 前端 | 石板路，沿折线铺 |
 | `props` | 点 / 两点折线 | 前后端 | 场景物件，见下 |
 | `portals` | 点 | 前后端 | 传送门（类 `portal`）：属性 `to` 是去的场景 id，`r` 是半径（默认 36）。玩家站进去 600 毫秒就被送过去，落在那边通回来的门外面 |
+| `rooms` | 矩形 | 前后端 | 只有副本地图有：房间（名字是 id，属性 `title`），见 [关卡](level.md) |
+| `gates` | 矩形 | 前后端 | 只有副本地图有：房间之间的门（属性 `after`、`to`），关着时挡路，见 [关卡](level.md) |
 
 ### props 图层
 

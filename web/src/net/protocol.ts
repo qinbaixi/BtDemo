@@ -7,7 +7,7 @@
 import { btdemo } from './pb';
 import type {
   AiTrace, ClassInfo, AiTreeDef, AiTreeNode, ClientMessage, EntityInfo, GameEvent, ItemInfo, ItemSlotted, Obstacle, PetInfo, SelfInfo,
-  EntityState, SelfUpdate, ServerFrame, ServerMessage,
+  EntityState, RoomPhase, SelfUpdate, ServerFrame, ServerMessage,
 } from './types';
 
 const EVENT_KIND: Record<string, GameEvent['k']> = {
@@ -153,6 +153,13 @@ export function createProtocol(): Protocol {
     return { time: sec(typeof time === 'number' ? time : time.toNumber()), msgs };
   }
 
+  // roomPhase 把 RoomPhase（数字或枚举名）换成小写的名字
+  function roomPhase(phase: any): RoomPhase {
+    const names: RoomPhase[] = ['idle', 'fight', 'clear', 'skipped'];
+    if (typeof phase === 'number') return names[phase] ?? 'idle';
+    return (String(phase || 'ROOM_IDLE').replace('ROOM_', '').toLowerCase() as RoomPhase);
+  }
+
   function message(m: any): ServerMessage | null {
     switch (m.msg) {
       case 'welcome': {
@@ -173,6 +180,11 @@ export function createProtocol(): Protocol {
           scene: w.scene ? {
             id: w.scene.id, name: w.scene.name, line: w.scene.line, map: w.scene.map,
             portals: (w.scene.portals || []).map((p: any) => ({ x: p.x, y: p.y, r: p.r, to: p.to, toName: p.toName })),
+            dungeon: !!w.scene.dungeon,
+            rooms: (w.scene.rooms || []).map((r: any) => ({
+              id: r.id, title: r.title, x: r.x, y: r.y, w: r.w, h: r.h, waves: r.waves || 0, reward: r.reward || '',
+            })),
+            gates: (w.scene.gates || []).map((g: any) => ({ id: g.id, x: g.x, y: g.y, w: g.w, h: g.h, to: g.to || '' })),
           } : null,
         };
       }
@@ -193,6 +205,11 @@ export function createProtocol(): Protocol {
         lines: (m.lines.lines || []).map((l: any) => ({ line: l.line, players: l.players || 0, soft: l.soft, hard: l.hard })),
       };
       case 'travel': return { t: 'travel', scene: m.travel.scene };
+      case 'level': return {
+        t: 'level',
+        rooms: (m.level.rooms || []).map((r: any) => ({ id: r.id, phase: roomPhase(r.phase), wave: r.wave || 0 })),
+        open: m.level.open || [],
+      };
       case 'petStatus': return {
         t: 'petStatus', pet: m.petStatus.pet || '', entity: m.petStatus.entity || 0,
         respawnIn: sec(m.petStatus.respawnIn || 0), cooldown: sec(m.petStatus.cooldown || 0),

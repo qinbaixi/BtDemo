@@ -23,7 +23,7 @@
 
 | 文件 | Go 类型 | 内容 |
 | --- | --- | --- |
-| `scenes.yaml` | `Scenes` | 场景模板：每个场景的地图、出生点、刷怪点、回血区，分线规则（见 [场景与分线](scene.md)）。每个场景有一份自己的 `Config`（`Scene.Cfg`）：和全局配置共用技能、模板、物品，地图、刷怪、回血区、出生点换成这个场景的 |
+| `scenes.yaml` | `Scenes` | 场景模板：每个场景的地图、出生点、刷怪点、回血区，分线规则（见 [场景与分线](scene.md)）；`kind: dungeon` 的副本还有房间玩法 `rooms`、关内祝福 `boons`（见 [关卡](level.md)）。每个场景有一份自己的 `Config`（`Scene.Cfg`）：和全局配置共用技能、模板、物品，地图、刷怪、回血区、出生点换成这个场景的 |
 | `world.yaml` | `World` | `addr` 监听地址、`aoi.cell`、`tick_rate`、`sync_rate`、`hostile` 阵营敌对表、`player` 玩家模板（公共字段 + `classes` 职业列表）、`loot` 装备掉落、`pet` 宠物、`session` 断线保留、`hit` 命中分量和韧性 |
 | `skills.yaml` | `map[string]*Skill` | 技能，key 是技能 id |
 | `monsters.yaml` | `map[string]*Template` | 怪物 / NPC 模板（刷怪点在 `scenes.yaml` 里） |
@@ -54,7 +54,8 @@ cfg, err := config.Load("config", game.TreeNames())
    - 地图尺寸、AOI 格子为正；`tick_rate` 默认 20（必须能整除 1000）、`sync_rate` 默认 10、`addr` 默认 `:8080`（只写端口时补冒号）；`session.keep` 默认 30000 毫秒。
    - 敌对表里引用的阵营都存在，且必须有 `player`。
    - 技能的 `kind` 是 target、aoe、self、dash、line、zone、rain 之一；`rain` 要有 `range`、`radius`、`distance`；`pierce: true` 只能用在 `line` 上；`damage` 是 physical、magic 或空；`zone` 技能要有 `zone` 且 `duration` 大于 0。
-   - `heal_zones` 的阵营在敌对表里、不写 `duration`；回血区的 `radius`、`heal` 为正，`interval` 默认 1000 毫秒，`look` 默认 `rune`（见 [zone](zone.md)）。
+   - `heal_zones` 的阵营在敌对表里、不写 `duration`；回血区的 `radius`、`heal` 为正，`interval` 默认 1000 毫秒，`look` 默认 `rune`（见 [zone](zone.md)）；`checkpoint: true` 的是副本存档点。
+   - 副本：房间和门引用的房间都在地图的 `rooms` 图层里，波次的怪物模板存在，有 `boon` 奖励就要有 `boons`，默认场景不能是副本（见 [关卡](level.md)）。
    - 技能的 `buff` 和 `debuff` 里，`look` 为空或者是 haste、holy、fire、frost 之一。
    - `player.classes` 至少一个职业：`id` 非空且不重复，`speed`、`radius` 为正，`model` 不写时默认用 `id`；每个职业的 `skills` 至少一个，第 2 个起的默认技能都在 `skill_pool` 里，`skills` 和 `skill_pool` 里的技能都存在。
    - 模板引用的技能都存在，且怪物不能用 `dash`、`line`、`rain`（行为树放技能不给方向）；模板的 `kind` 是 monster 或 npc；`tree` 是编译进程序的行为树（由调用方传入 `knownTrees`）；`faction` 在敌对表里。

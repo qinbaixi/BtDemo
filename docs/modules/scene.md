@@ -4,6 +4,8 @@
 
 设计的来龙去脉见项目文件里的 `btdemo/scene-lines-design.md`。
 
+副本（`kind: dungeon` 的场景）不分线，每个进来的玩家单独开一份，见 [关卡](level.md)。
+
 ## 为什么要分
 
 原来整个服务器只有一个 `World`，跑在一个 goroutine 上，最多用满一个核。现在 `World` 改叫 `Scene`，可以同时开很多个：

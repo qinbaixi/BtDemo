@@ -58,12 +58,12 @@ export function renderSceneBadge(): void {
     closeLines();
     return;
   }
-  badge.textContent = `${scene.name} · ${scene.line} 线`;
+  badge.textContent = scene.dungeon ? `${scene.name} · 副本` : `${scene.name} · ${scene.line} 线`;
   if (state.linesOpen) send({ t: 'lines' });   // 换了线，面板里的“当前”跟着变
 }
 
 export function openLines(): void {
-  if (!state.scene) return;
+  if (!state.scene || state.scene.dungeon) return;   // 副本是自己一个人的，没有别的线
   state.linesOpen = true;
   panel.classList.remove('hidden');
   list.innerHTML = '<div class="lines-empty">读取中…</div>';

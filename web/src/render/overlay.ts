@@ -4,6 +4,7 @@
 import { ACT_NAMES, DISPLAY, FONT, NAME_COLOR } from '../game/config';
 import { clamp, fmt } from '../game/math';
 import { headY, posOf, state, type ClientEntity, type Point } from '../game/state';
+import { drawGateRewards } from './gates';
 import { drawPortalLabels } from './portals';
 
 let ctx: CanvasRenderingContext2D;
@@ -41,6 +42,7 @@ export function drawOverlay(
   if (state.showAOI) { drawObstacles(); drawAOILabel(mp); }
   if (debugOpen) drawAiPath(now);
   drawPortalLabels(ctx, state.scene?.portals ?? [], mp, now);
+  drawGateRewards(ctx, state.scene?.gates ?? [], state.scene?.rooms ?? [], state.level, now);
   for (const it of ents) drawLabels(it.e, it.p, now);
   drawBubbles(now);
   drawFloats(now);

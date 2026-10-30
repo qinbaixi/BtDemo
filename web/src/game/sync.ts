@@ -1,4 +1,4 @@
-// 处理服务端的帧和消息：welcome / enter / leave / state / event / self / zones / ai / toast / skills / inventory / petStatus，更新本地状态。
+// 处理服务端的帧和消息：welcome / enter / leave / state / event / self / zones / ai / toast / skills / inventory / petStatus / level，更新本地状态。
 
 import { gameNow } from './clock';
 import { forgetEntity, sfxAt } from '../feel/director';
@@ -7,6 +7,7 @@ import { buildSkillBar, renderPetHud, renderSelf, setConn, showToast } from '../
 import { refreshBag, renderBagStats } from '../ui/bag';
 import { closePicker, openPicker } from '../ui/picker';
 import { hideTravel, renderLines, renderSceneBadge, showTravel } from '../ui/lines';
+import { onLevel, resetLevel } from '../ui/level';
 import { rememberedSkin, rememberSkin, takePendingSkin } from '../ui/skins';
 import { rememberedPet } from '../ui/bag';
 import { forgetBlock } from '../input';
@@ -114,6 +115,7 @@ function handleMessage(m: ServerMessage, now: number, deps: SyncDeps): void {
     case 'petStatus': onPetStatus(m, now); break;
     case 'lines': renderLines(m); break;
     case 'travel': showTravel(m.scene); break;
+    case 'level': onLevel(m); break;
   }
 }
 
@@ -190,6 +192,7 @@ function onWelcome(m: WelcomeMsg, deps: SyncDeps): void {
   if (prevScene && m.scene && (prevScene.id !== m.scene.id || prevScene.line !== m.scene.line)) state.clockSynced = false;
   hideTravel();
   renderSceneBadge();
+  resetLevel();
   state.myId = m.id;
   state.map = m.map || state.map;
   state.cell = (m.aoi && m.aoi.cell) || state.cell;

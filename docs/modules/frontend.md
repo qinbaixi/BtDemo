@@ -85,6 +85,7 @@ web/
       knightActions.ts  玩家（骑士、游侠）每个技能的专属动作：关键帧、手脚 IK、出手时刻
       fx.ts             技能和战斗特效、粒子、屏幕震动（Canvas 2D）
       scenery.ts        地表、场景物件、环境光源（Canvas 2D 生成贴图）
+      gates.ts          副本的门：一排木桩，关门升起、开门沉下；门上方的奖励图标（见 [关卡](level.md)）
     ui/
       hud.ts            自己 / 目标面板、两行技能栏、死亡遮罩、提示条、连接状态
       picker.ts         选技能面板：进游戏和死亡时挑职业、外观和技能，发 Loadout（和 SetSkin）
@@ -94,6 +95,7 @@ web/
       debug-ai.ts       AI 决策页：整棵行为树（可折叠）叠加每帧结果和判断依据，暂停后逐帧回看，节点详情
       debug-proto.ts    调试抽屉：协议收发列表
       settings.ts       设置面板（Esc 或右上角“设置”按钮）
+      level.ts          副本：进房间打出房间名和波次、清完打出“清除”，打着时显示进度（见 [关卡](level.md)）
     styles/             CSS，由 main.ts 引入
 ```
 

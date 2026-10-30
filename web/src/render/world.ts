@@ -27,6 +27,7 @@ import { SceneView, type Mover } from './pixi/sceneView';
 import { SpriteCtx } from './pixi/spriteCtx';
 import { DecalLayer } from './pixi/decals';
 import { RibbonPool } from './pixi/trail';
+import { GateLayer } from './gates';
 import { PortalLayer, portalLights } from './portals';
 import { pruneZones, ZoneLayer, zoneLights } from './zones';
 
@@ -48,6 +49,7 @@ let targetRing: Container;     // 目标脚下的旋转圈
 let targetRingArcs: Graphics;
 let underFx: CanvasSprite;     // 地面特效（暂时用 Canvas 2D 画）
 let decals: DecalLayer;        // 地面印记：裂纹、焦痕、霜、拖痕
+let gateLayer: GateLayer;  // 副本的门（木桩放在 depth 里）
 let depth: Container;          // 角色和物件，按 zIndex（脚底 y）排序
 let xrayLayer: RenderLayer;    // 角色剪影：被高物件挡住时画在所有物件上面
 let lighting: Lighting;
@@ -93,6 +95,7 @@ export async function initWorld(canvas: HTMLCanvasElement, overlay: HTMLCanvasEl
   depth = new Container();
   depth.sortableChildren = true;
   xrayLayer = new RenderLayer();
+  gateLayer = new GateLayer(depth);
   const zoneContainer = new Container();
   zoneLayer = new ZoneLayer(zoneContainer);
   portalLayer = new PortalLayer(zoneContainer);
@@ -191,6 +194,7 @@ export function drawWorld(now: number, dt: number, debugOpen: boolean): void {
   const portals = state.scene?.portals ?? [];
   portalLayer.update(portals, now, view, state.dpr);
   portalLayer.motes(state.fx, portals, now, dt, view);
+  gateLayer.update(state.scene?.gates ?? [], state.level, now, state.dpr);
   drawMarks(mp, now);
   drawUnderFx(now);
   // 先收集光源：角色要知道附近最亮的光在哪

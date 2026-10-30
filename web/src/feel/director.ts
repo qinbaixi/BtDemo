@@ -320,6 +320,19 @@ function isClear(entity: ClientEntity, now: number): boolean {
   return true;
 }
 
+// levelClear 是副本房间清完的演出：和清场一样慢放一下，再响一声。
+export function levelClear(now: number): void {
+  lastClearAt = -1e9;   // 最后一只怪刚触发过清场慢放也没关系，房间清完总要演一下
+  playClear(now);
+  play('levelup');
+}
+
+// gateSlam 是副本的门在 (x, y) 关上：一声闷响，手柄震一下。
+export function gateSlam(x: number, y: number, now: number): void {
+  play('wall', { x, y });
+  rumble(0.35, 120, now);
+}
+
 // playClear 是清场的演出：全局慢放一下、镜头再放大一点、环境声压低、震一下。几秒内只放一次。
 function playClear(now: number): void {
   if (now - lastClearAt < CLEAR.cooldownMs) return;

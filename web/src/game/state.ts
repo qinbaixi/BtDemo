@@ -4,6 +4,7 @@
 import { clockLag, gameNow } from './clock';
 import type { Aura, FX } from '../render/fx';
 import type { createScenery } from '../render/scenery';
+import type { ClientLevel } from '../ui/level';
 import type {
   ClassInfo,
   EntityInfo, EntityKind, EntityState, ItemInfo, ItemSlotted, Obstacle, PetInfo, SceneInfo, SelfInfo, SkillInfo, SkinInfo, ZoneInfo,
@@ -107,6 +108,7 @@ export interface State {
   mySkin: string;                 // 自己现在的外观 id（空 = 默认），以服务端发来的自己的 Enter 为准
   pets: PetInfo[];                // 可以带的宠物（welcome 里带的，第一个是默认）
   scene: SceneInfo | null;        // 所在的场景和线（welcome 里带的），传送门也在里面
+  level: ClientLevel | null;      // 副本进度（服务端 LevelState），不在副本里为 null
   myPet: string;                  // 自己选的宠物 id（空 = 不带），以服务端 PetStatus 为准
   petEntity: number;              // 自己宠物的实体 id（没在视野或没召唤为 0）
   petRespawnAt: number;           // 宠物复活的时间（演出时钟 gameNow()），0 = 没在复活中
@@ -189,6 +191,7 @@ export const state: State = {
   mySkin: '',
   pets: [],
   scene: null,
+  level: null,
   myPet: '',
   petEntity: 0,
   petRespawnAt: 0,

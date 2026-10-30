@@ -275,8 +275,23 @@ export interface WelcomeMsg {
 // PortalInfo 是一扇通往别的场景的传送门：站进去一会儿就出发。
 export interface PortalInfo { x: number; y: number; r: number; to: string; toName: string }
 
-// SceneInfo 是玩家所在的场景：哪个场景、第几线、地图文件地址、传送门。
-export interface SceneInfo { id: string; name: string; line: number; map: string; portals: PortalInfo[] }
+// SceneInfo 是玩家所在的场景：哪个场景、第几线、地图文件地址、传送门；副本还有房间和门。
+export interface SceneInfo {
+  id: string; name: string; line: number; map: string; portals: PortalInfo[];
+  dungeon: boolean; rooms: RoomInfo[]; gates: GateInfo[];
+}
+
+// RoomInfo 是副本里的一个房间：走进去开始刷怪。waves 为 0 是安全屋；reward 是清完给什么（heal | gear | boon）。
+export interface RoomInfo { id: string; title: string; x: number; y: number; w: number; h: number; waves: number; reward: string }
+
+// GateInfo 是房间之间的门：关着时挡路；to 是它通往的房间（门上画那个房间的奖励）。
+export interface GateInfo { id: string; x: number; y: number; w: number; h: number; to: string }
+
+// RoomPhase：idle 还没人进来、fight 打着（门关着）、clear 清完、skipped 岔路选了另一边。
+export type RoomPhase = 'idle' | 'fight' | 'clear' | 'skipped';
+export interface RoomState { id: string; phase: RoomPhase; wave: number }
+// LevelMsg 是副本的全部进度：每个房间、开着的门。
+export interface LevelMsg { t: 'level'; rooms: RoomState[]; open: string[] }
 
 // LineInfo 是场景的一条线：人数，以及“拥挤”（soft）和“满”（hard）的人数。
 export interface LineInfo { line: number; players: number; soft: number; hard: number }
@@ -304,7 +319,7 @@ export interface InventoryMsg { t: 'inventory'; items: ItemSlotted[]; capacity: 
 // respawnIn 是死后还有几秒复活（0 = 不在复活中）；cooldown 是换宠物的冷却还剩几秒（0 = 没有冷却）。
 export interface PetStatusMsg { t: 'petStatus'; pet: string; entity: number; respawnIn: number; cooldown: number }
 
-export type ServerMessage = WelcomeMsg | EnterMsg | LeaveMsg | StateMsg | EventMsg | SelfMsg | ZonesMsg | AiMsg | ToastMsg | SkillBarMsg | InventoryMsg | PetStatusMsg | LinesMsg | TravelMsg;
+export type ServerMessage = WelcomeMsg | EnterMsg | LeaveMsg | StateMsg | EventMsg | SelfMsg | ZonesMsg | AiMsg | ToastMsg | SkillBarMsg | InventoryMsg | PetStatusMsg | LinesMsg | TravelMsg | LevelMsg;
 
 export type ClientMessage =
   | { t: 'move'; dx: number; dy: number }

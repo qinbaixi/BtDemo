@@ -921,3 +921,61 @@ h4 {
 @media (max-width: 700px) {
   .scene-badge { top: 8px; font-size: 12px; padding: 3px 12px; }
 }
+
+/* ======================= 副本：房间横幅 / 进度 ======================= */
+/* 走进房间时屏幕上方三分之一处打出房间名和波次，清完打出“清除” */
+.level-banner {
+  position: absolute;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  text-align: center;
+  animation: level-banner-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  transition: opacity 0.5s ease;
+}
+.level-banner.out { opacity: 0; }
+.level-banner-title {
+  font: 44px var(--display);
+  letter-spacing: 10px;
+  color: #fbe9c0;
+  text-shadow: 0 2px 0 #000, 0 0 24px rgba(224, 160, 70, 0.55);
+}
+.level-banner-sub {
+  padding: 3px 22px;
+  font: 16px var(--display);
+  letter-spacing: 4px;
+  color: #ffd98a;
+  background: linear-gradient(90deg, transparent, rgba(9, 6, 12, 0.85) 20%, rgba(9, 6, 12, 0.85) 80%, transparent);
+}
+@keyframes level-banner-in {
+  from { opacity: 0; transform: translateX(-50%) scale(1.25); letter-spacing: 20px; }
+  to { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+/* 打着的房间的进度：挂在场景牌子下面 */
+.level-progress {
+  position: absolute;
+  top: 46px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 14px;
+  border: 1px solid rgba(239, 83, 80, 0.55);
+  background: rgba(20, 6, 8, 0.82);
+  color: #ffd0c0;
+  font: 13px var(--display);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .level-banner { animation: none; }
+}
+@media (max-width: 700px) {
+  .level-banner-title { font-size: 30px; letter-spacing: 6px; }
+  .level-banner-sub { font-size: 13px; }
+  .level-progress { top: 38px; font-size: 12px; }
+}
