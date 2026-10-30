@@ -166,6 +166,8 @@ type Zone struct {
 	Duration Millis      `yaml:"duration"` // 技能放的持续多少毫秒；heal_zones 不填（常驻）
 	Look     string      `yaml:"look"`     // 客户端画法：spring 泉水 | rune 法阵
 	Color    string      `yaml:"color"`
+	// Checkpoint 只有 heal_zones 用：存档点。玩家走进来以后，死了在这里复活（离开这个场景就不算了）
+	Checkpoint bool `yaml:"checkpoint"`
 }
 
 // Buff 是技能授予的限时属性修正。
@@ -184,6 +186,8 @@ type Buff struct {
 	BonusMagic BasisPoints `yaml:"bonus_magic"`
 	// Look 是客户端给带这个 Buff 的实体加的外观：haste 疾风、holy 金光、fire 火焰武器、frost 冰冻。
 	Look string `yaml:"look"`
+	// Keep 让 Buff 死了也不掉（副本的关内祝福），只在离开场景时清掉
+	Keep bool `yaml:"-"`
 }
 
 // Looks 是 Buff.Look 可以取的值，以及同步给客户端时对应的位（EntityState.looks）。

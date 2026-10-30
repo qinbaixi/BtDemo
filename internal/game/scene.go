@@ -16,11 +16,13 @@
 //	pet      宠物：召唤、收回、换宠物、复活、跟随主人的等级
 //	zone     地上的回血区：出生点泉水、技能放的法阵
 //	portal   通往别的场景的传送门
+//	level    副本的房间：锁门、刷波次、奖励、存档点
 //	session  已连接的玩家：输入、AOI 同步、协议
 package game
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,6 +34,7 @@ import (
 	"github.com/qinbaixi/BtDemo/internal/game/combat"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
 	"github.com/qinbaixi/BtDemo/internal/game/item"
+	"github.com/qinbaixi/BtDemo/internal/game/level"
 	"github.com/qinbaixi/BtDemo/internal/game/move"
 	"github.com/qinbaixi/BtDemo/internal/game/nav"
 	"github.com/qinbaixi/BtDemo/internal/game/pet"
@@ -65,6 +68,7 @@ type Scene struct {
 	Zone     *zone.System
 	Sessions *session.System
 	Portals  *portal.System
+	Level    *level.System
 
 	manager  *Manager // 单独运行的场景（测试）为 nil
 	commands commandQueue
@@ -118,6 +122,8 @@ func newScene(
 		float64(cfg.World.AOI.Cell),
 	)
 	scene.Attr = attr.New(scene.State)
+	firstGate := len(obstacles) // 副本的门接在物件后面，开关门时按下标改寻路图
+	obstacles = append(slices.Clip(obstacles), level.GateShapes(template.Layout)...)
 	scene.Nav = nav.New(float64(cfg.World.Map.Width), float64(cfg.World.Map.Height), obstacles)
 	scene.Move = move.New(scene.State, scene.Grid, scene.Nav)
 	scene.Items = item.New(scene.State)
@@ -146,6 +152,15 @@ func newScene(
 		scene.Pet,
 	)
 	scene.Portals = portal.New(scene.State)
+	scene.Level = level.New(
+		scene.State,
+		scene.Nav,
+		scene.Spawn,
+		scene.Combat,
+		scene.Items,
+		template,
+		firstGate,
+	)
 	scene.Sessions.SetHost(scene)
 	scene.Spawn.SpawnConfigured()
 	return scene, nil
@@ -215,6 +230,7 @@ func (scene *Scene) Step() {
 	scene.Pet.Tick()
 	scene.Combat.Tick()
 	scene.Zone.Tick()
+	scene.Level.Tick(scene.Sessions.EachPlayer)
 	scene.Move.Tick()
 	scene.AI.Tick(scene.Sessions.Watched())
 	scene.Portals.Tick(scene.eachPlayer, scene.enterPortal)

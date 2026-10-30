@@ -69,6 +69,7 @@ func (sys *System) sendFull(session *Session) {
 	sys.SendTo(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Welcome{Welcome: welcome}})
 	sys.showAround(session)
 	session.zonesSent = -1
+	session.levelSent = -1
 	session.defSent = ""
 	session.selfSent = nil
 	session.Player.InventoryDirty = true

@@ -346,6 +346,24 @@ func zoneInfos(zones []*core.Zone) []*pb.Zone {
 	return infos
 }
 
+// levelState 是发给客户端的副本进度。
+func levelState(level *core.Level) *pb.LevelState {
+	state := &pb.LevelState{}
+	for _, room := range level.Rooms {
+		state.Rooms = append(state.Rooms, &pb.RoomState{
+			Id:    proto.String(room.ID),
+			Phase: pb.RoomPhase(room.Phase).Enum(),
+			Wave:  core.I32(room.Wave),
+		})
+	}
+	for _, gate := range level.Gates {
+		if gate.Open {
+			state.Open = append(state.Open, gate.ID)
+		}
+	}
+	return state
+}
+
 // petInfos 是宠物图鉴：每种宠物的名字、说明和外观，按 pets.yaml 的顺序（第一个是默认）。
 func petInfos(pets []*config.Pet) []*pb.PetInfo {
 	infos := make([]*pb.PetInfo, 0, len(pets))

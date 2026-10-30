@@ -21,6 +21,7 @@ type State struct {
 	Ents   Entities
 	Events Events
 	Zones  Zones
+	Level  Level
 }
 
 // NewState 创建一个空的世界状态，实体 ID 自己从 1 开始数。

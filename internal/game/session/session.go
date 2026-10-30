@@ -40,6 +40,8 @@ type Session struct {
 	defSent string // 已经给本会话发过结构的行为树名；换了观察对象或树时重发
 	// zonesSent 是已经发给本会话的回血区版本（core.Zones.Version）
 	zonesSent int
+	// levelSent 是已经发给本会话的副本进度版本（core.Level.Version）
+	levelSent int
 	// selfSent 是上次发出的完整自身信息，用来算这次变了什么；nil 表示下次发全部
 	selfSent *pb.SelfInfo
 
@@ -115,6 +117,7 @@ func (sys *System) Join(link *Link) *Session {
 		Player:    player,
 		Inbox:     &Inbox{},
 		zonesSent: -1,
+		levelSent: -1,
 		token:     newToken(),
 		link:      link,
 	}
@@ -462,6 +465,13 @@ func (sys *System) Flush() {
 			zones := &pb.ZoneList{Zones: zoneInfos(sys.state.Zones.List())}
 			sys.SendTo(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Zones{Zones: zones}})
 			session.zonesSent = version
+		}
+		if version := sys.state.Level.Version; session.levelSent != version {
+			if len(sys.state.Level.Rooms) > 0 {
+				level := levelState(&sys.state.Level)
+				sys.SendTo(session, &pb.ServerMsg{Msg: &pb.ServerMsg_Level{Level: level}})
+			}
+			session.levelSent = version
 		}
 		if watched := sys.state.Ents.Get(session.Watch); watched != nil && sys.grid.CanSee(session.Player, watched) {
 			trace := sys.aiSys.Trace(watched, session.defSent)

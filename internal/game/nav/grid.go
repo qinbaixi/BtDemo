@@ -38,7 +38,10 @@ func newGrid(navMap *Map, radius float64) *Grid {
 		grid.blocked[cell] = point.X < radius || point.Y < radius || point.X > navMap.W-radius ||
 			point.Y > navMap.H-radius
 	}
-	for _, shape := range navMap.shapes {
+	for i, shape := range navMap.shapes {
+		if navMap.off[i] {
+			continue
+		}
 		lo, hi := shape.bounds(radius + CellSize)
 		x0, y0 := grid.xy(lo)
 		x1, y1 := grid.xy(hi)

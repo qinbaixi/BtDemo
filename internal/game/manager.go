@@ -186,6 +186,7 @@ const (
 )
 
 // pick 选场景模板 templateID 的一条线给一个要进来的角色。须拿着锁调用。
+//   - 副本：每次都开新的一份；
 //   - wantLine > 0：就要这条线，不存在或满了（hard）返回原因；
 //   - 否则：在没超过 soft 的线里选人最多的，让每条线都热闹；都超过了就开新线；
 //     开不了新线时选没满（hard）的线里人最少的。
@@ -196,6 +197,18 @@ func (manager *Manager) pick(templateID string, wantLine int) (*line, string) {
 	}
 	lines := manager.lines[templateID]
 	rules := template.Lines
+	if template.Dungeon() {
+		// 副本：每次进来都单独开一份，不和别人共用，也不能指定线号
+		if wantLine > 0 {
+			return nil, reasonNoSuchLine
+		}
+		opened, err := manager.openLine(template)
+		if err != nil {
+			log.Printf("scene %s: %v", templateID, err)
+			return nil, reasonLineFull
+		}
+		return opened, ""
+	}
 	if wantLine > 0 {
 		for _, candidate := range lines {
 			if candidate.scene.Line != wantLine {

@@ -131,14 +131,23 @@ func (sys *System) skills(ids []string) []*config.Skill {
 	return out
 }
 
-// Tick 复活复活时间已到的死亡实体（宠物由 pet 包复活）。
+// Tick 复活复活时间已到的死亡实体（宠物由 pet 包复活）；副本房间刷出来的怪不复活，到时间就移除尸体。
 func (sys *System) Tick() {
 	now := sys.state.Now()
+	var corpses []*core.Entity
 	sys.state.Ents.Each(func(entity *core.Entity) {
-		if entity.Dead && entity.Kind != core.KindPet && now >= entity.RespawnAt {
-			sys.respawn(entity)
+		if !entity.Dead || entity.Kind == core.KindPet || now < entity.RespawnAt {
+			return
 		}
+		if entity.Room != "" {
+			corpses = append(corpses, entity)
+			return
+		}
+		sys.respawn(entity)
 	})
+	for _, corpse := range corpses {
+		sys.Remove(corpse)
+	}
 }
 
 func (sys *System) respawn(entity *core.Entity) {
@@ -148,6 +157,9 @@ func (sys *System) respawn(entity *core.Entity) {
 	if entity.Kind == core.KindPlayer {
 		entity.MarkDirty(core.DirtyGuard) // 架势也回满了
 		spawnAt := sys.state.Cfg.World.Player.Spawn
+		if entity.Checkpoint != nil {
+			spawnAt = *entity.Checkpoint // 副本里在最近的存档点复活
+		}
 		x, y = sys.state.ScatterAround(spawnAt)
 	}
 	entity.Cooldowns = map[string]config.Millis{}

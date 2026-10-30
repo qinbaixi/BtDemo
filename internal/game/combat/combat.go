@@ -444,6 +444,9 @@ func (sys *System) castRain(
 	return nil
 }
 
+// AddBuff 给 entity 加上 Buff（副本房间奖励的祝福用），见 addBuff。
+func (sys *System) AddBuff(entity *core.Entity, cfg *config.Buff) { sys.addBuff(entity, cfg) }
+
 // addBuff 给 entity 加上 Buff（同名的会被刷新，不叠加），并通知客户端；返回发出的 BUFF 事件。
 func (sys *System) addBuff(entity *core.Entity, cfg *config.Buff) *core.Event {
 	filterBuffs(entity, func(buff *core.Buff) bool { return buff.Cfg.Name != cfg.Name })
@@ -600,7 +603,7 @@ func (sys *System) Kill(entity, killer *core.Entity) {
 	entity.SetBlocking(false) // 倒下时盾也掉了，复活后要重新按右键
 	entity.ParryUntil = 0
 	entity.SetTarget(0)
-	entity.Buffs = nil
+	filterBuffs(entity, func(buff *core.Buff) bool { return buff.Cfg.Keep }) // 关内祝福死了也不掉
 	entity.MarkDirty(core.DirtyShield | core.DirtyLooks)
 	// 保留 MoveX/MoveY，使按住的按键在重生后仍然有效
 	entity.SetAction("")

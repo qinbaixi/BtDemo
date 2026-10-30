@@ -113,7 +113,7 @@ func TestJoinEntersDefaultScene(t *testing.T) {
 	if scene.GetId() != "village" || scene.GetLine() != 1 || scene.GetMap() != "/maps/village.tmj" {
 		t.Fatalf("welcome scene = %v", scene)
 	}
-	if len(scene.GetPortals()) != 1 || scene.GetPortals()[0].GetToName() != "亡者墓园" {
+	if len(scene.GetPortals()) != 2 || scene.GetPortals()[0].GetToName() != "亡者墓园" {
 		t.Fatalf("portals = %v", scene.GetPortals())
 	}
 	if welcome.GetMapW() != 1280 {

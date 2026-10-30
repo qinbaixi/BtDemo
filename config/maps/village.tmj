@@ -2659,6 +2659,30 @@
        "value": 36
       }
      ]
+    },
+    {
+     "class": "portal",
+     "height": 0,
+     "id": 237,
+     "name": "to_wolf_trail",
+     "point": true,
+     "rotation": 0,
+     "visible": true,
+     "width": 0,
+     "x": 900,
+     "y": 110,
+     "properties": [
+      {
+       "name": "to",
+       "type": "string",
+       "value": "wolf_trail"
+      },
+      {
+       "name": "r",
+       "type": "float",
+       "value": 36
+      }
+     ]
     }
    ],
    "opacity": 1,
@@ -2669,7 +2693,7 @@
   }
  ],
  "nextlayerid": 5,
- "nextobjectid": 237,
+ "nextobjectid": 238,
  "orientation": "orthogonal",
  "properties": [
   {

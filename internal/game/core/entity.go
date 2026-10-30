@@ -177,6 +177,10 @@ type Buff struct {
 type Life struct {
 	Dead      bool
 	RespawnAt config.Millis
+	// Room 不为空表示这是副本房间刷出来的怪（房间 id）：死了不复活，尸体留到 RespawnAt 就移除
+	Room string
+	// Checkpoint 是玩家最近走进的存档点，死了在这里复活；nil 用场景的出生点。离开场景时清掉
+	Checkpoint *config.Point
 }
 
 // Control 是玩家的输入（由 session 管理，由 move 读取）。

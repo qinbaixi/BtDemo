@@ -40,8 +40,14 @@ type Scene struct {
 	Spawns []Spawn `yaml:"spawns"`
 	// HealZones 是这个场景里常驻的回血区
 	HealZones []*Zone `yaml:"heal_zones"`
-	// Lines 是这个场景的分线规则；不填的项用 scenes.yaml 顶层的 lines
+	// Lines 是这个场景的分线规则；不填的项用 scenes.yaml 顶层的 lines。副本不分线，不用这个
 	Lines LineRules `yaml:"lines"`
+	// Kind 是场景的种类：不写是开放的野外场景（分线），dungeon 是副本（每个进来的玩家单独开一份），见 level.go
+	Kind string `yaml:"kind"`
+	// Rooms 是副本每个房间的玩法：刷什么怪、清完给什么
+	Rooms []*LevelRoom `yaml:"rooms"`
+	// Boons 是副本里房间奖励 boon 抽取的祝福（Buff），死了不掉，离开副本清掉
+	Boons []*Buff `yaml:"boons"`
 
 	// Layout 是从 Map 读出的地图
 	Layout Layout `yaml:"-"`
@@ -110,6 +116,9 @@ func loadScenes(dir string, scenes *Scenes) (bool, error) {
 	if scenes.DefaultScene() == nil {
 		return true, fmt.Errorf("%s: default scene %q is not in the list", ScenesFile, scenes.Default)
 	}
+	if scenes.DefaultScene().Kind == SceneDungeon {
+		return true, fmt.Errorf("%s: the default scene %q must not be a dungeon", ScenesFile, scenes.Default)
+	}
 	return true, nil
 }
 
@@ -145,6 +154,9 @@ func (cfg *Config) forScene(scene *Scene) *Config {
 	return &sceneCfg
 }
 
+// dungeonIdleClose 是副本空了多少毫秒后关闭。
+const dungeonIdleClose Millis = 5000
+
 // fillLineRules 给场景补上默认的分线规则并检查。
 func (scenes *Scenes) fillLineRules() error {
 	defaults := scenes.Lines
@@ -175,6 +187,10 @@ func (scenes *Scenes) fillLineRules() error {
 		if rules.IdleClose <= 0 {
 			rules.IdleClose = defaults.IdleClose
 		}
+		if scene.Dungeon() {
+			// 副本每次进来都开新的一份，没人就关（断线保留中的角色也算人）
+			*rules = LineRules{Soft: 1, Hard: 1, Min: 0, IdleClose: dungeonIdleClose}
+		}
 		if rules.Hard < rules.Soft {
 			return fmt.Errorf("%s: scene %s: lines.hard must be >= lines.soft", ScenesFile, scene.ID)
 		}
@@ -191,6 +207,9 @@ func (cfg *Config) validateScenes() error {
 		scene.Cfg = cfg.forScene(scene)
 		label := ScenesFile + ": scene " + scene.ID
 		if err := scene.Cfg.validatePlacement(label); err != nil {
+			return err
+		}
+		if err := cfg.validateLevel(scene, label); err != nil {
 			return err
 		}
 		for _, portal := range scene.Layout.Portals {

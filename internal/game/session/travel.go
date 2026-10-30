@@ -41,6 +41,13 @@ func (sys *System) Each(fn func(*Session)) {
 	}
 }
 
+// EachPlayer 对每个会话的角色调用 fn（含断线保留中的）。
+func (sys *System) EachPlayer(fn func(*core.Entity)) {
+	for session := range sys.sessions {
+		fn(session.Player)
+	}
+}
+
 // TakeOut 把会话从这个场景拿出来，交给别的场景：收回宠物，把角色移出场景
 // （周围的玩家收到 Leave），这一帧没发的消息丢掉；连接保持不断。之后这个场景不再碰这个会话和它的角色。
 func (sys *System) TakeOut(session *Session) {

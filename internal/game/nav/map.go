@@ -13,6 +13,7 @@ const (
 type Map struct {
 	W, H    float64
 	shapes  []Shape
+	off     []bool // off[i] 为 true 的形状暂时不挡路（开着的门），见 SetSolid
 	cols    int
 	rows    int
 	buckets [][]int32 // 每个桶中的形状索引，桶的范围按 MaxRadius 向外扩展
@@ -25,7 +26,13 @@ const MaxRadius = 64.0
 
 // New 为 width×height 地图上的形状建立索引。
 func New(width, height float64, shapes []Shape) *Map {
-	navMap := &Map{W: width, H: height, shapes: shapes, grids: map[int]*Grid{}}
+	navMap := &Map{
+		W:      width,
+		H:      height,
+		shapes: shapes,
+		off:    make([]bool, len(shapes)),
+		grids:  map[int]*Grid{},
+	}
 	navMap.cols = int(math.Ceil(width / bucketSize))
 	navMap.rows = int(math.Ceil(height / bucketSize))
 	navMap.buckets = make([][]int32, navMap.cols*navMap.rows)
@@ -40,8 +47,20 @@ func New(width, height float64, shapes []Shape) *Map {
 	return navMap
 }
 
-// Shapes 返回所有障碍物。
+// Shapes 返回所有障碍物（含暂时不挡路的）。
 func (navMap *Map) Shapes() []Shape { return navMap.shapes }
+
+// SetSolid 设置第 index 个形状挡不挡路（关卡的门开关时用）。变了的话路径网格作废，下次寻路时重建。
+func (navMap *Map) SetSolid(index int, solid bool) {
+	if navMap.off[index] == !solid {
+		return
+	}
+	navMap.off[index] = !solid
+	clear(navMap.grids)
+}
+
+// Solid 报告第 index 个形状现在挡不挡路。
+func (navMap *Map) Solid(index int) bool { return !navMap.off[index] }
 
 func (navMap *Map) eachBucket(lo, hi Vec, fn func(int)) {
 	x0 := int(clamp(math.Floor(lo.X/bucketSize), 0, float64(navMap.cols-1)))
@@ -74,7 +93,7 @@ func (navMap *Map) Free(point Vec, radius float64) bool {
 		return false
 	}
 	for _, i := range navMap.near(point) {
-		if navMap.shapes[i].Dist(point) < radius {
+		if !navMap.off[i] && navMap.shapes[i].Dist(point) < radius {
 			return false
 		}
 	}
@@ -89,6 +108,9 @@ func (navMap *Map) Resolve(point Vec, radius float64) Vec {
 	for pass := 0; pass < maxPush; pass++ {
 		moved := false
 		for _, i := range navMap.near(point) {
+			if navMap.off[i] {
+				continue
+			}
 			if pushed, ok := navMap.shapes[i].push(point, radius); ok {
 				point, moved = pushed, true
 			}

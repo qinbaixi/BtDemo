@@ -36,3 +36,46 @@ scenes:
       - { template: ogre_chief,      x: 930, y: 1300, count: 1, spread: 0 }
     heal_zones:
       - { name: 守夜人之泉, x: 170, y: 870, radius: 90, heal: 500, interval: 1000, faction: player, look: spring, color: "#7dffc4" }
+
+  # 副本（kind: dungeon）：每个进来的玩家单独开一份，不分线，没人了就关。玩法见 docs/modules/level.md。
+  #   地图的 rooms 图层是房间（矩形，名字是房间 id，属性 title 是显示名），gates 图层是门（矩形，属性 after / to）。
+  #   rooms:  每个房间的玩法，没列出来的房间是安全屋（走进去就算清完）
+  #     waves:    一波一波的怪，上一波死光了才刷下一波；刷出来的怪不复活
+  #     reward:   清完给房间里的玩家：heal 回满血 | gear 一件装备 | boon 一个关内祝福（从 boons 里抽）
+  #     excludes: 走进这个房间以后再也去不了的房间（岔路的另一边）
+  #   boons:  关内祝福（写法同 skills.yaml 的 buff），死了不掉，离开副本清掉
+  #   heal_zones 里 checkpoint: true 的是存档点：走进去以后，死了在那里复活
+  - id: wolf_trail
+    name: 黑松林道
+    kind: dungeon
+    map: wolf_trail.tmj
+    spawn: { x: 800, y: 2060, spread: 40 }
+    heal_zones:
+      - { name: 林口篝火, x: 800, y: 2050, radius: 90, heal: 800, interval: 1000, faction: player, look: spring, color: "#7dffc4", checkpoint: true }
+      - { name: 猎人的泉水, x: 1190, y: 400, radius: 90, heal: 800, interval: 1000, faction: player, look: spring, color: "#7dffc4", checkpoint: true }
+    rooms:
+      - id: r1
+        waves:
+          - [{ template: slime, count: 3 }]
+          - [{ template: slime, count: 4 }]
+      - id: r2
+        reward: heal
+        waves:
+          - [{ template: wolf, count: 2 }]
+          - [{ template: wolf, count: 3 }]
+      - id: r3a
+        reward: boon
+        excludes: [r3b]
+        waves:
+          - [{ template: wolf, count: 2 }, { template: slime, count: 2 }]
+          - [{ template: wolf, count: 3 }]
+      - id: r3b
+        reward: gear
+        excludes: [r3a]
+        waves:
+          - [{ template: slime, count: 5 }]
+          - [{ template: slime, count: 3 }, { template: wolf, count: 2 }]
+    boons:
+      - { name: 狼血, duration: 3600000, atk_pct: 2500, look: fire }
+      - { name: 疾风, duration: 3600000, speed_pct: 2000, look: haste }
+      - { name: 铁皮, duration: 3600000, def_pct: 3000 }

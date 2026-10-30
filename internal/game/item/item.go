@@ -205,6 +205,29 @@ func (sys *System) Loot(monster, killer *core.Entity) {
 	)
 }
 
+// Reward 给玩家 player 一件装备（副本房间的奖励）：和怪物掉落一样抽，但一定给；背包满了只提示。
+// 发 LOOT 事件（src = dst = 玩家），返回给出的物品，没给返回 nil。
+func (sys *System) Reward(player *core.Entity) *config.Item {
+	item := sys.roll(player.Class)
+	if item == nil {
+		return nil
+	}
+	if !sys.Give(player, item) {
+		player.Notices = append(player.Notices, ReasonBagFull)
+		return nil
+	}
+	sys.state.Events.Emit(
+		player,
+		&core.Event{
+			Kind: pb.EventKind_LOOT.Enum(),
+			Src:  core.I32(player.ID),
+			Dst:  core.I32(player.ID),
+			Item: &item.ID,
+		},
+	)
+	return item
+}
+
 // roll 抽一件掉落的物品：ClassBias 的概率只从 classID 能用的物品里抽，否则从所有物品里抽；
 // 先按稀有度权重抽稀有度（只算候选里有的稀有度），再在这个稀有度里等概率抽一件。
 func (sys *System) roll(classID string) *config.Item {

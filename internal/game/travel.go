@@ -36,6 +36,7 @@ const (
 	reasonInCombat    = "战斗中不能换线"
 	reasonSameLine    = "你已经在这条线了"
 	reasonSingleScene = "这里没有别的线"
+	reasonDungeon     = "副本里不能换线"
 )
 
 // travelPack 是角色离开源场景时记下的、要按目标场景的时钟还原的东西。
@@ -71,7 +72,8 @@ func packPlayer(player *core.Entity, now config.Millis) travelPack {
 	player.Steering = core.Steering{}
 	player.Control = core.Control{}
 	player.AITicks = nil
-	player.Dirty = 0 // 进入目标场景时周围的玩家收到完整的 Enter
+	player.Checkpoint = nil // 存档点只在这个场景里算
+	player.Dirty = 0        // 进入目标场景时周围的玩家收到完整的 Enter
 	return pack
 }
 
@@ -174,6 +176,8 @@ func (scene *Scene) SwitchLine(client *Session, wantLine int) string {
 	switch {
 	case scene.manager == nil:
 		return reasonSingleScene
+	case scene.Template.Dungeon():
+		return reasonDungeon
 	case wantLine == scene.Line:
 		return reasonSameLine
 	case client.Player.Dead:
@@ -195,6 +199,34 @@ func (scene *Scene) SceneInfo() *pb.SceneInfo {
 		Name: proto.String(scene.Template.Name),
 		Line: core.I32(scene.Line),
 		Map:  proto.String(MapURL(scene.Template)),
+	}
+	if template := scene.Template; template.Dungeon() {
+		info.Dungeon = proto.Bool(true)
+		for _, area := range template.Layout.Rooms {
+			room := &pb.RoomInfo{
+				Id:    proto.String(area.ID),
+				Title: proto.String(area.Title),
+				X:     core.I32(area.X),
+				Y:     core.I32(area.Y),
+				W:     core.I32(area.W),
+				H:     core.I32(area.H),
+			}
+			if cfg := template.Room(area.ID); cfg != nil {
+				room.Waves = core.I32(len(cfg.Waves))
+				room.Reward = proto.String(cfg.Reward)
+			}
+			info.Rooms = append(info.Rooms, room)
+		}
+		for _, gate := range template.Layout.Gates {
+			info.Gates = append(info.Gates, &pb.GateInfo{
+				Id: proto.String(gate.ID),
+				X:  core.I32(gate.X),
+				Y:  core.I32(gate.Y),
+				W:  core.I32(gate.W),
+				H:  core.I32(gate.H),
+				To: proto.String(gate.To),
+			})
+		}
 	}
 	for _, portal := range scene.Portals.List() {
 		toName := portal.To

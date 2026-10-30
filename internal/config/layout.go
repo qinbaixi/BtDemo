@@ -23,7 +23,9 @@ type Layout struct {
 	Shapes        map[string]Shape // 物件种类 -> 碰撞形状
 	Props         []Prop
 	Portals       []Portal
-	Source        []byte // map.tmj 原文，原样提供给浏览器
+	Rooms         []RoomArea // 关卡的房间（rooms 图层），只有副本地图有
+	Gates         []Gate     // 关卡的门（gates 图层），只有副本地图有
+	Source        []byte     // map.tmj 原文，原样提供给浏览器
 }
 
 // Shape 是相对于场景物件落脚点（缩放前）的碰撞形状。
@@ -84,6 +86,8 @@ type tmjObject struct {
 	Class      string    `json:"class"` // Tiled 1.9 用 class，1.10 起又改回 type
 	X          float64   `json:"x"`
 	Y          float64   `json:"y"`
+	Width      float64   `json:"width"`
+	Height     float64   `json:"height"`
 	Point      bool      `json:"point"`
 	Polyline   []tmjPt   `json:"polyline"`
 	Template   string    `json:"template"`
@@ -162,6 +166,9 @@ func parseLayout(data []byte) (Layout, error) {
 			}
 			layout.Portals = append(layout.Portals, portal)
 		}
+	}
+	if err := parseLevelLayers(mapData.Layers, &layout); err != nil {
+		return layout, err
 	}
 	layer := findLayer(mapData.Layers, "props")
 	if layer == nil {
