@@ -251,3 +251,28 @@ func TestStuckMonstersAreMovedToThePlayer(t *testing.T) {
 		}
 	}
 }
+
+// 进房锁门时落在门外的宠物被传送到主人身边，不会被关在外面。
+func TestPetLeftOutsideIsBroughtIn(t *testing.T) {
+	manager := shippedManager(t)
+	client, scene := enterDungeon(t, manager)
+	player := client.Player
+	var pet *core.Entity
+	scene.State.Ents.Each(func(entity *core.Entity) {
+		if entity.Kind == core.KindPet && entity.Owner == player.ID {
+			pet = entity
+		}
+	})
+	if pet == nil {
+		t.Fatal("the player should have a pet")
+	}
+	moveTo(scene, pet, 800, 3290) // 还在营地
+	moveTo(scene, player, 460, 2840)
+	pump(manager, 1)
+	if roomStatus(t, scene, "r1").Phase != core.RoomFight {
+		t.Fatal("r1 should start")
+	}
+	if core.Dist(pet, player) > 80 {
+		t.Fatalf("the pet should be next to its owner, %.0f away", core.Dist(pet, player))
+	}
+}

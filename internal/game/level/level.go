@@ -10,6 +10,9 @@ package level
 import (
 	"fmt"
 	"math"
+	"slices"
+
+	"google.golang.org/protobuf/proto"
 
 	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/game/combat"
@@ -216,9 +219,42 @@ func (sys *System) enter(current *room) {
 		return
 	}
 	current.status.Phase = core.RoomFight
+	sys.bringPets(current)
 	current.emptyAt = 0
 	current.progressAt = sys.state.Now()
 	sys.spawnWave(current, 1)
+}
+
+// bringPets 在房间开打、门要关上时，把落在房间外面的宠物传送到主人身边（不然会被关在门外）。
+// 和宠物离主人太远时一样，发 fx = pet_teleport 的 CAST 事件。
+func (sys *System) bringPets(current *room) {
+	inside := sys.playersInside(current.area)
+	sys.state.Ents.Each(func(pet *core.Entity) {
+		if pet.Kind != core.KindPet || !pet.Alive() || current.area.Contains(pet.X, pet.Y, 0) {
+			return
+		}
+		owner := sys.state.Ents.Get(pet.Owner)
+		if !slices.Contains(inside, owner) {
+			return
+		}
+		fromX, fromY := pet.X, pet.Y
+		x, y := sys.state.Scatter(owner.X, owner.Y, 30)
+		sys.move.Stop(pet)
+		sys.move.Place(pet, x, y)
+		sys.state.Events.Emit(
+			pet,
+			&core.Event{
+				Kind:  pb.EventKind_CAST.Enum(),
+				Src:   core.I32(pet.ID),
+				Fx:    proto.String(core.FXPetTeleport),
+				Color: proto.String(pet.Color),
+				X:     core.FloorI32(fromX),
+				Y:     core.FloorI32(fromY),
+				Tx:    core.FloorI32(pet.X),
+				Ty:    core.FloorI32(pet.Y),
+			},
+		)
+	})
 }
 
 // fight 推进打着的房间：没人了就重置，这一波死光了就刷下一波或者清完。
