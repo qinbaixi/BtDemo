@@ -126,6 +126,7 @@ func newScene(
 	obstacles = append(slices.Clip(obstacles), level.GateShapes(template.Layout)...)
 	scene.Nav = nav.New(float64(cfg.World.Map.Width), float64(cfg.World.Map.Height), obstacles)
 	scene.Move = move.New(scene.State, scene.Grid, scene.Nav)
+	scene.Move.SetWater(template.Layout.Water)
 	scene.Items = item.New(scene.State)
 	scene.Combat = combat.New(
 		scene.State,

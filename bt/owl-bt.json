@@ -303,6 +303,50 @@
           "default": 400
         }
       ]
+    },
+    {
+      "name": "WarnLine",
+      "icon": "exclamation-triangle",
+      "color": "#ff5a5a",
+      "description": "沿 {{Angle}}° 往两头各 {{Length}} 画预警带，{{Seconds}} 秒后结束",
+      "properties": [
+        {
+          "name": "Angle",
+          "type": "number",
+          "default": 0
+        },
+        {
+          "name": "Length",
+          "type": "number",
+          "min": 0,
+          "default": 600
+        },
+        {
+          "name": "Seconds",
+          "type": "seconds",
+          "min": 0,
+          "default": 0.9
+        }
+      ]
+    },
+    {
+      "name": "FireLine",
+      "icon": "long-arrow-right",
+      "color": "#ff5a5a",
+      "description": "用第 {{Slot}} 个技能沿 {{Angle}}° 往两头射",
+      "properties": [
+        {
+          "name": "Slot",
+          "type": "number",
+          "min": 1,
+          "default": 1
+        },
+        {
+          "name": "Angle",
+          "type": "number",
+          "default": 0
+        }
+      ]
     }
   ],
   "decorators": [

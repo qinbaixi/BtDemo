@@ -105,3 +105,61 @@ scenes:
       - { name: 狼血, duration: 3600000, atk_pct: 2500, look: fire }
       - { name: 疾风, duration: 3600000, speed_pct: 2000, look: haste }
       - { name: 铁皮, duration: 3600000, def_pct: 3000 }
+
+  # 第二关「亡者地穴」：墓园大墓穴进，一路往下走。教掩体（墓碑挡箭）、骨堆复活、点灯解谜、群怪。地图由 scripts/maps/crypt.py 生成
+  - id: crypt
+    name: 亡者地穴
+    kind: dungeon
+    map: crypt.tmj
+    spawn: { x: 800, y: 260, spread: 30 }
+    heal_zones:
+      - { name: 守夜人篝火, x: 870, y: 250, radius: 80, heal: 800, interval: 1000, faction: player, look: spring, color: "#7dd8ff", checkpoint: true }
+      - { name: 礼拜堂圣泉, x: 800, y: 2560, radius: 90, heal: 800, interval: 1000, faction: player, look: spring, color: "#7dd8ff", checkpoint: true }
+    rooms:
+      # 断碑走廊：对面高台上三个弓手，箭会被墓碑挡住，一块一块往前挪
+      - id: r1
+        waves:
+          - [{ template: skeleton_archer, count: 3, x: 800, y: 780, spread: 260 }]
+          - [{ template: skeleton_soldier, count: 2, x: 800, y: 760, spread: 200 }]
+      # 骨堆大厅：第一次见骷髅兵；地上本来就有两堆骨头，打到一半站起来
+      - id: r2
+        reward: boon
+        waves:
+          - [{ template: skeleton_soldier, count: 2 }, { template: bone_pile, count: 2, x: 800, y: 1250, spread: 220 }]
+          - [{ template: skeleton_soldier, count: 3 }, { template: skeleton_archer, count: 1 }]
+      # 灵火回廊：很暗，三个灵火盆全点亮才开门；中间的骷髅雕像横竖交替射骨箭。清完拿到守墓人钥匙
+      - id: r3a
+        dark: true
+        key: 守墓人钥匙
+        excludes: [r3b]
+        allies:
+          - { template: bone_statue, count: 1, x: 540, y: 1920, spread: 0 }
+        waves:
+          - [{ template: brazier, count: 1, x: 360, y: 1690, spread: 0 }, { template: brazier, count: 1, x: 730, y: 1760, spread: 0 }, { template: brazier, count: 1, x: 380, y: 2150, spread: 0 }]
+      # 守墓人密室：砸开回廊左墙的裂缝、用钥匙开门
+      - id: secret
+        reward: gear
+      # 渗水墓道：一半是积水（走得慢），弓手站在干地上，骷髅兵在水里往前推
+      - id: r3b
+        reward: gear
+        excludes: [r3a]
+        waves:
+          - [{ template: skeleton_archer, count: 2, x: 1130, y: 1680, spread: 160 }, { template: skeleton_soldier, count: 2, x: 1000, y: 1850, spread: 80 }]
+          - [{ template: skeleton_soldier, count: 2, x: 1000, y: 2100, spread: 80 }, { template: skeleton_archer, count: 1, x: 1180, y: 2100, spread: 20 }]
+      # 地下礼拜堂：存档，清完打开回篝火的捷径
+      - id: r4
+        reward: heal
+      # 墓穴守卫：精英骷髅骑士带两个弓手和三堆骨头
+      - id: r5
+        waves:
+          - [{ template: skeleton_knight, count: 1, x: 800, y: 3020, spread: 0 }, { template: skeleton_archer, count: 2, x: 800, y: 3150, spread: 240 }, { template: bone_pile, count: 3, x: 800, y: 2960, spread: 260 }]
+      # 献祭坑：首领食人魔·血槌（三阶段在 P3 做，现在先用野外的食人魔首领）
+      - id: r6
+        waves:
+          - [{ template: ogre_chief, count: 1, x: 800, y: 3600, spread: 0 }]
+      # 坑底出口
+      - id: r7
+    boons:
+      - { name: 灵火, duration: 3600000, atk_pct: 2500, look: fire }
+      - { name: 亡者疾行, duration: 3600000, speed_pct: 2000, look: haste }
+      - { name: 骨甲, duration: 3600000, def_pct: 3000 }

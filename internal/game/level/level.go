@@ -457,6 +457,12 @@ func (sys *System) clear(current *room) {
 	current.status.Phase = core.RoomClear
 	current.waveAt, current.emptyAt = 0, 0
 	sys.state.Level.Version++
+	if current.cfg != nil && current.cfg.Key != "" && !slices.Contains(sys.state.Level.Keys, current.cfg.Key) {
+		sys.state.Level.Keys = append(sys.state.Level.Keys, current.cfg.Key)
+		for _, player := range sys.playersInside(current.area) {
+			player.Notices = append(player.Notices, "获得「"+current.cfg.Key+"」")
+		}
+	}
 	if current.cfg == nil || current.cfg.Reward == "" {
 		return
 	}
@@ -546,6 +552,9 @@ func (sys *System) updateGates() bool {
 		}
 		if current.breakable.Alive() {
 			open = false
+		}
+		if current.cfg.Key != "" && !slices.Contains(sys.state.Level.Keys, current.cfg.Key) {
+			open = false // 锁着，要钥匙
 		}
 		if current.status.Open != open {
 			current.status.Open = open

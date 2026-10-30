@@ -32,7 +32,8 @@ hostile:
   monster: [player, guard, villager]
   guard: [monster]
   villager: []
-  wild: []           # 能砍的东西（荆棘丛）：谁也不打
+  wild: []           # 能砍的东西（荆棘丛、灵火盆）：谁也不打
+  trap: [player]     # 机关（骨箭雕像）：只打玩家，玩家也打不动它
 
 # 玩家模板：每个连接创建一个新角色
 player:

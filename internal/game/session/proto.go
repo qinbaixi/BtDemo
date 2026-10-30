@@ -361,6 +361,7 @@ func levelState(level *core.Level) *pb.LevelState {
 			state.Open = append(state.Open, gate.ID)
 		}
 	}
+	state.Keys = append(state.Keys, level.Keys...)
 	return state
 }
 

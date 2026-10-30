@@ -2873,6 +2873,30 @@
        "value": 36
       }
      ]
+    },
+    {
+     "id": 237,
+     "name": "to_crypt",
+     "class": "portal",
+     "x": 530,
+     "y": 592,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "to",
+       "type": "string",
+       "value": "crypt"
+      },
+      {
+       "name": "r",
+       "type": "float",
+       "value": 30
+      }
+     ]
     }
    ],
    "opacity": 1,
@@ -2883,7 +2907,7 @@
   }
  ],
  "nextlayerid": 5,
- "nextobjectid": 237,
+ "nextobjectid": 238,
  "orientation": "orthogonal",
  "properties": [
   {

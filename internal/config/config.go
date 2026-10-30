@@ -255,6 +255,8 @@ type Template struct {
 	// BreakStun 是架势被打空后的硬直毫秒数（0 = 和玩家一样）。精英骷髅骑士用。
 	Guard     int    `yaml:"guard"`
 	BreakStun Millis `yaml:"break_stun"`
+	// Hits 是打几下就倒（不看伤害，0 = 按血量算）：灵火盆挨一下就点着。
+	Hits int `yaml:"hits"`
 }
 
 // Spawn 在 (X, Y) 周围放置 Count 份模板副本。
@@ -539,8 +541,8 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 				return fmt.Errorf("monsters.yaml: template %s: %s %q is not a template", id, field, other)
 			}
 		}
-		if template.Guard < 0 || template.BreakStun < 0 {
-			return fmt.Errorf("monsters.yaml: template %s: guard and break_stun must be >= 0", id)
+		if template.Guard < 0 || template.BreakStun < 0 || template.Hits < 0 {
+			return fmt.Errorf("monsters.yaml: template %s: guard, break_stun and hits must be >= 0", id)
 		}
 		if _, ok := world.Hostile[template.Faction]; !ok {
 			return fmt.Errorf(
@@ -552,9 +554,14 @@ func (cfg *Config) validate(knownTrees map[string]bool) error {
 		if err := checkSkills("monsters.yaml template "+id, template.Skills); err != nil {
 			return err
 		}
-		// 行为树放技能时不给方向（combat.Cast），要瞄准的技能怪物用不了
+		// 行为树的 CastSkill 放技能时不给方向（combat.Cast），要瞄准的技能怪物用不了；
+		// 例外是机关（阵营 trap）：它用 FireLine 节点按固定角度射直线技能
 		for _, skillID := range template.Skills {
-			if kind := cfg.Skills[skillID].Kind; kind == "dash" || kind == "line" || kind == "rain" {
+			kind := cfg.Skills[skillID].Kind
+			if template.Faction == "trap" && kind == "line" {
+				continue
+			}
+			if kind == "dash" || kind == "line" || kind == "rain" {
 				return fmt.Errorf("monsters.yaml: template %s cannot use %s skill %s", id, kind, skillID)
 			}
 		}

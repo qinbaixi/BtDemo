@@ -543,6 +543,10 @@ func (sys *System) damage(
 		src.AmbushUntil = 0 // 伏击的必暴用掉了
 	}
 	result := damageResult{event: event, outcome: pb.HitResult_HIT}
+	if dst.Tmpl != nil && dst.Tmpl.Hits > 0 {
+		// 按下数算的东西（灵火盆）：每下打掉 1/Hits 的血，不看攻击力
+		dmg = (dst.Attr.MaxHP + dst.Tmpl.Hits - 1) / dst.Tmpl.Hits
+	}
 	if dst.Blocking && sys.ShieldCovers(dst, src) {
 		result.outcome = sys.guard(dst, sys.state.Cfg.Skills[skillID], proc)
 		if result.outcome == pb.HitResult_PARRY {

@@ -21,6 +21,23 @@ type System struct {
 	state *core.State
 	grid  *aoi.Grid
 	nav   *nav.Map
+	water []config.RoomArea // 积水的范围（地图 water 图层），站在里面走得慢
+}
+
+// WaterPace 是站在积水里的移动速度倍率（万分比）：慢 30%。客户端 game/config.ts 的 WATER_PACE 要一致。
+const WaterPace config.BasisPoints = 7000
+
+// SetWater 设置场景里积水的范围。
+func (sys *System) SetWater(water []config.RoomArea) { sys.water = water }
+
+// Pace 是 entity 现在的移动速度倍率：站在积水里是 WaterPace，否则 1。
+func (sys *System) Pace(entity *core.Entity) float64 {
+	for i := range sys.water {
+		if sys.water[i].Contains(entity.X, entity.Y, 0) {
+			return float64(WaterPace) / config.OneHundredPercent
+		}
+	}
+	return 1
 }
 
 // New 在给定的障碍物地图上创建移动系统。
@@ -135,7 +152,7 @@ func (sys *System) Tick() {
 			entity.SetAction("stagger")
 			return
 		}
-		speed := float64(entity.Attr.Speed)
+		speed := float64(entity.Attr.Speed) * sys.Pace(entity)
 		if entity.Blocking {
 			// 格挡时走得慢（万分比倍率）
 			speed = speed * float64(sys.state.Cfg.World.Player.Block.Speed) / config.OneHundredPercent

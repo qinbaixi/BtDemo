@@ -28,5 +28,6 @@ type GateStatus struct {
 type Level struct {
 	Rooms   []*RoomStatus
 	Gates   []*GateStatus
+	Keys    []string // 拿到的钥匙（清完配了 key 的房间给），按拿到的顺序
 	Version int
 }

@@ -25,6 +25,7 @@ type Layout struct {
 	Portals       []Portal
 	Rooms         []RoomArea // 关卡的房间（rooms 图层），只有副本地图有
 	Gates         []Gate     // 关卡的门（gates 图层），只有副本地图有
+	Water         []RoomArea // 积水（water 图层的矩形），站在里面走得慢
 	Source        []byte     // map.tmj 原文，原样提供给浏览器
 }
 

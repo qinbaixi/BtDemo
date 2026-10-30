@@ -214,17 +214,22 @@ func (scene *Scene) SceneInfo() *pb.SceneInfo {
 			if cfg := template.Room(area.ID); cfg != nil {
 				room.Waves = core.I32(len(cfg.Waves))
 				room.Reward = proto.String(cfg.Reward)
+				room.Dark = proto.Bool(cfg.Dark)
+				if cfg.Key != "" {
+					room.Key = proto.String(cfg.Key)
+				}
 			}
 			info.Rooms = append(info.Rooms, room)
 		}
 		for _, gate := range template.Layout.Gates {
 			info.Gates = append(info.Gates, &pb.GateInfo{
-				Id: proto.String(gate.ID),
-				X:  core.I32(gate.X),
-				Y:  core.I32(gate.Y),
-				W:  core.I32(gate.W),
-				H:  core.I32(gate.H),
-				To: proto.String(gate.To),
+				Id:  proto.String(gate.ID),
+				X:   core.I32(gate.X),
+				Y:   core.I32(gate.Y),
+				W:   core.I32(gate.W),
+				H:   core.I32(gate.H),
+				To:  proto.String(gate.To),
+				Key: proto.String(gate.Key),
 			})
 		}
 	}

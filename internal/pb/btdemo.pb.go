@@ -2904,6 +2904,8 @@ type RoomInfo struct {
 	H             *int32                 `protobuf:"varint,6,req,name=h" json:"h,omitempty"`
 	Waves         *int32                 `protobuf:"varint,7,opt,name=waves" json:"waves,omitempty"`  // 0 = a safe room (cleared as soon as someone walks in)
 	Reward        *string                `protobuf:"bytes,8,opt,name=reward" json:"reward,omitempty"` // given on clear: heal | gear | boon (drawn above the gates leading in)
+	Dark          *bool                  `protobuf:"varint,9,opt,name=dark" json:"dark,omitempty"`    // a dark room: only the player's own small circle and lit braziers are lit
+	Key           *string                `protobuf:"bytes,10,opt,name=key" json:"key,omitempty"`      // the key given on clear (LevelState.keys once taken)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2994,6 +2996,20 @@ func (x *RoomInfo) GetReward() string {
 	return ""
 }
 
+func (x *RoomInfo) GetDark() bool {
+	if x != nil && x.Dark != nil {
+		return *x.Dark
+	}
+	return false
+}
+
+func (x *RoomInfo) GetKey() string {
+	if x != nil && x.Key != nil {
+		return *x.Key
+	}
+	return ""
+}
+
 // GateInfo is a gate between rooms: a rectangle that blocks the way while closed.
 type GateInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -3002,7 +3018,8 @@ type GateInfo struct {
 	Y             *int32                 `protobuf:"varint,3,req,name=y" json:"y,omitempty"`
 	W             *int32                 `protobuf:"varint,4,req,name=w" json:"w,omitempty"`
 	H             *int32                 `protobuf:"varint,5,req,name=h" json:"h,omitempty"`
-	To            *string                `protobuf:"bytes,6,opt,name=to" json:"to,omitempty"` // RoomInfo.id it leads into (show that room's reward on it)
+	To            *string                `protobuf:"bytes,6,opt,name=to" json:"to,omitempty"`   // RoomInfo.id it leads into (show that room's reward on it)
+	Key           *string                `protobuf:"bytes,7,opt,name=key" json:"key,omitempty"` // the key it needs (a lock is drawn until LevelState.keys has it)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3079,11 +3096,19 @@ func (x *GateInfo) GetTo() string {
 	return ""
 }
 
+func (x *GateInfo) GetKey() string {
+	if x != nil && x.Key != nil {
+		return *x.Key
+	}
+	return ""
+}
+
 // LevelState is the whole progress of a dungeon.
 type LevelState struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Rooms         []*RoomState           `protobuf:"bytes,1,rep,name=rooms" json:"rooms,omitempty"`
 	Open          []string               `protobuf:"bytes,2,rep,name=open" json:"open,omitempty"` // GateInfo.id of every open gate
+	Keys          []string               `protobuf:"bytes,3,rep,name=keys" json:"keys,omitempty"` // keys taken so far in this dungeon
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3128,6 +3153,13 @@ func (x *LevelState) GetRooms() []*RoomState {
 func (x *LevelState) GetOpen() []string {
 	if x != nil {
 		return x.Open
+	}
+	return nil
+}
+
+func (x *LevelState) GetKeys() []string {
+	if x != nil {
+		return x.Keys
 	}
 	return nil
 }
@@ -5345,7 +5377,7 @@ const file_btdemo_proto_rawDesc = "" +
 	"\aportals\x18\x05 \x03(\v2\x12.btdemo.PortalInfoR\aportals\x12\x18\n" +
 	"\adungeon\x18\x06 \x01(\bR\adungeon\x12&\n" +
 	"\x05rooms\x18\a \x03(\v2\x10.btdemo.RoomInfoR\x05rooms\x12&\n" +
-	"\x05gates\x18\b \x03(\v2\x10.btdemo.GateInfoR\x05gates\"\x96\x01\n" +
+	"\x05gates\x18\b \x03(\v2\x10.btdemo.GateInfoR\x05gates\"\xbc\x01\n" +
 	"\bRoomInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x02(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x02(\tR\x05title\x12\f\n" +
@@ -5354,18 +5386,23 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x01w\x18\x05 \x02(\x05R\x01w\x12\f\n" +
 	"\x01h\x18\x06 \x02(\x05R\x01h\x12\x14\n" +
 	"\x05waves\x18\a \x01(\x05R\x05waves\x12\x16\n" +
-	"\x06reward\x18\b \x01(\tR\x06reward\"b\n" +
+	"\x06reward\x18\b \x01(\tR\x06reward\x12\x12\n" +
+	"\x04dark\x18\t \x01(\bR\x04dark\x12\x10\n" +
+	"\x03key\x18\n" +
+	" \x01(\tR\x03key\"t\n" +
 	"\bGateInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x02(\tR\x02id\x12\f\n" +
 	"\x01x\x18\x02 \x02(\x05R\x01x\x12\f\n" +
 	"\x01y\x18\x03 \x02(\x05R\x01y\x12\f\n" +
 	"\x01w\x18\x04 \x02(\x05R\x01w\x12\f\n" +
 	"\x01h\x18\x05 \x02(\x05R\x01h\x12\x0e\n" +
-	"\x02to\x18\x06 \x01(\tR\x02to\"I\n" +
+	"\x02to\x18\x06 \x01(\tR\x02to\x12\x10\n" +
+	"\x03key\x18\a \x01(\tR\x03key\"]\n" +
 	"\n" +
 	"LevelState\x12'\n" +
 	"\x05rooms\x18\x01 \x03(\v2\x11.btdemo.RoomStateR\x05rooms\x12\x12\n" +
-	"\x04open\x18\x02 \x03(\tR\x04open\"X\n" +
+	"\x04open\x18\x02 \x03(\tR\x04open\x12\x12\n" +
+	"\x04keys\x18\x03 \x03(\tR\x04keys\"X\n" +
 	"\tRoomState\x12\x0e\n" +
 	"\x02id\x18\x01 \x02(\tR\x02id\x12'\n" +
 	"\x05phase\x18\x02 \x02(\x0e2\x11.btdemo.RoomPhaseR\x05phase\x12\x12\n" +

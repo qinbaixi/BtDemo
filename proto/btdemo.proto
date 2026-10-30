@@ -312,6 +312,8 @@ message RoomInfo {
   required int32 h = 6;
   optional int32 waves = 7;           // 0 = a safe room (cleared as soon as someone walks in)
   optional string reward = 8;         // given on clear: heal | gear | boon (drawn above the gates leading in)
+  optional bool dark = 9;             // a dark room: only the player's own small circle and lit braziers are lit
+  optional string key = 10;           // the key given on clear (LevelState.keys once taken)
 }
 
 // GateInfo is a gate between rooms: a rectangle that blocks the way while closed.
@@ -322,6 +324,7 @@ message GateInfo {
   required int32 w = 4;
   required int32 h = 5;
   optional string to = 6;             // RoomInfo.id it leads into (show that room's reward on it)
+  optional string key = 7;            // the key it needs (a lock is drawn until LevelState.keys has it)
 }
 
 enum RoomPhase {
@@ -335,6 +338,7 @@ enum RoomPhase {
 message LevelState {
   repeated RoomState rooms = 1;
   repeated string open = 2;           // GateInfo.id of every open gate
+  repeated string keys = 3;           // keys taken so far in this dungeon
 }
 
 message RoomState {

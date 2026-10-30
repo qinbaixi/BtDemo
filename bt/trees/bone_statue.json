@@ -1,0 +1,91 @@
+{
+  "type": "Sequence",
+  "label": "骨箭雕像",
+  "comment": "机关也是一棵行为树：等待 → 预警 → 射击，横竖交替",
+  "childNodes": [
+    {
+      "type": "Wait",
+      "label": "等待",
+      "properties": [
+        {
+          "name": "Seconds",
+          "value": 2.1
+        }
+      ]
+    },
+    {
+      "type": "WarnLine",
+      "label": "横线预警",
+      "properties": [
+        {
+          "name": "Angle",
+          "value": 0
+        },
+        {
+          "name": "Length",
+          "value": 560
+        },
+        {
+          "name": "Seconds",
+          "value": 0.9
+        }
+      ]
+    },
+    {
+      "type": "FireLine",
+      "label": "横着射",
+      "properties": [
+        {
+          "name": "Slot",
+          "value": 1
+        },
+        {
+          "name": "Angle",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "type": "Wait",
+      "label": "等待",
+      "properties": [
+        {
+          "name": "Seconds",
+          "value": 2.1
+        }
+      ]
+    },
+    {
+      "type": "WarnLine",
+      "label": "竖线预警",
+      "properties": [
+        {
+          "name": "Angle",
+          "value": 90
+        },
+        {
+          "name": "Length",
+          "value": 560
+        },
+        {
+          "name": "Seconds",
+          "value": 0.9
+        }
+      ]
+    },
+    {
+      "type": "FireLine",
+      "label": "竖着射",
+      "properties": [
+        {
+          "name": "Slot",
+          "value": 1
+        },
+        {
+          "name": "Angle",
+          "value": 90
+        }
+      ]
+    }
+  ]
+}

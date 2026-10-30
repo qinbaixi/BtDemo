@@ -45,6 +45,8 @@ type Gate struct {
 	To         string
 	// Breakable 是挡在门里的东西的怪物模板（比如灌木）：砍掉它门才开（秘密房的入口）
 	Breakable string
+	// Key 是开这扇门要的钥匙名（LevelRoom.Key），不写不要钥匙
+	Key string
 }
 
 // Center 是门的中心。
@@ -74,8 +76,13 @@ type LevelRoom struct {
 	Reward string `yaml:"reward"`
 	// Excludes 是走进这个房间以后再也去不了的房间（岔路的另一边），通往它们的门永远关上
 	Excludes []string `yaml:"excludes"`
-	// Allies 是第一次有人走进来时刷出的友方 NPC（比如被狼围住的猎人），和普通 NPC 一样会复活，房间重置也不移走
+	// Allies 是第一次有人走进来时刷出的友方 NPC（比如被狼围住的猎人）或机关（骨箭雕像），
+	// 和普通 NPC 一样会复活，房间重置也不移走
 	Allies []Wave `yaml:"allies"`
+	// Dark 是暗房：客户端只照亮玩家身边一小圈和点着的灵火
+	Dark bool `yaml:"dark"`
+	// Key 是清完这个房间拿到的钥匙名（比如 守墓人钥匙），开地图上 key 属性相同的门
+	Key string `yaml:"key"`
 
 	Area *RoomArea `yaml:"-"` // 地图上的范围，由 validateLevel 填上
 }
@@ -93,7 +100,7 @@ func (scene *Scene) Room(id string) *LevelRoom {
 	return nil
 }
 
-// parseLevelLayers 读地图的 rooms 和 gates 图层（没有就跳过）。
+// parseLevelLayers 读地图的 rooms、gates 和 water 图层（没有就跳过）。
 func parseLevelLayers(layers []tmjLayer, layout *Layout) error {
 	if rooms := findLayer(layers, "rooms"); rooms != nil {
 		for _, obj := range rooms.Objects {
@@ -114,6 +121,15 @@ func parseLevelLayers(layers []tmjLayer, layout *Layout) error {
 			layout.Rooms = append(layout.Rooms, area)
 		}
 	}
+	if water := findLayer(layers, "water"); water != nil {
+		for _, obj := range water.Objects {
+			x, y, w, h, err := objectRect(obj)
+			if err != nil {
+				return fmt.Errorf("water object %d: %w", obj.ID, err)
+			}
+			layout.Water = append(layout.Water, RoomArea{ID: obj.Name, X: x, Y: y, W: w, H: h})
+		}
+	}
 	if gates := findLayer(layers, "gates"); gates != nil {
 		for _, obj := range gates.Objects {
 			x, y, w, h, err := objectRect(obj)
@@ -128,6 +144,7 @@ func parseLevelLayers(layers []tmjLayer, layout *Layout) error {
 				"after":     &gate.After,
 				"to":        &gate.To,
 				"breakable": &gate.Breakable,
+				"key":       &gate.Key,
 			}
 			if err := stringProps(obj, props); err != nil {
 				return fmt.Errorf("gates object %d: %w", obj.ID, err)
@@ -256,6 +273,17 @@ func (cfg *Config) validateLevel(scene *Scene, label string) error {
 					)
 				}
 			}
+		}
+	}
+	keys := map[string]bool{}
+	for _, room := range scene.Rooms {
+		if room.Key != "" {
+			keys[room.Key] = true
+		}
+	}
+	for _, gate := range layout.Gates {
+		if gate.Key != "" && !keys[gate.Key] {
+			return fmt.Errorf("%s: gate %s needs key %q but no room gives it", label, gate.ID, gate.Key)
 		}
 	}
 	if needBoons && len(scene.Boons) == 0 {

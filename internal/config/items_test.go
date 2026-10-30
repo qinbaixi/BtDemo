@@ -184,6 +184,7 @@ func TestShippedItems(t *testing.T) {
 		"skeleton_soldier": true,
 		"skeleton_knight":  true,
 		"bone_pile":        true,
+		"bone_statue":      true,
 		"npc_guard":        true,
 		"npc_villager":     true,
 		"pet_melee":        true,

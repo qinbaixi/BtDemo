@@ -93,6 +93,9 @@ skills:
   knight_cleave: { weight: medium, windup: 550, name: 劈砍,  kind: target, range: 72, cooldown: 1800, damage: physical, ratio: 13000, base: 6, fx: melee, color: "#cfd8e6" }
   knight_bash:   { weight: heavy, windup: 750, name: 盾击,   kind: target, range: 70, cooldown: 6000, damage: physical, ratio: 15000, base: 8, knock: 60, fx: melee, color: "#ffd27a" }
 
+  # 骨箭雕像（机关）：沿一条线往两头射一排穿透的骨箭，见行为树 bone_statue
+  bone_volley:   { weight: medium, name: 骨箭齐射, kind: line, pierce: true, range: 560, cooldown: 100, damage: physical, ratio: 9000, base: 10, fx: pierce, color: "#e8e3d0" }
+
   # 第一关「黑松林道」的头狼和灰鬃狼王
   #   charge 冲锋：前摇 windup 毫秒（地上画预警带），然后朝目标方向冲 distance 像素；撞到第一个敌人就停下打它，
   #     没撞到人却撞上墙、石头就自己晕 self_stun 毫秒。range 是能对多远（圆心距离）的目标出招

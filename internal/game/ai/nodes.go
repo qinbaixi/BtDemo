@@ -29,9 +29,10 @@ const (
 	lostTargetFactor               = 2.0  // 距离超过 Range*lostTargetFactor 的目标会被丢弃
 )
 
-// step 返回本 tick 内 agent 以给定速度倍率可以移动的距离；举着盾时和玩家一样走得慢。
+// step 返回本 tick 内 agent 以给定速度倍率可以移动的距离；举着盾、蹚水时和玩家一样走得慢。
 func (agent *Agent) step(mult float64) float64 {
 	speed := float64(agent.Entity.Attr.Speed) * mult * agent.sys.state.Clock.DtSeconds()
+	speed *= agent.sys.move.Pace(agent.Entity)
 	if agent.Entity.Blocking {
 		speed = speed * float64(agent.sys.state.Cfg.World.Player.Block.Speed) / config.OneHundredPercent
 	}

@@ -5,6 +5,7 @@ import (
 
 	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
+	"github.com/qinbaixi/BtDemo/internal/game/session"
 	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
@@ -186,4 +187,120 @@ func TestSoldierFlanksTheShield(t *testing.T) {
 		}
 	}
 	t.Fatalf("the soldier should walk around the shield, now at (%.0f, %.0f)", soldier.X, soldier.Y)
+}
+
+// enterCrypt 让一个新角色从晨曦村直接进第二关，返回会话和它所在的副本。
+func enterCrypt(t *testing.T) (*Session, *Scene) {
+	t.Helper()
+	manager := shippedManager(t)
+	client := attachNow(t, manager, session.NewLink(), "")
+	village := sceneOf(manager, client)
+	village.Do(func() { village.travel(client, "crypt", 0) })
+	pump(manager, 3)
+	crypt := sceneOf(manager, client)
+	if crypt == nil || crypt.Template.ID != "crypt" {
+		t.Fatal("the player should be in the crypt")
+	}
+	client.Player.HP = client.Player.Attr.MaxHP * 100 // 测试里别让玩家倒下
+	client.Player.Attr.MaxHP = client.Player.HP
+	return client, crypt
+}
+
+// 灵火回廊：进门刷出雕像和三个灵火盆，每个挨一下就点着；全点着房间清完，拿到钥匙。
+// 密室的门要砸开裂墙（只怕重击）、还要有钥匙才开。
+func TestBraziersClearTheRoomAndGiveTheKey(t *testing.T) {
+	client, scene := enterCrypt(t)
+	player := client.Player
+	for _, room := range []string{"r1", "r2"} {
+		roomStatus(t, scene, room).Phase = core.RoomClear
+	}
+	moveTo(scene, player, 470, 1700)
+	stepScene(scene, 2)
+	if findTemplate(scene, "", "bone_statue") == nil {
+		t.Fatal("the statue should be standing in the hall")
+	}
+	braziers := roomMonsters(scene, "r3a")
+	if len(braziers) != 3 {
+		t.Fatalf("r3a should have 3 braziers, got %d", len(braziers))
+	}
+	if gateOpen(t, scene, "g_vault") {
+		t.Fatal("the vault should be shut")
+	}
+	for _, brazier := range braziers {
+		moveTo(scene, player, brazier.X+30, brazier.Y)
+		strikeNow(t, scene, player, scene.State.Cfg.Skills["slash"], brazier.ID)
+		if brazier.Alive() {
+			t.Fatal("one hit should light the brazier")
+		}
+	}
+	stepScene(scene, 4)
+	if roomStatus(t, scene, "r3a").Phase != core.RoomClear {
+		t.Fatal("lighting every brazier should clear the hall")
+	}
+	if len(scene.State.Level.Keys) != 1 {
+		t.Fatalf("clearing the hall should give the key, keys %v", scene.State.Level.Keys)
+	}
+	if gateOpen(t, scene, "g_vault") {
+		t.Fatal("the cracked wall still blocks the vault")
+	}
+	var crack *core.Entity
+	scene.State.Ents.Each(func(entity *core.Entity) {
+		if entity.Room == "gate:g_vault" {
+			crack = entity
+		}
+	})
+	moveTo(scene, player, crack.X+40, crack.Y)
+	strikeNow(t, scene, player, scene.State.Cfg.Skills["slash"], crack.ID)
+	if crack.HP < crack.Attr.MaxHP {
+		t.Fatal("a slash should not crack the wall")
+	}
+	whirlwind := scene.State.Cfg.Skills["whirlwind"]
+	strikeNow(t, scene, player, whirlwind, 0)
+	strikeNow(t, scene, player, whirlwind, 0)
+	stepScene(scene, 2)
+	if crack.Alive() || !gateOpen(t, scene, "g_vault") {
+		t.Fatal("two heavy hits should break the wall and the key should open the vault")
+	}
+}
+
+// 骨箭雕像：预警之后沿横线射，站在线上的玩家挨打，站在线外的不挨。
+func TestStatueShootsAlongItsLine(t *testing.T) {
+	client, scene := enterCrypt(t)
+	player := client.Player
+	for _, room := range []string{"r1", "r2"} {
+		roomStatus(t, scene, room).Phase = core.RoomClear
+	}
+	moveTo(scene, player, 470, 1700)
+	stepScene(scene, 2)
+	statue := findTemplate(scene, "", "bone_statue")
+	moveTo(scene, player, statue.X+150, statue.Y) // 横线上
+	hp := player.HP
+	stepScene(scene, 3200/50+4) // 等 2.1 秒 + 预警 0.9 秒
+	if player.HP >= hp {
+		t.Fatal("standing on the line should get hit")
+	}
+	moveTo(scene, player, statue.X+150, statue.Y+120) // 两条线都不在
+	hp = player.HP
+	stepScene(scene, 3200/50+4)
+	if player.HP < hp {
+		t.Fatal("standing off both lines should be safe")
+	}
+}
+
+// 积水：同样按住方向键，在水里走得比干地上慢 30%。
+func TestWaterSlowsThePlayer(t *testing.T) {
+	client, scene := enterCrypt(t)
+	player := client.Player
+	walk := func(x, y float64) float64 {
+		moveTo(scene, player, x, y)
+		player.MoveX, player.MoveY = 1, 0
+		stepScene(scene, 5)
+		player.MoveX = 0
+		return player.X - x
+	}
+	dry := walk(760, 300)
+	wet := walk(950, 1830)
+	if wet > dry*0.75 || wet < dry*0.6 {
+		t.Fatalf("water should slow by 30%%: dry %.1f, wet %.1f", dry, wet)
+	}
 }

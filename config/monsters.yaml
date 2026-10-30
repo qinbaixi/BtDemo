@@ -203,6 +203,55 @@ templates:
     mass: 22000
     guard: 200
     break_stun: 2000
+  # 第二关的机关。骨箭雕像：阵营 trap，只打玩家，玩家也打不动；行为树就是 等待 → 预警 → 射击
+  bone_statue:
+    name: 骷髅雕像
+    kind: npc
+    faction: trap
+    tree: bone_statue
+    level: 6
+    attrs: { str: 12, agi: 1, int: 1, vit: 10 }
+    speed: 0
+    radius: 18
+    color: "#ff5a5a"
+    skills: [bone_volley]
+    respawn: 5000
+    exp: 0
+    poise: 100000
+    mass: 1000000
+  # 灵火盆：挨一下就点着（死了就是点着了，尸体一直留着）；房间里的灵火盆全点着，房间就算清完、门打开
+  brazier:
+    name: 灵火盆
+    kind: npc
+    faction: wild
+    level: 1
+    attrs: { str: 1, agi: 1, int: 1, vit: 1 }
+    speed: 0
+    radius: 14
+    color: "#5ff2ff"
+    skills: []
+    respawn: 86400000
+    exp: 0
+    poise: 100000
+    mass: 1000000
+    hits: 1
+  # 墙上的裂缝：守墓人密室的入口，只有重击和范围技能砸得开
+  cracked_wall:
+    name: 裂开的墙
+    kind: npc
+    faction: wild
+    level: 1
+    attrs: { str: 1, agi: 1, int: 1, vit: 1 }
+    speed: 0
+    radius: 22
+    color: "#6a6474"
+    skills: []
+    respawn: 1500
+    exp: 0
+    poise: 100000
+    mass: 1000000
+    heavy_only: true
+    hits: 2
   # 挡住秘密房入口的荆棘丛：不会动，砍掉门才开（地图 gates 图层的 breakable）
   bramble:
     name: 荆棘丛

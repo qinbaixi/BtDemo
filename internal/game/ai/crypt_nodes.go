@@ -3,8 +3,13 @@ package ai
 import (
 	"math"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/qinbaixi/BtDemo/internal/bt"
+	"github.com/qinbaixi/BtDemo/internal/config"
 	"github.com/qinbaixi/BtDemo/internal/game/core"
+	"github.com/qinbaixi/BtDemo/internal/game/nav"
+	"github.com/qinbaixi/BtDemo/internal/pb"
 )
 
 // 骷髅兵和骨堆用的节点（第二关「亡者地穴」）：
@@ -12,7 +17,15 @@ import (
 //   - facing_shield 目标举着盾、盾正对着我（从正面打会被挡住）；
 //   - flank_shield 绕到目标的盾侧面去，从盾挡不住的方向打；
 //   - skill_ready 第 Slot 个技能冷却好了（先确认能出手再放盾，不然盾放下又举起来）；
-//   - reassemble 骨堆重新站起来变回骷髅兵，由场景接到关卡系统上。
+//   - reassemble 骨堆重新站起来变回骷髅兵，由场景接到关卡系统上；
+//   - warn_line / fire_line 骨箭雕像：沿一条直线（往两头）先画预警，再射一排穿透的骨箭。
+//     机关本身就是一棵树（等待 → 预警 → 射击），行为树不只是给怪用的。
+
+// FXLineWarn 是骨箭雕像射击前的预警（CAST 事件）：从 (x, y) 到 (tx, ty) 的一条带子，hit_at 时射出，radius 是半宽。
+const FXLineWarn = "line_warn"
+
+// lineWarnWidth 是骨箭预警带的半宽（像素）。
+const lineWarnWidth = 16
 
 // 绕盾用的常量。
 const (
@@ -145,4 +158,64 @@ func (sys *System) registerCrypt() {
 		ctx.Explain("骨头拼回去了，站起来的是 %s", who(risen))
 		return bt.Success
 	})
+
+	reg.Task("warn_line", func(ctx *bt.Ctx) bt.Status {
+		entity := ctx.Agent.(*Agent).Entity
+		if ctx.Fresh {
+			from, to := sys.lineEnds(entity, ctx.Node.Num("Angle", 0), ctx.Node.Num("Length", 600))
+			warn := config.Millis(ctx.Node.Num("Seconds", 0.9) * 1000)
+			sys.state.Events.Emit(
+				entity,
+				&core.Event{
+					Kind:   pb.EventKind_CAST.Enum(),
+					Src:    core.I32(entity.ID),
+					Fx:     proto.String(FXLineWarn),
+					Color:  proto.String(entity.Color),
+					X:      core.FloorI32(from.X),
+					Y:      core.FloorI32(from.Y),
+					Tx:     core.FloorI32(to.X),
+					Ty:     core.FloorI32(to.Y),
+					Radius: core.I32(lineWarnWidth),
+					HitAt:  core.I64(sys.state.Now() + warn),
+				},
+			)
+			ctx.Mem["until"] = ctx.Now + float64(warn)/1000
+		}
+		if left := memFloat(ctx, "until") - ctx.Now; left > 0 {
+			ctx.Explain("预警中，%.1f 秒后射击", left)
+			return bt.Running
+		}
+		return bt.Success
+	})
+
+	reg.Task("fire_line", func(ctx *bt.Ctx) bt.Status {
+		entity := ctx.Agent.(*Agent).Entity
+		slot := int(ctx.Node.Num("Slot", 1))
+		if slot < 1 || slot > len(entity.Skills) {
+			ctx.Explain("没有第 %d 个技能", slot)
+			return bt.Failure
+		}
+		skill := entity.Skills[slot-1]
+		radians := ctx.Node.Num("Angle", 0) * math.Pi / 180
+		directionX, directionY := math.Cos(radians), math.Sin(radians)
+		// 往两头各射一次：雕像站在线的中间
+		for _, sign := range []float64{1, -1} {
+			delete(entity.Cooldowns, skill.ID)
+			if err := sys.combat.CastAimed(entity, skill, 0, sign*directionX, sign*directionY); err != nil {
+				ctx.Explain("%s 射不出：%v", skill.Name, err)
+				return bt.Failure
+			}
+		}
+		ctx.Explain("沿 %.0f° 射出 %s", ctx.Node.Num("Angle", 0), skill.Name)
+		return bt.Success
+	})
+}
+
+// lineEnds 是从 entity 出发、沿 angle 度方向往两头各 length 像素的直线的两个端点（被墙挡住的地方截断）。
+func (sys *System) lineEnds(entity *core.Entity, angle, length float64) (nav.Vec, nav.Vec) {
+	radians := angle * math.Pi / 180
+	direction := nav.Vec{X: math.Cos(radians), Y: math.Sin(radians)}
+	center := nav.Vec{X: entity.X, Y: entity.Y}
+	navMap := sys.move.Nav()
+	return navMap.Reach(center, direction.Scale(-1), length, 4), navMap.Reach(center, direction, length, 4)
 }
