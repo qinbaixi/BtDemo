@@ -102,7 +102,7 @@ props += [point('column', 400, 780), point('column', 1200, 780), point('bones', 
 # 2 骨堆大厅：骨头散落，四根柱子
 for x, y in [(480, 1100), (1120, 1100), (480, 1360), (1120, 1360)]:
   props.append(point('column', x, y, s=1.2))
-props += [point('bones', 700, 1200, v=1), point('bones', 900, 1300, v=2), point('bones', 620, 1420), point('tomb', 800, 1020, v=1)]
+props += [point('bones', 700, 1200, v=1), point('bones', 900, 1300, v=2), point('bones', 620, 1420), point('tomb', 1000, 1040, v=1)]
 # 3A 灵火回廊：中间是雕像（实体），角落的陶罐和骨头；左墙的裂缝（裂墙实体）后面是密室
 props += [point('amphora', 330, 2180), point('bones', 740, 1660, v=2), point('bones', 340, 1990, v=1)]
 # 密室：守墓人的遗物
