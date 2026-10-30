@@ -928,6 +928,11 @@ export class FX {
     ctx.restore();
   }
 
+  // dropShocks 收掉 id 放出的震地冲击环（它死了）。
+  dropShocks(id: number) {
+    this.effects = this.effects.filter((f) => !(f.kind === 'shock' && f.src === id));
+  }
+
   // cancel 收掉 id 还没落下的出招：预警圈、等着出手时才放的刀光（前摇被打断时）。
   cancel(id: number) {
     this.effects = this.effects.filter((f) => !((f.kind === 'warn' || f.kind === 'band') && f.src === id));

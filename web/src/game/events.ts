@@ -211,6 +211,7 @@ export function onEvent(ev: GameEvent, now: number): void {
       break;
     case 'die': {
       state.bubbles.delete(ev.id);
+      fx.dropShocks(ev.id);   // 首领死了，还没扩出去的冲击环也散了（服务端同样不再结算）
       const e = state.ents.get(ev.id);
       if (e && e.deadAt < 0) e.deadAt = now;
       // 倒地时被打飞一小段（方向沿用最后一次受击），自己打死的再停一下、响收尾音
