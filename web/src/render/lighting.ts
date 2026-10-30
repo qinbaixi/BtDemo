@@ -10,6 +10,7 @@ import type { ActorLight } from './pixi/actorView';
 const SCALE = 0.5;               // 暗色层相对 CSS 像素的分辨率
 const AMBIENT = 0x0a0616;        // 没被照亮的地方盖的颜色
 const AMBIENT_ALPHA = 0.58;
+const DARK_ALPHA = 0.95;         // 暗房里盖的暗色
 
 interface Light { x: number; y: number; radius: number; color: string; strength: number; glow: number }
 
@@ -52,6 +53,7 @@ export type Lighting = ReturnType<typeof createLighting>;
 // world 是跟着镜头走的容器（彩色光放这里）。
 export function createLighting(renderer: Renderer, screen: Container, world: Container) {
   const lights: Light[] = [];
+  let ambientAlpha = AMBIENT_ALPHA;
 
   // 暗色层：一块铺满的暗色，加上一组用“擦除”混合挖洞的白色光斑
   const darkScene = new Container();
@@ -72,6 +74,9 @@ export function createLighting(renderer: Renderer, screen: Container, world: Con
 
   return {
     begin(): void { lights.length = 0; },
+
+    // setDark 设置有多暗：0 是平常，1 是暗房（暗色几乎盖死，只剩光源挖出来的洞）。
+    setDark(dark: number): void { ambientAlpha = AMBIENT_ALPHA + (DARK_ALPHA - AMBIENT_ALPHA) * dark; },
 
     // dominant 找出照在 (x, y) 处角色身上最亮的光源（光源就在角色身上的不算，比如自己的光）。
     // 返回从光源指向角色的方向和强度，附近没有光时返回 null。要在 add 完所有光源之后调用。
@@ -111,7 +116,7 @@ export function createLighting(renderer: Renderer, screen: Container, world: Con
         target = RenderTexture.create({ width: w, height: h, resolution: 1 });
         darkSprite.texture = target;
       }
-      darkFill.clear().rect(0, 0, w, h).fill({ color: AMBIENT, alpha: AMBIENT_ALPHA });
+      darkFill.clear().rect(0, 0, w, h).fill({ color: AMBIENT, alpha: ambientAlpha });
       holePool.begin();
       glowPool.begin();
       for (const l of lights) {

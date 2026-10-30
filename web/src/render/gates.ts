@@ -159,6 +159,7 @@ export function drawGateRewards(
 ): void {
   if (!level) return;
   for (const gate of gates) {
+    if (gate.key && !level.keys.has(gate.key)) drawLock(ctx, gate, now);
     const room = rooms.find((candidate) => candidate.id === gate.to);
     if (!room?.reward || !level.open.has(gate.id) || level.rooms.get(room.id)?.phase !== 'idle') continue;
     const color = REWARD_COLORS[room.reward] ?? '#ffffff';
@@ -185,6 +186,39 @@ export function drawGateRewards(
     drawRewardGlyph(ctx, room.reward);
     ctx.restore();
   }
+}
+
+// drawLock 在要钥匙的门上画一把挂锁，下面写要哪把钥匙；拿到钥匙后不画。
+function drawLock(ctx: CanvasRenderingContext2D, gate: GateInfo, now: number): void {
+  const x = gate.x + gate.w / 2;
+  const y = gate.y - 26 + Math.sin(now / 500) * 2;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#0b0710';
+  ctx.beginPath();
+  ctx.arc(0, -6, 6, Math.PI, 0);
+  ctx.stroke();
+  ctx.lineWidth = 1.8;
+  ctx.strokeStyle = '#c9b27a';
+  ctx.stroke();
+  ctx.fillStyle = '#0b0710';
+  ctx.fillRect(-9, -7, 18, 15);
+  ctx.fillStyle = '#b8954a';
+  ctx.fillRect(-7.5, -5.5, 15, 12);
+  ctx.fillStyle = '#2a1a10';
+  ctx.beginPath();
+  ctx.arc(0, -1, 2, 0, TAU);
+  ctx.fill();
+  ctx.fillRect(-0.9, -1, 1.8, 4.5);
+  ctx.font = '12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(8,4,10,0.9)';
+  ctx.strokeText(`需要「${gate.key}」`, 0, 22);
+  ctx.fillStyle = '#f0dca0';
+  ctx.fillText(`需要「${gate.key}」`, 0, 22);
+  ctx.restore();
 }
 
 function drawRewardGlyph(ctx: CanvasRenderingContext2D, reward: string): void {

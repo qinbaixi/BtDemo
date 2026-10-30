@@ -62,6 +62,12 @@ export function onEvent(ev: GameEvent, now: number): void {
         if (charge && windupMs > 0) {
           fx.chargeWarn(src.id, ev.x ?? src.x, ev.y ?? src.y, ev.tx!, ev.ty ?? src.y, (ev.radius || src.r || 14) * 2, windupMs, now);
         }
+        // 骨箭雕像的预警：沿横线 / 竖线一条红带，到 hitAt 射出一排骨箭
+        if (ev.fx === 'line_warn' && typeof ev.tx === 'number') {
+          fx.chargeWarn(src.id, ev.x ?? src.x, ev.y ?? src.y, ev.tx, ev.ty ?? src.y, (ev.radius || 16) * 2, windupMs, now);
+          sfxAt('cast.bow.heavy', src.id, now, true);
+          break;
+        }
         if (windupMs > 0 && src.kind !== 'player') {
           fx.telegraph(src.id, ev.dst || 0, ev.radius || 0, ev.weight === 'heavy' && !charge, windupMs, now);
         }
@@ -127,7 +133,9 @@ export function onEvent(ev: GameEvent, now: number): void {
         if (ev.immune) {
           // 无敌：金色的“免疫”，不推不闪
           fx.impact(ev.dst, '#ffe9a0', false, t);
-          addFloat(t, ev.dst, '免疫', '#ffe9a0', 18, 900, { pop: true, rise: 46 });
+          // 骨堆和裂墙只怕重击和范围技能：提示换招，而不是“免疫”
+          const heavyOnly = e && (e.model === 'bone_pile' || e.model === 'cracked_wall');
+          addFloat(t, ev.dst, heavyOnly ? '要重击' : '免疫', heavyOnly ? '#ffb070' : '#ffe9a0', 18, 900, { pop: true, rise: 46 });
           return;
         }
         if (ev.result === 'parry') {
@@ -207,11 +215,20 @@ export function onEvent(ev: GameEvent, now: number): void {
       fx.death(ev.id, e ? e.color : '#ffffff', now);
       break;
     }
-    case 'respawn':
+    case 'respawn': {
+      // 骷髅兵倒下变成骨堆、骨堆重新站起来：不放复活的光柱，骨头一拼就站起来了
+      const model = state.ents.get(ev.id ?? 0)?.model;
+      if (model === 'bone_pile') break;
+      if (model === 'skeleton_soldier') {
+        fx.boneRise(ev.id, now);
+        addFloat(now, ev.id, '骨头拼回去了', '#9fe8ff', 15, 1000);
+        break;
+      }
       fx.respawn(ev.id, now);
       sfxAt('respawn', ev.id, now);
       addFloat(now, ev.id, '复活', '#7cff9b', 16, 1000);
       break;
+    }
     case 'say':
       state.bubbles.set(ev.id, { text: String(ev.text || ''), until: now + 3000 });
       break;

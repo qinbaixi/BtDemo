@@ -182,9 +182,9 @@ export function createProtocol(): Protocol {
             portals: (w.scene.portals || []).map((p: any) => ({ x: p.x, y: p.y, r: p.r, to: p.to, toName: p.toName })),
             dungeon: !!w.scene.dungeon,
             rooms: (w.scene.rooms || []).map((r: any) => ({
-              id: r.id, title: r.title, x: r.x, y: r.y, w: r.w, h: r.h, waves: r.waves || 0, reward: r.reward || '',
+              id: r.id, title: r.title, x: r.x, y: r.y, w: r.w, h: r.h, waves: r.waves || 0, reward: r.reward || '', dark: !!r.dark, key: r.key || '',
             })),
-            gates: (w.scene.gates || []).map((g: any) => ({ id: g.id, x: g.x, y: g.y, w: g.w, h: g.h, to: g.to || '' })),
+            gates: (w.scene.gates || []).map((g: any) => ({ id: g.id, x: g.x, y: g.y, w: g.w, h: g.h, to: g.to || '', key: g.key || '' })),
           } : null,
         };
       }
@@ -209,6 +209,7 @@ export function createProtocol(): Protocol {
         t: 'level',
         rooms: (m.level.rooms || []).map((r: any) => ({ id: r.id, phase: roomPhase(r.phase), wave: r.wave || 0 })),
         open: m.level.open || [],
+        keys: m.level.keys || [],
       };
       case 'petStatus': return {
         t: 'petStatus', pet: m.petStatus.pet || '', entity: m.petStatus.entity || 0,

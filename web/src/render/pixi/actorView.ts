@@ -30,6 +30,9 @@ export interface Pose {
   squash?: number;      // 受击形变：正数横向变宽、纵向变扁
   dissolve?: number;    // 尸体溶解进度 0..1，-1 或不填表示不溶解
   burn?: string;        // 溶解边缘的火光颜色
+  node?: string;        // 行为树正在跑的节点（骨箭雕像预警时眼睛烧红）
+  age?: number;         // 进视野多少毫秒（骨堆越到后面抖得越厉害）
+  hpk?: number;         // 剩余血量比例（裂墙挨过一下裂得更开）
   light?: ActorLight | null;   // 附近最亮的光源（给身体加一道那个颜色的轮廓光）
   breath?: number;      // 待机呼吸：身体纵向多拉长的比例
   turn?: number;        // 转身：身体横向收窄的比例（0..1）

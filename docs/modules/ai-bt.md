@@ -142,6 +142,24 @@ var All = map[string]Exported{
 
 模板可以不写 `tree`（比如荆棘丛），这样的实体没有行为树，站着不动。
 
+## 地穴节点（视线、骷髅、机关）
+
+第二关「亡者地穴」用到的节点，在 `internal/game/ai/sight_nodes.go` 和 `crypt_nodes.go`。树是 `bt/trees/monster_ranged.json`（弓手加了找射击位）、`skeleton_soldier.json`、`skeleton_knight.json`、`bone_pile.json`、`bone_statue.json`。
+
+| 类型 | sub_type（BtTree 里的名字） | 参数 | 做什么 |
+| --- | --- | --- | --- |
+| 条件 | `has_sight`（HasSight） | | 看得见目标：中间没有墓碑、墙挡着（`combat.HasSight`，和箭能不能射到用同一个判断） |
+| 任务 | `find_shot_spot`（FindShotSpot） | `Range`=240 | 看不见目标时横着挪：在目标连线的两侧和目标周围找一个看得见、又在射程内的空地，挑最近的走过去；每 0.6 秒重挑一次 |
+| 任务 | `raise_shield` / `lower_shield`（RaiseShield / LowerShield） | | 举盾 / 放盾，和玩家格挡同一套规则（`combat.RaiseBlock`）；破防后架势没回到一半举不起来，返回 Failure |
+| 条件 | `facing_shield`（FacingShield） | | 目标举着盾，盾正对着我（从这里打会被挡住） |
+| 任务 | `flank_shield`（FlankShield） | `Distance`=50 | 绕到目标的盾侧面（稍微偏后）；已经在盾挡不到的地方返回 Success，绕 2.5 秒还没绕过去也返回 Success（硬打） |
+| 条件 | `skill_ready`（SkillReady） | `Slot`=1 | 第 Slot 个技能冷却好了（先确认能出手再放盾） |
+| 任务 | `reassemble`（Reassemble） | `Range`=400 | 骨堆重新站起来变成模板的 `revive`（骷髅兵），盯上 Range 内最近的敌人。由场景接到关卡系统（`level.System.Reassemble`） |
+| 任务 | `warn_line`（WarnLine） | `Angle`=0、`Length`=600、`Seconds`=0.9 | 机关：沿 Angle 度往两头各 Length（撞墙截断）发预警（fx `line_warn` 的 CAST 事件），等 Seconds 秒 |
+| 任务 | `fire_line`（FireLine） | `Slot`=1、`Angle`=0 | 机关：用第 Slot 个技能（直线穿透）沿 Angle 度往两头各射一次。阵营 `trap` 的模板才能配直线技能 |
+
+行为树里移动用的步长（`Agent.step`）会乘上举盾减速和积水减速，和玩家一样。
+
 ## 以近战怪为例读一棵树
 
 ```text

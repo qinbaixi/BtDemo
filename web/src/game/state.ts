@@ -72,6 +72,7 @@ export interface ClientEntity {
   shownFacing: number; // 上一帧画出来的朝向，用来发现转身
   turnAt: number;     // 最近一次转身的时间（转身时身体收窄一下）
   fresh: boolean;     // 还没收到过同步：一进视野就是死的，直接显示倒地
+  bornAt: number;     // 进视野的时间（骨堆按它算还有多久站起来）
 }
 
 export interface FloatText {
@@ -284,6 +285,7 @@ export function makeEntity(d: Partial<Omit<EntityInfo, 'state'>> & Partial<Entit
     shownFacing: NaN,   // 还没画过：第一帧不算转身
     turnAt: -1e9,
     fresh: true,
+    bornAt: now,
   };
 }
 

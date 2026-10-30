@@ -27,7 +27,7 @@ const TAU = Math.PI * 2;
 const PI = Math.PI;
 const OUTLINE = '#0b0710';
 
-export const MODELS = ['knight', 'ranger', 'slime', 'wolf', 'alpha_wolf', 'wolf_king', 'skeleton_archer', 'ogre_chief', 'guard', 'villager', 'hunter', 'bramble', 'wolf_pup', 'ember', 'sprout'];
+export const MODELS = ['knight', 'ranger', 'slime', 'wolf', 'alpha_wolf', 'wolf_king', 'skeleton_archer', 'skeleton_soldier', 'skeleton_knight', 'bone_pile', 'bone_statue', 'brazier', 'cracked_wall', 'ogre_chief', 'guard', 'villager', 'hunter', 'bramble', 'wolf_pup', 'ember', 'sprout'];
 
 /* ------------------------------ colour ------------------------------ */
 
@@ -258,6 +258,11 @@ function joint(x, y, a1, l1, a2, l2) {
 
 /* ------------------------------ entry ------------------------------- */
 
+// keepsCorpse 报告这种模型倒下以后是不是一直留着、不溶解（点着的灵火盆）。
+export function keepsCorpse(model: string): boolean {
+  return !!SPECS[model]?.keep;
+}
+
 export function drawModel(ctx, model, p) {
   const R = p.r || 14;
   const s = R / 16;
@@ -289,8 +294,8 @@ export function drawModel(ctx, model, p) {
     const k = (1 - hit) * (1 - hit);
     ctx.translate(-dir * 5 * k * s + Math.sin(hit * 46) * 1.2 * k, 0);
   }
-  if (dead >= 0) {
-    // fade out over the second half of the fall
+  if (dead >= 0 && !spec.keep) {
+    // fade out over the second half of the fall（keep 的模型倒下以后还留着，比如点着的灵火盆）
     ctx.globalAlpha *= 1 - 0.5 * clamp01((dead - 0.4) / 0.6);
     if (spec.fall) {
       // topple around the feet: buckle, tip, then hit the ground with a bounce
@@ -2376,7 +2381,8 @@ function drawSkeleton(ctx, q) {
 }
 
 // drawBonePile: a slain skeleton falls apart into a heap of bones.
-function drawBonePile(ctx, q, bone, cloak) {
+// dropped 画掉在骨堆旁边的武器（默认是弓手的弓），参数是倒下的进度和高度插值。
+function drawBonePile(ctx, q, bone, cloak, dropped = drawDroppedBow) {
   const d = ease(q.dead);
   const drop = (y0, y1) => lerp(y0, y1, easeIn(clamp01(d * 1.3)));
   // the hood and cloak settle into a heap
@@ -2386,15 +2392,7 @@ function drawBonePile(ctx, q, bone, cloak) {
     c.quadraticCurveTo(4, drop(-24, -6), 9, 0);
     c.closePath();
   }, cloak, { sd: 2 });
-  // the bow drops beside it
-  ctx.save();
-  ctx.translate(lerp(8, 4, d), drop(-18, -2));
-  ctx.rotate(lerp(0, 1.45, d));
-  ctx.beginPath();
-  ctx.arc(-4, 0, 10, -1.1, 1.1);
-  ctx.lineWidth = 4.2; ctx.strokeStyle = OUTLINE; ctx.lineCap = 'round'; ctx.stroke();
-  ctx.lineWidth = 2; ctx.strokeStyle = '#8a5230'; ctx.stroke();
-  ctx.restore();
+  dropped(ctx, d, drop);
   // ribs, then long bones with knobbed ends
   ctx.save();
   ctx.translate(lerp(0, -4, d), drop(-18, -5));
@@ -2423,6 +2421,18 @@ function drawBonePile(ctx, q, bone, cloak) {
   flat(ctx, (c) => { pEll(c, 0.8, -0.8, 1.4, 1.6); pEll(c, 3.6, -0.6, 1.1, 1.5); }, '#120e18');
   line(ctx, [-1, 3.8, 2.6, 3.8], '#120e18', 0.8);
   if (d < 0.9) glint(ctx, 2, -0.8, 4, `rgba(120,220,255,${0.7 * (1 - d)})`);
+  ctx.restore();
+}
+
+// drawDroppedBow：弓手倒下时弓掉在骨堆旁边。
+function drawDroppedBow(ctx, d, drop) {
+  ctx.save();
+  ctx.translate(lerp(8, 4, d), drop(-18, -2));
+  ctx.rotate(lerp(0, 1.45, d));
+  ctx.beginPath();
+  ctx.arc(-4, 0, 10, -1.1, 1.1);
+  ctx.lineWidth = 4.2; ctx.strokeStyle = OUTLINE; ctx.lineCap = 'round'; ctx.stroke();
+  ctx.lineWidth = 2; ctx.strokeStyle = '#8a5230'; ctx.stroke();
   ctx.restore();
 }
 
@@ -2966,6 +2976,422 @@ function drawBlob(ctx, q) {
   eyes(ctx, 3, -14 - bob);
 }
 
+/* ------------------------- crypt: skeleton warriors ------------------------- */
+// 第二关「亡者地穴」的骷髅兵和精英骷髅骑士：骨架和弓手一样，近手持盾、远手持剑。
+// 平时盾挡在身前，举盾（q.blocking）时盾往前顶、剑收到肩后；出手时盾让开、剑从头顶劈下来；
+// 破防（q.broken）时盾被打开、人往后仰。骑士大一号，多了头盔、胸甲、肩甲、破红披风和塔盾。
+
+interface SkeletonStyle {
+  knight: boolean;
+  bone: string;
+  rag: string;        // 破布 / 披风
+  iron: string;       // 甲片和剑
+  wood: string;       // 盾面
+}
+
+const SOLDIER_STYLE: SkeletonStyle = { knight: false, bone: '#ece4cc', rag: '#3a3446', iron: '#8a8f99', wood: '#6b4a2c' };
+const KNIGHT_STYLE: SkeletonStyle = { knight: true, bone: '#e4dcc4', rag: '#6a1f24', iron: '#5c6270', wood: '#3a3f4c' };
+
+function drawSkeletonWarrior(ctx, q, st: SkeletonStyle) {
+  const t = q.time / 1000;
+  const moving = q.moving && q.dead < 0;
+  const ph = q.walk || 0;
+  if (q.dead >= 0) {
+    drawBonePile(ctx, q, st.bone, st.rag, (c, d, drop) => drawDroppedArms(c, d, drop, st));
+    return;
+  }
+  const ap = q.ph;
+  const broken = q.broken >= 0 ? Math.sin(Math.min(1, q.broken / 0.5) * PI * 0.5) * (1 - Math.max(0, q.broken - 0.6) / 0.4) : 0;
+  const guard = q.blocking && !ap ? 1 : 0;
+  const swingLeg = moving ? Math.sin(ph) * (guard ? 0.3 : 0.5) : 0;
+  const bob = moving ? Math.abs(Math.cos(ph)) * 1.4 : Math.sin(t * 2) * 0.5;
+  const rattle = moving ? Math.sin(ph * 4) * 0.4 : 0;
+  // 举盾时压低重心、往前探；破防时往后仰
+  const crouch = guard * 1.6;
+  const lean = guard * 1.5 - broken * 3 + (ap ? arc3(ap, 0, -1.5, 2.5) : 0);
+  const hipY = -15 - bob * 0.5 + crouch;
+  const sy = -28 - bob + crouch * 1.4;
+  const sx = lean;
+
+  // 披风（骑士）/ 破布腰带（骷髅兵），在最后面
+  const sway = Math.sin(t * 2.2 + ph) * 1.5;
+  if (st.knight) {
+    cel(ctx, (c) => {
+      c.moveTo(sx - 4, sy - 1);
+      c.quadraticCurveTo(sx - 13, sy + 6, -12 - sway, hipY + 9);
+      c.lineTo(-9 - sway, hipY + 6);
+      c.lineTo(-7.5 - sway, hipY + 10);
+      c.lineTo(-5, hipY + 6);
+      c.lineTo(-3, hipY + 9);
+      c.lineTo(sx + 2, sy + 4);
+      c.closePath();
+    }, st.rag, { sd: 2.4 });
+    folds(ctx, [[sx - 5, sy + 1, -9, sy + 9, -10 - sway, hipY + 5]], 'rgba(20,4,8,0.55)', 0.9);
+  }
+
+  // 远手（剑）：手的位置和剑的角度（弧度，0 朝前，正的往下）
+  const rest = { hx: sx + 3, hy: hipY - 2, a: 1.25 };
+  const held = { hx: sx - 5, hy: sy - 3, a: -2.1 };      // 举盾时剑收到肩后
+  const wound = { hx: sx - 4, hy: sy - 9, a: -2.5 };     // 劈之前举过头顶
+  const struck = { hx: sx + 11, hy: sy + 7, a: 0.55 };   // 劈到身前
+  let hand = guard ? held : rest;
+  if (ap) {
+    hand = {
+      hx: arc3(ap, hand.hx, wound.hx, struck.hx),
+      hy: arc3(ap, hand.hy, wound.hy, struck.hy),
+      a: arc3(ap, hand.a, wound.a, struck.a),
+    };
+  }
+  if (broken > 0) hand = { hx: lerp(hand.hx, sx - 9, broken), hy: lerp(hand.hy, sy - 4, broken), a: lerp(hand.a, -2.8, broken) };
+  // 远手的臂骨：肩 → 肘 → 手
+  const farShoulder = { x: sx - 2, y: sy + 1.5 };
+  const elbow = { x: (farShoulder.x + hand.hx) / 2 - 2, y: (farShoulder.y + hand.hy) / 2 + 2 };
+  inkLine(ctx, [farShoulder.x, farShoulder.y, elbow.x, elbow.y, hand.hx, hand.hy], '#b8af96', 1.6);
+  drawBoneSword(ctx, hand.hx, hand.hy, hand.a, st, ap && ap.strike > 0 && ap.back < 0.4);
+
+  // 腿
+  for (const [x, a, col] of [[-2, -swingLeg - guard * 0.25, '#b8af96'], [2.2, swingLeg + guard * 0.35, st.bone]] as [number, number, string][]) {
+    const j = joint(x, hipY, a, 7.5, a - Math.max(0, a) * 0.8 - guard * 0.3, 7.5 + crouch * 0.2);
+    inkLine(ctx, [x, hipY, j.kx, j.ky, j.ex, Math.min(0, j.ey)], col, st.knight ? 2.2 : 1.8);
+    flat(ctx, (c) => pEll(c, j.kx, j.ky, 1.6, 1.6), col, 1);
+    if (st.knight) cel(ctx, (c) => pRrect(c, j.kx - 2, j.ky - 2.4, 4.4, 4.4, 1.2), st.iron, { sd: 1, lw: 1.1 });   // 护膝
+    flat(ctx, (c) => pPoly(c, [j.ex - 2, Math.min(0, j.ey) - 1.4, j.ex + 3.6, Math.min(0, j.ey) - 0.6, j.ex + 3.4, Math.min(0, j.ey) + 0.4, j.ex - 2, Math.min(0, j.ey) + 0.4]), col, 1.1);
+  }
+  // 胸腔里的魂火
+  {
+    const f = 0.7 + 0.3 * Math.sin(t * 6.3) + 0.15 * Math.sin(t * 17);
+    glint(ctx, sx + 1, sy + 7, 7 * f, st.knight ? 'rgba(255,90,70,0.5)' : 'rgba(70,200,255,0.55)');
+  }
+  // 骨盆、脊柱、肋骨
+  cel(ctx, (c) => { c.moveTo(-4.5, hipY - 1); c.lineTo(4.5, hipY - 1); c.lineTo(3, hipY + 2.6); c.lineTo(-3, hipY + 2.6); c.closePath(); }, st.bone, { sd: 1, lw: 1.2 });
+  // 破布腰带
+  cel(ctx, (c) => { c.moveTo(-5, hipY - 2); c.lineTo(5, hipY - 2); c.lineTo(4, hipY + 5); c.lineTo(1.5, hipY + 2.5); c.lineTo(-1, hipY + 6); c.lineTo(-4, hipY + 3); c.closePath(); }, st.knight ? '#2a2d36' : st.rag, { sd: 1.4, lw: 1.1 });
+  inkLine(ctx, [sx + 0.4, sy + 1, 0, hipY - 1], st.bone, 1.8);
+  if (st.knight) {
+    // 胸甲：一块生锈的铁板，上面有一道旧伤
+    cel(ctx, (c) => {
+      c.moveTo(sx - 5.5, sy + 0.5);
+      c.quadraticCurveTo(sx + 1, sy - 2, sx + 7, sy + 0.5);
+      c.lineTo(sx + 6, sy + 10);
+      c.quadraticCurveTo(sx + 1, sy + 12.5, sx - 4.5, sy + 10);
+      c.closePath();
+    }, st.iron, { sd: 2, lw: 1.3 });
+    line(ctx, [sx - 2, sy + 2.5, sx + 3.5, sy + 8], 'rgba(20,12,10,0.7)', 0.8);
+    flat(ctx, (c) => pEll(c, sx + 4, sy + 7, 1.6, 1), 'rgba(140,70,40,0.6)');     // 锈斑
+    rivets(ctx, [sx - 3.5, sy + 1.6, sx + 5, sy + 1.6, sx - 3, sy + 9, sx + 4.6, sy + 9], 0.5, '#c8ccd4');
+  } else {
+    for (let i = 0; i < 4; i++) {
+      const y = sy + 2.4 + i * 2.6 + rattle * (i % 2 ? 1 : -1) * 0.3;
+      const wdt = 5.6 - i * 0.6;
+      ctx.beginPath();
+      ctx.moveTo(sx - wdt + 1, y + 0.8);
+      ctx.quadraticCurveTo(sx + 0.5, y - 1.2, sx + wdt + 1, y + 0.8);
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3.2; ctx.stroke();
+      ctx.strokeStyle = i % 2 ? '#d8cfb4' : st.bone; ctx.lineWidth = 1.4; ctx.stroke();
+    }
+  }
+
+  // 头：骷髅兵是光头骨，骑士戴一顶带护鼻和红缨的铁盔
+  const hy = sy - 6 + guard * 0.8;
+  const hx = sx + guard * 1.2;
+  cel(ctx, (c) => {
+    c.moveTo(hx - 3, hy + 1);
+    c.quadraticCurveTo(hx - 3, hy - 6, hx + 2.6, hy - 6);
+    c.quadraticCurveTo(hx + 8.4, hy - 5.4, hx + 8.2, hy + 1);
+    c.lineTo(hx + 7.6, hy + 4.4);
+    c.lineTo(hx + 1, hy + 5);
+    c.closePath();
+  }, st.bone, { sd: 1.4, lw: 1.3 });
+  flat(ctx, (c) => { pEll(c, hx + 3.3, hy - 0.5, 1.6, 1.9); pEll(c, hx + 6.9, hy - 0.4, 1.3, 1.7); }, '#120e18');
+  const glow = 0.65 + 0.35 * Math.sin(t * 5);
+  const eye = st.knight ? `rgba(255,90,60,${glow})` : `rgba(90,230,255,${glow})`;
+  glint(ctx, hx + 3.4, hy - 0.4, 3.4, eye);
+  glint(ctx, hx + 6.9, hy - 0.3, 2.8, eye);
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  for (let x = 3; x <= 7.5; x += 1.5) { ctx.moveTo(hx + x, hy + 3); ctx.lineTo(hx + x, hy + 4.8); }
+  ctx.stroke();
+  if (st.knight) {
+    // 红缨在后面飘
+    cel(ctx, (c) => {
+      c.moveTo(hx + 1, hy - 7);
+      c.quadraticCurveTo(hx - 6, hy - 12 + sway * 0.4, hx - 11 - sway, hy - 6);
+      c.quadraticCurveTo(hx - 5, hy - 7, hx + 1, hy - 4);
+      c.closePath();
+    }, '#a8262c', { sd: 1.4, lw: 1.1 });
+    cel(ctx, (c) => {
+      c.moveTo(hx - 4, hy + 2);
+      c.quadraticCurveTo(hx - 4.5, hy - 8.5, hx + 3, hy - 8.4);
+      c.quadraticCurveTo(hx + 9.6, hy - 8, hx + 9.4, hy - 1.5);
+      c.lineTo(hx + 8.6, hy - 1.5);
+      c.lineTo(hx + 8.6, hy - 2.6);
+      c.lineTo(hx + 1.6, hy - 2.6);
+      c.lineTo(hx + 1.6, hy + 3);     // 护鼻
+      c.lineTo(hx - 1, hy + 3);
+      c.closePath();
+    }, st.iron, { sd: 1.6, lw: 1.3 });
+    line(ctx, [hx - 3, hy - 3.5, hx + 8.5, hy - 3.8], 'rgba(255,255,255,0.25)', 0.7);
+  }
+
+  // 近手（盾）：平时挡在身前，举盾时往前顶、抬高；出手时让开；破防时被打开
+  let shieldX = sx + 6.5, shieldY = sy + 10, face = 0.55;
+  if (guard) { shieldX = sx + 9.5; shieldY = sy + 7; face = 0.75; }
+  if (ap) { shieldX = arc3(ap, shieldX, sx + 4, sx + 1); shieldY = arc3(ap, shieldY, sy + 9, sy + 12); }
+  if (broken > 0) { shieldX = lerp(shieldX, sx + 3, broken); shieldY = lerp(shieldY, sy + 15, broken); face = lerp(face, 0.3, broken); }
+  const nearShoulder = { x: sx + 2, y: sy + 2 };
+  inkLine(ctx, [nearShoulder.x, nearShoulder.y, (nearShoulder.x + shieldX) / 2 + 1, (nearShoulder.y + shieldY) / 2 + 2, shieldX - 1, shieldY], st.bone, 1.7);
+  if (st.knight) {
+    // 肩甲
+    cel(ctx, (c) => { c.moveTo(sx - 1.5, sy + 3); c.quadraticCurveTo(sx + 2.5, sy - 3.5, sx + 7, sy + 1.5); c.lineTo(sx + 5.5, sy + 4.5); c.quadraticCurveTo(sx + 2.5, sy + 2, sx - 1.5, sy + 3); c.closePath(); }, st.iron, { sd: 1.4, lw: 1.2 });
+  }
+  drawBoneShield(ctx, shieldX, shieldY, face, st, q);
+}
+
+// drawBoneSword 在手的位置 (hx, hy) 画一把剑，angle 是剑尖的方向（0 朝前，正的往下）。
+function drawBoneSword(ctx, hx, hy, angle, st: SkeletonStyle, swinging) {
+  const length = st.knight ? 21 : 15;
+  const width = st.knight ? 2.4 : 1.7;
+  ctx.save();
+  ctx.translate(hx, hy);
+  ctx.rotate(angle);
+  if (swinging) {
+    // 劈下去的一瞬间拖一道刀光
+    flat(ctx, (c) => { c.moveTo(4, 0); c.arc(0, 0, length, -1.6, 0, false); c.lineTo(length * 0.4, 0); c.closePath(); }, st.knight ? 'rgba(255,140,110,0.35)' : 'rgba(200,230,255,0.3)');
+  }
+  // 剑身（缺了几个口）、护手、握柄
+  cel(ctx, (c) => {
+    c.moveTo(2.5, -width);
+    c.lineTo(length - 3, -width);
+    c.lineTo(length, 0);
+    c.lineTo(length - 3, width);
+    c.lineTo(length * 0.6, width);
+    c.lineTo(length * 0.55, width - 0.8);
+    c.lineTo(length * 0.5, width);
+    c.lineTo(2.5, width);
+    c.closePath();
+  }, st.iron, { sd: 0.9, lw: 1.1 });
+  line(ctx, [3, -0.3, length - 3, -0.3], 'rgba(255,255,255,0.35)', 0.6);
+  cel(ctx, (c) => pRrect(c, 1.2, -width - 2, 2, width * 2 + 4, 0.8), st.knight ? '#7a5a2a' : '#5a5048', { sd: 0.6, lw: 1 });
+  inkLine(ctx, [-2.5, 0, 1.2, 0], '#4a3424', 1.6);
+  ctx.restore();
+  flat(ctx, (c) => pEll(c, hx, hy, 1.8, 1.8), st.bone, 1);
+}
+
+// drawBoneShield 画近手的盾：骷髅兵是一面破木圆盾，骑士是一面铁边塔盾。face 是盾面朝外露出多少（侧面看是扁的）。
+function drawBoneShield(ctx, x, y, face, st: SkeletonStyle, q) {
+  const flash = q.parry >= 0 ? 1 - q.parry : 0;
+  if (st.knight) {
+    const w = 6 * face + 1.5, h = 13;
+    cel(ctx, (c) => {
+      c.moveTo(x - w, y - h);
+      c.quadraticCurveTo(x, y - h - 2, x + w, y - h);
+      c.lineTo(x + w, y + h * 0.55);
+      c.quadraticCurveTo(x + w * 0.4, y + h, x, y + h + 1.5);
+      c.quadraticCurveTo(x - w * 0.4, y + h, x - w, y + h * 0.55);
+      c.closePath();
+    }, st.iron, { sd: 2, lw: 1.5 });
+    // 盾面上的骷髅纹和铁边
+    cel(ctx, (c) => {
+      c.moveTo(x - w + 1.6, y - h + 1.8);
+      c.lineTo(x + w - 1.6, y - h + 1.8);
+      c.lineTo(x + w - 1.6, y + h * 0.5);
+      c.quadraticCurveTo(x, y + h - 0.5, x - w + 1.6, y + h * 0.5);
+      c.closePath();
+    }, '#7a1f26', { sd: 1.2, lw: 0.9 });
+    flat(ctx, (c) => { pEll(c, x, y - 2, w * 0.45, 3); pRrect(c, x - w * 0.25, y + 0.2, w * 0.5, 2.4, 0.6); }, '#d8d0b8');
+    flat(ctx, (c) => { pEll(c, x - w * 0.18, y - 2.2, 0.7, 0.9); pEll(c, x + w * 0.18, y - 2.2, 0.7, 0.9); }, '#1a0e12');
+    rivets(ctx, [x - w + 0.9, y - h + 0.9, x + w - 0.9, y - h + 0.9, x - w + 0.9, y + 3, x + w - 0.9, y + 3], 0.55, '#c8ccd4');
+  } else {
+    const rx = 5.6 * face + 1, ry = 8;
+    cel(ctx, (c) => pEll(c, x, y, rx, ry), st.wood, { sd: 1.8, lw: 1.5 });
+    // 木板缝、铁边、中间的铁包
+    line(ctx, [x - rx * 0.4, y - ry + 1.2, x - rx * 0.4, y + ry - 1.2], 'rgba(30,18,10,0.6)', 0.7);
+    line(ctx, [x + rx * 0.35, y - ry + 1.4, x + rx * 0.35, y + ry - 1.4], 'rgba(30,18,10,0.6)', 0.7);
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx, ry, 0, 0, TAU);
+    ctx.lineWidth = 1.3; ctx.strokeStyle = st.iron; ctx.stroke();
+    cel(ctx, (c) => pEll(c, x + 0.4, y, Math.max(1, rx * 0.35), 2.4), st.iron, { sd: 0.8, lw: 1 });
+    // 缺了一角
+    flat(ctx, (c) => pPoly(c, [x + rx * 0.3, y - ry - 0.5, x + rx + 0.6, y - ry * 0.6, x + rx + 0.6, y - ry - 0.5]), '#140c12');
+  }
+  if (flash > 0) glint(ctx, x, y, 14, `rgba(200,235,255,${0.8 * flash})`);
+}
+
+// drawDroppedArms：骷髅兵 / 骑士倒下时盾和剑掉在骨堆旁边。
+function drawDroppedArms(ctx, d, drop, st: SkeletonStyle) {
+  ctx.save();
+  ctx.translate(lerp(-6, -11, d), drop(-16, -3));
+  ctx.rotate(lerp(0, -1.2, d));
+  drawBoneSword(ctx, 0, 0, 0, st, false);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(lerp(8, 7, d), drop(-14, -3));
+  ctx.scale(1, lerp(1, 0.45, d));      // 盾倒下来平躺在地上
+  drawBoneShield(ctx, 0, 0, lerp(0.55, 1, d), st, { parry: -1 });
+  ctx.restore();
+}
+
+// drawBonePileAlive 是骨堆（还能站起来的那种）：和骷髅兵倒下的最后一帧一样，
+// 魂火在骨头缝里越烧越旺、骨头越抖越厉害，6 秒左右重新拼起来。q.age 是出现了多少毫秒。
+function drawBonePileAlive(ctx, q) {
+  const k = clamp01((q.age || 0) / 6000);
+  const t = q.time / 1000;
+  const shake = q.dead < 0 ? Math.sin(t * (18 + k * 30)) * k * k * 1.6 : 0;
+  const jolt = q.hit >= 0 && q.hit < 1 ? Math.sin(q.hit * 30) * (1 - q.hit) * 2.5 : 0;
+  ctx.save();
+  if (q.dead >= 0) {
+    // 砸碎了：骨头散开、压扁
+    const d = ease(clamp01(q.dead));
+    ctx.scale(1 + d * 0.4, 1 - d * 0.55);
+  }
+  ctx.translate(shake + jolt, 0);
+  drawBonePile(ctx, { ...q, dead: 1 }, SOLDIER_STYLE.bone, SOLDIER_STYLE.rag, (c, d, drop) => drawDroppedArms(c, d, drop, SOLDIER_STYLE));
+  ctx.restore();
+  if (q.dead < 0) {
+    // 骨头缝里的魂火：一团实心的蓝火苗，越到后面越高
+    const f = 0.8 + 0.2 * Math.sin(t * 9);
+    const h = 3 + k * 9 * f;
+    flat(ctx, (c) => {
+      c.moveTo(-3.5, -3);
+      c.quadraticCurveTo(-4, -3 - h * 0.6, 0, -3 - h);
+      c.quadraticCurveTo(3.5, -3 - h * 0.5, 3, -3);
+      c.closePath();
+    }, `rgba(110,220,255,${0.55 + 0.35 * k})`);
+    flat(ctx, (c) => {
+      c.moveTo(-1.5, -3);
+      c.quadraticCurveTo(-1.6, -3 - h * 0.45, 0.4, -3 - h * 0.7);
+      c.quadraticCurveTo(1.6, -3 - h * 0.35, 1.4, -3);
+      c.closePath();
+    }, `rgba(225,250,255,${0.6 + 0.3 * k})`);
+  }
+}
+
+/* ------------------------- crypt: mechanisms ------------------------- */
+
+// drawBoneStatue 是骨箭雕像：石台上一尊大骷髅头，四面各伸出一根骨刺（横竖两条射线的方向）；
+// 预警时（行为树在 WarnLine）眼睛和骨刺尖烧红。
+function drawBoneStatue(ctx, q) {
+  const t = q.time / 1000;
+  const warn = q.node === 'warn_line' ? 0.6 + 0.4 * Math.sin(t * 22) : 0;
+  const stone = '#6b6878';
+  const dark = '#45424f';
+  ctx.scale(LX, 1);     // 雕像不跟着朝向翻转（横竖对称，左右翻过来反而奇怪）
+  // 台座
+  cel(ctx, (c) => pRrect(c, -15, -10, 30, 11, 2), dark, { sd: 2, lw: 1.5 });
+  cel(ctx, (c) => pRrect(c, -12, -16, 24, 8, 2), stone, { sd: 1.6, lw: 1.4 });
+  line(ctx, [-13, -5, 13, -5], 'rgba(10,8,14,0.5)', 0.8);
+  // 左右两根骨刺（横线）和上面一根（竖线；下面那根埋在台座里）
+  const tip = warn ? `rgba(255,${120 - warn * 60},${90 - warn * 60},1)` : '#e8e0c8';
+  for (const sign of [-1, 1]) {
+    cel(ctx, (c) => pPoly(c, [sign * 9, -27, sign * 9, -21, sign * 22, -24]), '#d8d0b8', { sd: 1, lw: 1.2 });
+    flat(ctx, (c) => pPoly(c, [sign * 18, -25.4, sign * 18, -22.6, sign * 22, -24]), tip);
+  }
+  cel(ctx, (c) => pPoly(c, [-3, -40, 3, -40, 0, -50]), '#d8d0b8', { sd: 1, lw: 1.2 });
+  flat(ctx, (c) => pPoly(c, [-1.3, -46, 1.3, -46, 0, -50]), tip);
+  // 大骷髅头
+  cel(ctx, (c) => {
+    c.moveTo(-10, -26);
+    c.quadraticCurveTo(-11, -42, 0, -42);
+    c.quadraticCurveTo(11, -42, 10, -26);
+    c.lineTo(7, -18);
+    c.lineTo(-7, -18);
+    c.closePath();
+  }, stone, { sd: 2.2, lw: 1.5 });
+  // 裂纹和青苔
+  line(ctx, [-6, -38, -3, -34, -5, -31], 'rgba(20,16,24,0.7)', 0.8);
+  flat(ctx, (c) => { pEll(c, 6, -39, 3, 1.4); pEll(c, -8, -24, 2.2, 1.2); }, 'rgba(70,110,70,0.55)');
+  // 眼窝：平时暗红，预警时烧亮
+  flat(ctx, (c) => { pEll(c, -4.2, -30, 2.8, 3.2); pEll(c, 4.2, -30, 2.8, 3.2); }, '#140c12');
+  const eye = 0.35 + warn * 0.65;
+  flat(ctx, (c) => { pEll(c, -4.2, -29.6, 1.3, 1.5); pEll(c, 4.2, -29.6, 1.3, 1.5); }, `rgba(255,${90 + warn * 80},70,${eye})`);
+  if (warn) {
+    glint(ctx, -4.2, -29.6, 6, `rgba(255,80,60,${warn})`);
+    glint(ctx, 4.2, -29.6, 6, `rgba(255,80,60,${warn})`);
+  }
+  // 牙
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  for (let x = -5; x <= 5; x += 2.5) { ctx.moveTo(x, -22); ctx.lineTo(x, -18.5); }
+  ctx.stroke();
+}
+
+// drawBrazier 是灵火盆：熄着时是一盆黑炭冒一缕烟，被打一下就点着（服务端把它算作倒下，尸体一直留着）。
+function drawBrazier(ctx, q) {
+  const t = q.time / 1000;
+  const lit = q.dead >= 0;
+  const flare = lit ? clamp01(q.dead / 0.3) : 0;
+  ctx.scale(LX, 1);
+  // 三条腿的石座和铁盆
+  for (const x of [-7, 0, 7]) inkLine(ctx, [x * 0.6, -8, x, 0], '#4a4652', 2);
+  cel(ctx, (c) => { c.moveTo(-11, -14); c.lineTo(11, -14); c.quadraticCurveTo(9, -6, 0, -6); c.quadraticCurveTo(-9, -6, -11, -14); c.closePath(); }, '#5a5d68', { sd: 2, lw: 1.4 });
+  cel(ctx, (c) => pEll(c, 0, -14, 11, 3), '#2a2830', { sd: 0.8, lw: 1.2 });
+  rivets(ctx, [-8, -11, 0, -8.5, 8, -11], 0.6, '#b8bcc8');
+  if (!lit) {
+    // 黑炭和一缕青烟
+    flat(ctx, (c) => { pEll(c, -4, -14.5, 3, 1.4); pEll(c, 3, -14.8, 3.4, 1.5); pEll(c, 0, -15.4, 2.4, 1.2); }, '#1a1418');
+    const drift = Math.sin(t * 1.4) * 2;
+    line(ctx, [0, -16, drift, -22, -drift, -28], 'rgba(150,200,220,0.35)', 1.4);
+    return;
+  }
+  // 点着：一团实心的青色魂火，外层、里层两层火舌
+  const f = 0.85 + 0.15 * Math.sin(t * 11) + 0.08 * Math.sin(t * 23);
+  const h = (18 + 6 * flare * (1 - clamp01((q.dead - 0.3) / 0.5))) * f;
+  const sway = Math.sin(t * 3) * 1.5;
+  flat(ctx, (c) => {
+    c.moveTo(-9, -14);
+    c.quadraticCurveTo(-10, -14 - h * 0.5, -3 + sway, -14 - h * 0.75);
+    c.quadraticCurveTo(-2, -14 - h * 0.6, sway * 1.4, -14 - h);
+    c.quadraticCurveTo(4, -14 - h * 0.55, 5 + sway, -14 - h * 0.7);
+    c.quadraticCurveTo(10, -14 - h * 0.4, 9, -14);
+    c.closePath();
+  }, '#3fd8ff');
+  flat(ctx, (c) => {
+    c.moveTo(-5, -14);
+    c.quadraticCurveTo(-5, -14 - h * 0.4, sway, -14 - h * 0.7);
+    c.quadraticCurveTo(5, -14 - h * 0.4, 5, -14);
+    c.closePath();
+  }, '#d8fbff');
+  // 飘起来的火星
+  for (let i = 0; i < 3; i++) {
+    const k = (t * 0.8 + i / 3) % 1;
+    flat(ctx, (c) => pEll(c, Math.sin(i * 2.3 + t * 2) * 6, -14 - h * 0.6 - k * 16, 1.1 * (1 - k), 1.1 * (1 - k)), '#9ff0ff');
+  }
+}
+
+// drawCrackedWall 是墙上的一道裂缝（守墓人密室的入口）：一段石墙，裂缝里透出一点光；
+// 挨一下重击裂得更开，砸开以后塌成一堆碎石。
+function drawCrackedWall(ctx, q) {
+  const stone = safeColor(q.color, '#6a6474');
+  const hurt = q.hpk !== undefined ? 1 - q.hpk : 0;
+  const shiver = q.hit >= 0 && q.hit < 1 ? Math.sin(q.hit * 40) * (1 - q.hit) * 2 : 0;
+  ctx.scale(LX, 1);
+  if (q.dead >= 0) {
+    const d = ease(clamp01(q.dead));
+    for (const [x, y, r] of [[-12, -4, 6], [-3, -3, 7], [8, -4, 6], [14, -2, 4], [2, -9, 5], [-9, -10, 4]] as [number, number, number][]) {
+      cel(ctx, (c) => pEll(c, x * (1 + d * 0.2), lerp(y - 18, y, d), r, r * 0.7), stone, { sd: 1.4, lw: 1.2 });
+    }
+    return;
+  }
+  ctx.translate(shiver, 0);
+  // 砖块
+  for (let row = 0; row < 4; row++) {
+    for (let col = -2; col < 2; col++) {
+      const x = col * 11 + (row % 2 ? 5.5 : 0) - 5.5;
+      const y = -10 - row * 9;
+      cel(ctx, (c) => pRrect(c, x, y, 10.5, 8.5, 1.2), shade(stone, ((row * 3 + col) % 3) * 0.06 - 0.06), { sd: 1.4, lw: 1.1 });
+    }
+  }
+  // 裂缝：一道折线，里面透出光；挨过一下后裂得更宽、光更亮
+  const crack = [-2, -44, 2, -34, -3, -26, 3, -18, -1, -6];
+  line(ctx, crack, OUTLINE, 1.8 + hurt * 2.4);
+  if (hurt > 0) line(ctx, crack, 'rgba(255,170,110,0.9)', 0.6 + hurt * 1.2);
+  else line(ctx, crack, 'rgba(160,200,255,0.35)', 0.6);     // 裂缝里透出一点墙后的蓝光
+  if (hurt > 0) line(ctx, [-3, -26, -11, -22, -14, -14], OUTLINE, 1.6);
+}
+
 // SPECS: how each model is drawn and how it falls when it dies (fall is the
 // direction it topples: -1 backward, +1 forward, 0 handles death itself).
 const SPECS = {
@@ -2980,6 +3406,12 @@ const SPECS = {
   hunter: { draw: drawHunter, fall: -1 },
   bramble: { draw: drawBramble, fall: 0 },
   skeleton_archer: { draw: drawSkeleton, fall: 0 },
+  skeleton_soldier: { draw: (ctx, q) => drawSkeletonWarrior(ctx, q, SOLDIER_STYLE), fall: 0 },
+  skeleton_knight: { draw: (ctx, q) => drawSkeletonWarrior(ctx, q, KNIGHT_STYLE), fall: 0 },
+  bone_pile: { draw: drawBonePileAlive, fall: 0 },
+  bone_statue: { draw: drawBoneStatue, fall: 0 },
+  brazier: { draw: drawBrazier, fall: 0, keep: true },
+  cracked_wall: { draw: drawCrackedWall, fall: 0 },
   ogre_chief: { draw: drawOgre, fall: 1 },
   wolf_pup: { draw: drawWolfPup, fall: 0 },
   ember: { draw: drawEmber, fall: 0 },

@@ -281,17 +281,19 @@ export interface SceneInfo {
   dungeon: boolean; rooms: RoomInfo[]; gates: GateInfo[];
 }
 
-// RoomInfo 是副本里的一个房间：走进去开始刷怪。waves 为 0 是安全屋；reward 是清完给什么（heal | gear | boon）。
-export interface RoomInfo { id: string; title: string; x: number; y: number; w: number; h: number; waves: number; reward: string }
+// RoomInfo 是副本里的一个房间：走进去开始刷怪。waves 为 0 是安全屋；reward 是清完给什么（heal | gear | boon）；
+// dark 是暗房（只照亮身边一小圈和点着的灵火）；key 是清完拿到的钥匙。
+export interface RoomInfo { id: string; title: string; x: number; y: number; w: number; h: number; waves: number; reward: string; dark: boolean; key: string }
 
 // GateInfo 是房间之间的门：关着时挡路；to 是它通往的房间（门上画那个房间的奖励）。
-export interface GateInfo { id: string; x: number; y: number; w: number; h: number; to: string }
+// key 是开门要的钥匙（拿到以前门上画一把锁）。
+export interface GateInfo { id: string; x: number; y: number; w: number; h: number; to: string; key: string }
 
 // RoomPhase：idle 还没人进来、fight 打着（门关着）、clear 清完、skipped 岔路选了另一边。
 export type RoomPhase = 'idle' | 'fight' | 'clear' | 'skipped';
 export interface RoomState { id: string; phase: RoomPhase; wave: number }
 // LevelMsg 是副本的全部进度：每个房间、开着的门。
-export interface LevelMsg { t: 'level'; rooms: RoomState[]; open: string[] }
+export interface LevelMsg { t: 'level'; rooms: RoomState[]; open: string[]; keys: string[] }
 
 // LineInfo 是场景的一条线：人数，以及“拥挤”（soft）和“满”（hard）的人数。
 export interface LineInfo { line: number; players: number; soft: number; hard: number }

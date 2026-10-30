@@ -5,6 +5,7 @@
 //   zones  点对象，名字是区域种类（village、meadow、forest、graveyard、camp），决定地表怎么画
 //   roads  折线对象，石板路
 //   props  点对象是物件（类 = 种类，属性 s / v / flip），两点折线是一段墙
+//   water  矩形对象，积水（服务端在里面减速，前端画水面、算本地预测）
 
 export interface MapProp {
   kind: string;
@@ -25,13 +26,14 @@ export interface MapData {
   props: MapProp[];
   zones: Record<string, { x: number; y: number }[]>;   // 区域种类 -> 各个区域中心
   roads: Pt[][];
+  water: { x: number; y: number; w: number; h: number }[];
   key: string;        // 文件内容，用来判断地图有没有变
 }
 
 interface TmjProp { name: string; value: unknown }
 interface TmjObject {
   id: number; name?: string; type?: string; class?: string;
-  x: number; y: number; point?: boolean; polyline?: { x: number; y: number }[];
+  x: number; y: number; width?: number; height?: number; point?: boolean; polyline?: { x: number; y: number }[];
   properties?: TmjProp[];
 }
 interface TmjLayer { name: string; type: string; objects?: TmjObject[]; layers?: TmjLayer[] }
@@ -48,13 +50,16 @@ export async function loadMap(url = '/map.tmj'): Promise<MapData | null> {
 export function parseMap(text: string): MapData {
   const m = JSON.parse(text);
   const out: MapData = {
-    w: m.width * m.tilewidth, h: m.height * m.tileheight, props: [], zones: {}, roads: [], key: text,
+    w: m.width * m.tilewidth, h: m.height * m.tileheight, props: [], zones: {}, roads: [], water: [], key: text,
   };
   for (const o of layer(m.layers, 'zones') || []) {
     if (o.name) (out.zones[o.name] ??= []).push({ x: o.x, y: o.y });
   }
   for (const o of layer(m.layers, 'roads') || []) {
     if (o.polyline?.length > 1) out.roads.push(o.polyline.map((p) => [o.x + p.x, o.y + p.y] as Pt));
+  }
+  for (const o of layer(m.layers, 'water') || []) {
+    if ((o.width ?? 0) >= 1 && (o.height ?? 0) >= 1) out.water.push({ x: o.x, y: o.y, w: o.width!, h: o.height! });
   }
   for (const o of layer(m.layers, 'props') || []) {
     const kind = o.type || o.class;

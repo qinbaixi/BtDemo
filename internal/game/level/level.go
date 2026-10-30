@@ -409,6 +409,8 @@ func (sys *System) spawnWave(current *room, number int) {
 			x, y := sys.spawnSpot(current.area, inside)
 			if group.At() {
 				x, y = sys.state.Scatter(float64(group.X), float64(group.Y), float64(group.Spread))
+				// 散开以后可能落到房间外面（门外的通道里），那样门关着打不到、房间永远清不完
+				x, y = clampInto(current.area, x, y, spawnInset)
 			}
 			monster := sys.spawn.Template(template, x, y)
 			monster.Room = current.area.ID
@@ -563,6 +565,13 @@ func (sys *System) updateGates() bool {
 		sys.nav.SetSolid(current.shape, !open)
 	}
 	return changed
+}
+
+// clampInto 把 (x, y) 挪进房间 area 里、离边至少 inset。
+func clampInto(area *config.RoomArea, x, y, inset float64) (float64, float64) {
+	x = math.Max(float64(area.X)+inset, math.Min(float64(area.X+area.W)-inset, x))
+	y = math.Max(float64(area.Y)+inset, math.Min(float64(area.Y+area.H)-inset, y))
+	return x, y
 }
 
 // someoneInside 报告 players 里有没有人在房间 area 里（离边至少 inset）。

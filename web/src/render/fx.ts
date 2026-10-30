@@ -979,6 +979,21 @@ export class FX {
     }
   }
 
+  // boneRise 是骨堆重新站起来：地上一圈蓝色魂火的环，碎骨从四周飞回来往上拼。
+  boneRise(id, now) {
+    const p = this.pos(id, null);
+    if (!p) return;
+    this.effects.push({ kind: 'ring', x: p.x, y: p.y, color: '#7fdcff', rgb: rgbOf('#7fdcff'), radius: 40, born: now, life: 450 });
+    for (let index = 0; index < 16; index++) {
+      const angle = (index / 16) * TAU + rand(-0.2, 0.2);
+      const distance = rand(18, 30);
+      this.spawn({ x: p.x + Math.cos(angle) * distance, y: p.y + Math.sin(angle) * distance * 0.45 - 2,
+        vx: -Math.cos(angle) * rand(0.04, 0.07), vy: -Math.sin(angle) * 0.03 - rand(0.04, 0.09),
+        drag: 0.98, life: rand(320, 520), size: rand(1.6, 2.6), color: index % 2 ? '#e8e0c8' : '#9fe8ff', kind: 'spark',
+        born: now + rand(0, 120) });
+    }
+  }
+
   levelUp(id, now) {
     const p = this.pos(id, null);
     if (!p) return;

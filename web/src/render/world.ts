@@ -19,6 +19,8 @@ import { art } from './art';
 import type { LookEnt } from './fx';
 import { makeGrade, makeLut, ZONE_GRADES } from './grade';
 import { createLighting, type Lighting } from './lighting';
+import { keepsCorpse } from './models';
+import { darkRoomAt } from '../ui/level';
 import { drawOverlay, initOverlay, resizeOverlay } from './overlay';
 import { ActorView, type Pose } from './pixi/actorView';
 import { CanvasSprite } from './pixi/canvasSprite';
@@ -314,7 +316,7 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
 
   // 溶解：怪物和 NPC 倒地一会儿后烧掉（玩家的尸体留着等复活）
   let dissolve = -1;
-  if (dead >= 1 && e.kind !== 'player' && e.deadAt >= 0) {
+  if (dead >= 1 && e.kind !== 'player' && e.deadAt >= 0 && !keepsCorpse(e.model)) {
     const t = (now - e.deadAt - DEATH_MS - FEEL.dissolveDelayMs) / Math.max(1, FEEL.dissolveMs);
     if (t >= 0) dissolve = Math.min(1, t);
   }
@@ -349,6 +351,9 @@ function poseOf(e: ClientEntity, p: Point, now: number, dt: number): Pose {
     // 待机时轻微呼吸（每个角色相位不同）
     breath: dead < 0 && !(now < e.moveUntil) && !(atk >= 0 && atk < 1) ? 0.012 * Math.sin((now + e.id * 397) / 520) : 0,
     burn: BURN[e.kind],
+    node: e.act,
+    age: now - e.bornAt,
+    hpk: e.maxHp > 0 ? e.hp / e.maxHp : 1,
   };
 }
 
@@ -544,12 +549,21 @@ function zoneLut(kind: string): TextureSource {
   return lut;
 }
 
+let darkness = 0;      // 暗房的暗度，进出暗房时慢慢过渡
+let darkAt = 0;
+
 // updateLights 收集光源：自己身上的光、其他玩家、场景里的火、正在播放的特效。
+// 走进暗房（灵火回廊）时四周暗下来，只剩身边一小圈、点着的灵火盆和雕像的眼睛。
 function updateLights(now: number, mp: Point | null, shake: Point): void {
   const L = lighting;
   L.begin();
+  const wantDark = mp && darkRoomAt(mp.x, mp.y) ? 1 : 0;
+  darkness += (wantDark - darkness) * Math.min(1, Math.max(0, now - darkAt) / 600);
+  darkAt = now;
+  L.setDark(darkness);
   if (state.hq) {
-    if (mp) L.add(mp.x, mp.y - 10, 300, '#ffd9a0', 1, 0.18);
+    if (mp) L.add(mp.x, mp.y - 10, 300 - 150 * darkness, '#ffd9a0', 1, 0.18);
+    cryptLights(L.add, now);
     for (const e of state.ents.values()) {
       if (e.id === state.myId || e.dead || e.kind !== 'player') continue;
       const p = posOf(e, now);
@@ -563,6 +577,25 @@ function updateLights(now: number, mp: Point | null, shake: Point): void {
   // 光照跟着世界走，屏幕震动也算进去
   const c = state.cam;
   L.render({ x: c.x - shake.x, y: c.y - shake.y, w: c.w, h: c.h }, state.hq);
+}
+
+// cryptLights 是第二关机关的光：点着的灵火盆照亮一大片，没点的冒一点微光好让人找到；
+// 骨箭雕像的眼睛，预警时烧红；骨堆缝里的魂火。
+function cryptLights(add: Lighting['add'], now: number): void {
+  for (const e of state.ents.values()) {
+    if (e.model !== 'brazier' && e.model !== 'bone_statue' && e.model !== 'bone_pile') continue;
+    const p = posOf(e, now);
+    if (e.model === 'brazier') {
+      const flicker = 0.9 + 0.1 * Math.sin(now / 90 + e.id);
+      if (e.dead) add(p.x, p.y - 22, 260 * flicker, '#5fe8ff', 1, 0.55);
+      else add(p.x, p.y - 14, 60, '#5fe8ff', 0.45, 0.2);
+    } else if (e.model === 'bone_statue') {
+      const warn = e.act === 'warn_line';
+      add(p.x, p.y - 36, warn ? 150 : 70, '#ff5a3a', warn ? 0.9 : 0.4, warn ? 0.6 : 0.2);
+    } else if (!e.dead) {
+      add(p.x, p.y - 6, 70, '#7fdcff', 0.5, 0.25);
+    }
+  }
 }
 
 const BLINK_GHOST_MS = 380;

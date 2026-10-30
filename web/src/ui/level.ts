@@ -13,6 +13,7 @@ import type { LevelMsg, RoomInfo, RoomState } from '../net/types';
 export interface ClientLevel {
   rooms: Map<string, RoomState>;
   open: Set<string>;
+  keys: Set<string>;
   gateAt: Map<string, number>;
 }
 
@@ -50,6 +51,7 @@ export function onLevel(m: LevelMsg): void {
   const next: ClientLevel = {
     rooms: new Map(m.rooms.map((room) => [room.id, room])),
     open: new Set(m.open),
+    keys: new Set(m.keys),
     gateAt: new Map(prev?.gateAt ?? []),
   };
   for (const gate of state.scene?.gates ?? []) {
@@ -70,7 +72,7 @@ export function onLevel(m: LevelMsg): void {
     } else if (room.phase === 'fight' && room.wave > before.wave) {
       showBanner('', waveText(room.wave, info.waves));
     } else if (before.phase === 'fight' && room.phase === 'clear') {
-      showBanner('清除', rewardText(info.reward));
+      showBanner('清除', info.key ? `获得「${info.key}」` : rewardText(info.reward));
       levelClear(now);
     } else if (before.phase === 'idle' && room.phase === 'clear') {
       showBanner(info.title, '安全');
@@ -91,14 +93,23 @@ export function renderLevelHud(): void {
   }
   const now = gameNow();
   let left = 0;
+  let unlit = 0;    // 灵火回廊：还没点着的灵火盆
   for (const e of state.ents.values()) {
-    if (e.kind !== 'monster' || e.dead) continue;
+    if (e.dead || (e.kind !== 'monster' && e.model !== 'brazier')) continue;
     const p = posOf(e, now);
-    if (p.x >= info.x && p.x <= info.x + info.w && p.y >= info.y && p.y <= info.y + info.h) left++;
+    if (p.x < info.x || p.x > info.x + info.w || p.y < info.y || p.y > info.y + info.h) continue;
+    if (e.model === 'brazier') unlit++;
+    else left++;
   }
-  const text = `${info.title} · ${waveText(fighting.wave, info.waves)} · 还剩 ${left} 只`;
+  const count = unlit > 0 ? `还有 ${unlit} 个灵火盆没点亮` : `还剩 ${left} 只`;
+  const text = `${info.title} · ${waveText(fighting.wave, info.waves)} · ${count}`;
   if (progress.textContent !== text) progress.textContent = text;
   progress.classList.remove('hidden');
+}
+
+// darkRoomAt 报告 (x, y) 在不在一间暗房里。
+export function darkRoomAt(x: number, y: number): boolean {
+  return !!state.scene?.rooms.some((room) => room.dark && x >= room.x && x <= room.x + room.w && y >= room.y && y <= room.y + room.h);
 }
 
 function roomInfo(id: string): RoomInfo | undefined {

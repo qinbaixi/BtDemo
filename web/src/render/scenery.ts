@@ -28,6 +28,7 @@ const SPRITE_SCALE = 2;      // sprite resolution relative to world units
 type Zone = { x: number; y: number };
 let ZONES: Record<'village' | 'meadow' | 'forest' | 'graveyard' | 'camp', Zone[]> = emptyZones();
 let ROADS: Pt[][] = [];
+let WATER: { x: number; y: number; w: number; h: number }[] = [];   // 积水（地图 water 图层）
 
 function emptyZones() {
   return { village: [], meadow: [], forest: [], graveyard: [], camp: [] };
@@ -104,6 +105,7 @@ export function createScenery(mapW: number, mapH: number, map: MapData | null, s
   ZONES = emptyZones();
   for (const k of Object.keys(ZONES)) ZONES[k] = map?.zones[k] || [];
   ROADS = map?.roads || [];
+  WATER = map?.water || [];
   LAVA = makeLava();
   const unknown = new Set((map?.props || []).filter((p) => !kindDef(p)).map((p) => p.kind));
   if (unknown.size) console.error(`地图里的物件种类前端不会画：${[...unknown].join(', ')}（加美术图，或在 scenery.ts 的 KINDS 里加画法）`);
@@ -378,6 +380,7 @@ function paintGround(W, H, rnd, { tombs, campfires }) {
     blob(g, z.x + (rnd() - 0.5) * 420, z.y + (rnd() - 0.5) * 300, 130 + rnd() * 110, 'rgba(70,24,14,0.6)');
   }
   for (const c of campfires) blob(g, c.x, c.y, 120, 'rgba(10,4,4,0.7)');
+  for (const pool of WATER) paintWater(g, pool, rnd);
 
   // ink hatching in the shadows of every zone
   for (let i = 0; i < 260; i++) {
@@ -572,6 +575,62 @@ function paintGround(W, H, rnd, { tombs, campfires }) {
 }
 
 // paintPlaza 在 (px, py) 画一个圣所广场。
+// paintWater 画一片积水：墨绿的深水，边上一圈湿泥和浅水，水面上几道反光和漂着的骨头。
+function paintWater(g, pool, rnd) {
+  const { x, y, w, h } = pool;
+  g.save();
+  // 湿泥边：比水面大一圈的深色
+  g.fillStyle = 'rgba(12,16,18,0.55)';
+  g.beginPath();
+  g.roundRect(x - 8, y - 6, w + 16, h + 12, 18);
+  g.fill();
+  // 水面：上浅下深的渐变
+  const grad = g.createLinearGradient(0, y, 0, y + h);
+  grad.addColorStop(0, '#1f4a52');
+  grad.addColorStop(1, '#10282f');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.roundRect(x, y, w, h, 14);
+  g.fill();
+  g.clip();
+  // 水底的暗影和浅水亮斑
+  for (let i = 0; i < (w * h) / 6000; i++) {
+    blob(g, x + rnd() * w, y + rnd() * h, 30 + rnd() * 50, rnd() < 0.5 ? 'rgba(5,12,16,0.45)' : 'rgba(60,140,140,0.18)');
+  }
+  // 横着的反光波纹
+  g.strokeStyle = 'rgba(170,230,230,0.28)';
+  g.lineWidth = 1.4;
+  g.lineCap = 'round';
+  for (let i = 0; i < (w * h) / 2500; i++) {
+    const cx = x + rnd() * w;
+    const cy = y + rnd() * h;
+    const len = 8 + rnd() * 18;
+    g.beginPath();
+    g.moveTo(cx - len, cy);
+    g.quadraticCurveTo(cx, cy - 2.5, cx + len, cy);
+    g.stroke();
+  }
+  // 漂着的碎骨
+  g.strokeStyle = 'rgba(220,210,180,0.55)';
+  g.lineWidth = 2;
+  for (let i = 0; i < (w * h) / 9000; i++) {
+    const cx = x + 10 + rnd() * (w - 20);
+    const cy = y + 10 + rnd() * (h - 20);
+    const a = rnd() * Math.PI;
+    g.beginPath();
+    g.moveTo(cx - Math.cos(a) * 5, cy - Math.sin(a) * 2.5);
+    g.lineTo(cx + Math.cos(a) * 5, cy + Math.sin(a) * 2.5);
+    g.stroke();
+  }
+  g.restore();
+  // 岸边一圈亮线
+  g.strokeStyle = 'rgba(120,190,190,0.35)';
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.roundRect(x + 1, y + 1, w - 2, h - 2, 13);
+  g.stroke();
+}
+
 function paintPlaza(g, px, py, rnd) {
   g.fillStyle = INK;
   ellipseFill(g, px, py, 178, 126);

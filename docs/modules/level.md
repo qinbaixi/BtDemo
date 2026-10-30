@@ -2,9 +2,10 @@
 
 代码：`internal/game/level`（房间进度）、`internal/config/level.go`（配置和地图图层）、`internal/game/manager.go`（副本开实例）、
 `internal/game/nav/map.go`（门的动态碰撞 `SetSolid`）。前端：`web/src/ui/level.ts`（横幅、进度）、`web/src/render/gates.ts`（木桩门、门上奖励图标）。
-配置：`config/scenes.yaml` 里 `kind: dungeon` 的场景，地图 `config/maps/wolf_trail.tmj`。
+配置：`config/scenes.yaml` 里 `kind: dungeon` 的场景，地图 `config/maps/wolf_trail.tmj`、`config/maps/crypt.tmj`。
 
-设计稿见项目文件 `btdemo/levels/levels-design.html`（两关的完整方案）。第 0 期做了关卡框架，第 1 期做完了第一关「黑松林道」（正式布局、狼群、头狼、灰鬃狼王、秘密房、猎人）。
+设计稿见项目文件 `btdemo/levels/levels-design.html`（两关的完整方案）。第 0 期做了关卡框架，第 1 期做完了第一关「黑松林道」（正式布局、狼群、头狼、灰鬃狼王、秘密房、猎人），
+第 2 期做了第二关「亡者地穴」的系统（视线遮挡、骷髅兵和骨堆、精英骷髅骑士、骨箭雕像、灵火盆、钥匙门、暗房、积水）和 0–5 号房；首领食人魔·血槌是第 3 期，现在献祭坑里先放野外的食人魔首领。
 
 ## 第一关「黑松林道」的流程
 
@@ -24,7 +25,37 @@
 
 首领房四角各有一块大石头：站在石头后面，狼王的扑杀会撞上去晕 1.5 秒。
 
-地图 `config/maps/wolf_trail.tmj` 是脚本生成的（房间、通道矩形 → 四周的墙、外面一圈树、房间里的装饰），以后在 Tiled 里直接改。
+地图 `config/maps/wolf_trail.tmj` 是脚本 `scripts/maps/wolf_trail.py` 生成的（房间、通道矩形 → 四周的墙、外面一圈树、房间里的装饰）。改房间布局就改脚本重新生成；只挪装饰可以直接在 Tiled 里改（再跑脚本会被覆盖）。
+
+## 第二关「亡者地穴」的流程
+
+从亡者墓园的大墓穴（`to_crypt` 传送门）进来，出生在守夜人篝火（第一个存档点），一路往下走：
+
+| 房间 | 名字 | 遭遇 | 教什么 / 新写法 |
+| --- | --- | --- | --- |
+| r0 | 守夜人篝火 | 安全，存档点 | |
+| r1 | 断碑走廊 | 骷髅弓手 3，然后骷髅兵 2 | 掩体：箭被墓碑挡住（视线遮挡）；弓手没视线时横着挪去找射击位（`find_shot_spot`） |
+| r2 | 骨堆大厅 | 骷髅兵 + 两堆骨头，然后骷髅兵 3 + 弓手；奖励祝福 | 骷髅兵举盾、绕到玩家的盾侧面（`raise_shield`、`facing_shield`、`flank_shield`）；倒下变骨堆，6 秒后站起来（`reassemble`），重击或范围技能砸碎 |
+| r3a / r3b | 灵火回廊 / 渗水墓道 | 岔路二选一 | r3a 很暗，三个灵火盆全点亮才开门，中间的骨箭雕像横竖交替射（机关也是一棵树：`warn_line` → `fire_line`），清完拿到守墓人钥匙；r3b 一半是积水（走得慢 30%），奖励装备 |
+| secret | 守墓人密室 | 奖励装备 | 在 r3a 左墙：裂墙（只怕重击，`heavy_only`）+ 钥匙门（`key`） |
+| r4 | 地下礼拜堂 | 安全，存档点，回满血 | 清完打开回篝火的捷径 |
+| r5 | 墓穴守卫 | 精英骷髅骑士 + 弓手 2 + 骨堆 3 | 破防：骑士架势很厚（`guard`），打空了晕 2 秒（`break_stun`） |
+| r6 | 献祭坑 | 首领（第 3 期做血槌，现在是食人魔首领） | |
+| r7 | 坑底出口 | 安全 | 回墓园的传送门 |
+
+地图由 `scripts/maps/crypt.py` 生成（以墓园地图为底抄碰撞形状）。野外墓园营地原来的食人魔首领换成了精英骷髅骑士。
+
+### 第二关的机关和怪
+
+- **骷髅兵**（`skeleton_soldier`）：模板配了 `guard`（架势上限），和玩家一样能举盾：只挡正面、挡一下扣架势、扣空破防。行为树：玩家举盾正对着它时绕到盾侧面（4 秒一次）；技能冷却好了才放盾出手（`skill_ready`），其余时间举盾逼近。举着盾走得慢（和玩家一样）。
+- **骨堆**：副本房间里的怪模板配了 `pile`，尸体移走时在原地刷出骨堆（`spawn.leavePile`，同一个房间，关卡系统用 `spawn.Adopt` 把它算进房间）。骨堆 `heavy_only`：只有 heavy 分量的技能和范围技能（aoe、rain）打得动，别的一下按免疫算（客户端飘“要重击”）。骨堆的树是“等 6 秒 → 重组”：`level.Reassemble` 在原地刷出 `revive` 模板（骷髅兵），骨堆本身塌掉移走。房间算剩几只怪时，倒下了但还没变成骨堆的骷髅兵也算（`level.standing`），所以不砸碎骨堆房间清不完。
+- **精英骷髅骑士**（`skeleton_knight`）：架势 200（玩家 100），破防晕 2 秒（`break_stun: 2000`）。一直举盾逼近，只在出手时放下。
+- **骨箭雕像**（`bone_statue`）：阵营 `trap`（只打玩家，玩家也打不动它），用 `allies` 放进房间（只刷一次）。行为树：等 2.1 秒 → 横线预警 0.9 秒 → 往两头射一排穿透骨箭 → 等 → 竖线预警 → 射。预警是 fx `line_warn` 的 CAST 事件（两端点 + `hit_at`），客户端画成和狼王扑杀一样的红带。
+- **灵火盆**（`brazier`）：阵营 `wild`，`hits: 1` 挨一下就“倒下”（点着了），尸体一直留着（`respawn` 很长）。灵火回廊的波次就是三个灵火盆，全点着房间就清完。游侠可以远程射亮。
+- **裂墙**（`cracked_wall`）：门的 `breakable`，`heavy_only` + `hits: 2`，旋风斩、箭雨砸两下就开。
+- **钥匙门**：地图门的属性 `key`（钥匙名），房间配置的 `key` 是清完给的钥匙。钥匙记在副本进度里（`core.Level.Keys`），发给客户端（`LevelState.keys`），没钥匙门上画一把锁。
+- **暗房**：房间配置 `dark: true`，发给客户端（`RoomInfo.dark`）。玩家走进去，光照层的暗色几乎盖死，自己身上的光缩小一半，只剩点着的灵火盆、雕像的眼睛、骨堆的魂火在发光（低画质没有光照层，看不出暗）。
+- **积水**：地图的 `water` 图层（矩形）。站在里面移动速度 × 70%（`move.WaterPace`，玩家和怪都算）。前端在地面上画水面。
 
 ## 玩法（参考 Hades 的房间制）
 
@@ -48,7 +79,8 @@
 | 图层 | 对象 | 含义 |
 | --- | --- | --- |
 | `rooms` | 矩形 | 一个房间。名字是房间 id（`scenes.yaml` 的 `rooms` 用它），属性 `title` 是走进去时打出来的名字 |
-| `gates` | 矩形 | 一扇门，关着时整个矩形挡路。属性 `after`：这个房间清完之后才开（不写就一开始开着）；`to`：门通往的房间，那个房间打起来时门关上，被岔路排除后永远关着，门上画那个房间的奖励；`breakable`：门里放一个这个模板的东西（比如 `bramble` 荆棘丛），它活着门就关着，砍掉才开 |
+| `gates` | 矩形 | 一扇门，关着时整个矩形挡路。属性 `after`：这个房间清完之后才开（不写就一开始开着）；`to`：门通往的房间，那个房间打起来时门关上，被岔路排除后永远关着，门上画那个房间的奖励；`breakable`：门里放一个这个模板的东西（比如 `bramble` 荆棘丛），它活着门就关着，砍掉才开；`key`：要这把钥匙才开 |
+| `water` | 矩形 | 积水，站在里面走得慢（普通地图也能用） |
 
 门放在房间边上的通道里，厚 16 像素左右。房间之间只能经过门走，所以房间和通道四周要用 `wall` 围起来。
 
@@ -78,11 +110,14 @@
         waves: [...]
       - id: secret                # 没有波次：安全屋，走进去就清完（有奖励照样给）
         reward: gear
+      - id: r3a                   # 第二关
+        dark: true                # 暗房
+        key: 守墓人钥匙            # 清完拿到的钥匙，开地图上 key 属性相同的门
     boons:                        # 写法同 skills.yaml 的 buff；duration 写长一点（祝福在副本里一直有效）
       - { name: 狼血, duration: 3600000, atk_pct: 2500, look: fire }
 ```
 
-启动时会检查：房间和门引用的房间都在地图里、波次和友方 NPC 的模板存在、门的 `breakable` 模板存在、有 `boon` 奖励就必须有 `boons`、默认场景不能是副本、普通场景不能有房间和门。
+启动时会检查：房间和门引用的房间都在地图里、波次和友方 NPC 的模板存在、门的 `breakable` 模板存在、门要的钥匙有房间给、有 `boon` 奖励就必须有 `boons`、默认场景不能是副本、普通场景不能有房间和门。
 
 ## 服务端怎么做的
 
@@ -100,17 +135,19 @@
 
 | 消息 | 字段 | 含义 |
 | --- | --- | --- |
-| `SceneInfo` | `dungeon`、`rooms`、`gates` | 是不是副本、房间（id、名字、矩形、几波、奖励）、门（id、矩形、通往哪个房间） |
-| `ServerMsg.level` | `LevelState` | 整份进度：每个房间的 `phase`（`ROOM_IDLE` / `ROOM_FIGHT` / `ROOM_CLEAR` / `ROOM_SKIPPED`）和第几波，开着的门 |
+| `SceneInfo` | `dungeon`、`rooms`、`gates` | 是不是副本、房间（id、名字、矩形、几波、奖励、暗房、给的钥匙）、门（id、矩形、通往哪个房间、要的钥匙） |
+| `ServerMsg.level` | `LevelState` | 整份进度：每个房间的 `phase`（`ROOM_IDLE` / `ROOM_FIGHT` / `ROOM_CLEAR` / `ROOM_SKIPPED`）和第几波，开着的门，拿到的钥匙 |
 
 ## 前端
 
 - `ui/level.ts`：收到 `LevelState` 和上一份比较：没人进过 → 打着，打出房间名和“第 1 / N 波”；波数变了打出下一波；打着 → 清完，打出“清除”和奖励，播清场慢放（`director.levelClear`）；安全屋打出名字和“安全”；打着 → 没人进过（团灭重置）打出“败退”。打着的时候场景牌子下面挂一条“房间名 · 第几波 · 还剩几只”。
 - 首领：`ui/boss.ts` 在附近有首领（`BOSS_MODELS`）时在屏幕上方挂一条首领血条，刻线是阶段分界，掉的血先留白色残影。狼王扑杀的预警带、冲刺和撞晕的星星在 `render/fx.ts`（`chargeWarn`、`pounce_go`、`dizzy`）和 `game/events.ts`（`pounceTo`）。
 - 模型：`render/models.ts` 的 `alpha_wolf`、`wolf_king`（同一套狼的画法加 `WOLF_STYLES`：颈毛、高鬃、伤疤、冰蓝眼睛和裂纹）、`hunter`（猎人老陈，猎叉、背弓）、`bramble`（荆棘丛）。
+  第二关：`skeleton_soldier` / `skeleton_knight`（同一套画法 `drawSkeletonWarrior` 加 `SOLDIER_STYLE` / `KNIGHT_STYLE`：举盾、劈砍、破防、倒地散成骨堆带盾和剑）、`bone_pile`（魂火越烧越旺、越抖越厉害）、`bone_statue`（预警时眼睛烧红）、`brazier`（倒下 = 点着，`keep` 不淡出不溶解）、`cracked_wall`。
+- 第二关：`render/world.ts` 的 `cryptLights`（灵火盆、雕像、骨堆的光）和暗房过渡（`lighting.setDark`）；`render/scenery.ts` 的 `paintWater`；`render/gates.ts` 的 `drawLock`；进度条在灵火回廊显示“还有 N 个灵火盆没点亮”。
 - `render/gates.ts`：每扇门是一排削尖的木桩，每根木桩一张小画布放进深度层（按桩脚 y 排序）。关门时木桩 0.38 秒升起、符文发红光，伴随一声闷响（`director.gateSlam`）；开门时沉进土里只剩桩头。门开着、通往的房间还没人去过且有奖励时，门上方浮一个奖励圆牌。
 
 ## 以后（设计稿里的第 2–3 期）
 
-- 第二关的视线遮挡、骷髅兵和骨堆复活、机关和点灯、暗房照明、食人魔·血槌；
+- 第 3 期：首领食人魔·血槌（冲撞撞碎石柱、召唤弓手、震地冲击环）、房间标题、音乐和环境音；
 - 组队进副本（现在只做了单人，`Manager.pick` 留了口子：按队伍开实例即可）。

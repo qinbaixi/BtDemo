@@ -165,8 +165,8 @@ const GUARD_FADE_MS = 700;   // 架势回满后，架势条再留这么久才淡
 
 // drawGuard 在 (x, y) 画格挡架势条：举盾或者架势没满时才出现，快空了闪橙色，回满后淡出。
 // 返回画了没有（画了的话名字要往上让一让）。
+// 怪物也有：持盾的骷髅兵、骷髅骑士（服务端只给会举盾的发架势，别的一直是满的，不会显示）。
 function drawGuard(e: ClientEntity, x: number, y: number, w: number, now: number): boolean {
-  if (e.kind !== 'player') return false;
   const showing = e.blocking || e.guard < 1;
   const alpha = showing ? 1 : 1 - clamp((now - e.guardAt) / GUARD_FADE_MS, 0, 1);
   if (alpha <= 0) return false;
