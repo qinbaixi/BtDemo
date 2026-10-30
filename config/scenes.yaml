@@ -23,7 +23,7 @@ scenes:
       - { template: villager,        x: 520,  y: 760,  count: 4, spread: 140 }
       - { template: guard,           x: 640,  y: 700,  count: 2, spread: 120 }
       - { template: slime,           x: 1000, y: 900,  count: 5, spread: 200 }
-      - { template: wolf,            x: 900,  y: 330,  count: 4, spread: 160 }
+      - { template: wolf,            x: 900,  y: 330,  count: 3, spread: 160 }
     heal_zones:
       - { name: 生命之泉, x: 520, y: 800, radius: 130, heal: 500, interval: 1000, faction: player, look: spring, color: "#7dffc4" }
 

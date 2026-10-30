@@ -28,9 +28,9 @@ templates:
     kind: monster
     faction: monster
     tree: monster_melee
-    level: 3
-    attrs: { str: 8, agi: 10, int: 1, vit: 6 }
-    speed: 130
+    level: 2
+    attrs: { str: 5, agi: 7, int: 1, vit: 5 }   # 村子去狼林路上的狼：1 级出门也打得过
+    speed: 120
     radius: 15
     color: "#9a9a9a"
     skills: [bite, heavy_bite]
