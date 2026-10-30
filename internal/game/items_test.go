@@ -159,7 +159,7 @@ func TestJoinSendsCatalogueSkinsAndStarterInventory(t *testing.T) {
 		t.Fatalf("sword info = %v", sword)
 	}
 	for _, class := range welcome.Classes {
-		if len(class.Skins) != 3 || class.Skins[0].GetColor() == "" {
+		if len(class.Skins) != 4 || class.Skins[0].GetColor() == "" {
 			t.Fatalf("class %s skins = %v", class.GetId(), class.Skins)
 		}
 	}

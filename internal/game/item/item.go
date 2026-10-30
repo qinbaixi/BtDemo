@@ -19,6 +19,7 @@ const (
 	ReasonSlotEmpty  = "这个槽位没有装备"
 	ReasonBagFull    = "背包满了"
 	ReasonBadSkin    = "当前职业没有这个皮肤"
+	ReasonLockedSkin = "这个皮肤还没解锁"
 	// NoticeStarterLost 后面接物品名：职业新手装备背包放不下，没发
 	NoticeStarterLost = "背包满了，没能领到"
 	// NoticeDropped 后面接物品名：换职业时卸下的装备背包放不下，被丢掉了
@@ -138,8 +139,10 @@ func (sys *System) SetSkin(entity *core.Entity, skinID string) string {
 	}
 	if skinID == "" {
 		skinID = class.DefaultSkin()
-	} else if class.Skin(skinID) == nil {
+	} else if skin := class.Skin(skinID); skin == nil {
 		return ReasonBadSkin
+	} else if config.SkinLocked(skin, entity.UnlockedSkins) {
+		return ReasonLockedSkin
 	}
 	if entity.Skin != skinID {
 		entity.Skin = skinID

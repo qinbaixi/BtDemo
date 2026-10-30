@@ -118,3 +118,23 @@ func TestPhaseTwoRaisesArchers(t *testing.T) {
 		t.Fatalf("knocking the ground should raise 2 archers, got %d", archers)
 	}
 }
+
+// 首次通关：打死血槌（献祭坑清完）解锁骸骨守卫、守墓人两个皮肤；没解锁前换不上。
+func TestClearingThePitUnlocksSkins(t *testing.T) {
+	client, scene, boss := pitBoss(t)
+	player := client.Player
+	if reason := scene.Items.SetSkin(player, "boneguard"); reason == "" {
+		t.Fatal("a locked skin should not be wearable")
+	}
+	scene.Combat.Kill(boss, player)
+	stepScene(scene, 4)
+	if roomStatus(t, scene, "r6").Phase != core.RoomClear {
+		t.Fatal("killing the boss should clear the pit")
+	}
+	if len(player.UnlockedSkins) != 2 {
+		t.Fatalf("clearing the pit should unlock 2 skins, got %v", player.UnlockedSkins)
+	}
+	if reason := scene.Items.SetSkin(player, "boneguard"); reason != "" {
+		t.Fatalf("the unlocked skin should be wearable: %s", reason)
+	}
+}

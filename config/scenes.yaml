@@ -157,6 +157,7 @@ scenes:
       - id: r6
         waves:
           - [{ template: blood_hammer, count: 1, x: 800, y: 3600, spread: 0 }]
+        skins: [boneguard, gravewarden]   # 首次通关：打死血槌解锁的皮肤
       # 坑底出口
       - id: r7
     boons:

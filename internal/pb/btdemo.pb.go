@@ -2567,7 +2567,8 @@ type SkinInfo struct {
 	Id            *string                `protobuf:"bytes,1,req,name=id" json:"id,omitempty"`
 	Name          *string                `protobuf:"bytes,2,req,name=name" json:"name,omitempty"`
 	Desc          *string                `protobuf:"bytes,3,opt,name=desc" json:"desc,omitempty"`
-	Color         *string                `protobuf:"bytes,4,opt,name=color" json:"color,omitempty"` // swatch colour for the picker
+	Color         *string                `protobuf:"bytes,4,opt,name=color" json:"color,omitempty"`   // swatch colour for the picker
+	Unlock        *string                `protobuf:"bytes,5,opt,name=unlock" json:"unlock,omitempty"` // locked until earned (SelfInfo.skins): how to earn it, e.g. "首次通关亡者地穴"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2626,6 +2627,13 @@ func (x *SkinInfo) GetDesc() string {
 func (x *SkinInfo) GetColor() string {
 	if x != nil && x.Color != nil {
 		return *x.Color
+	}
+	return ""
+}
+
+func (x *SkinInfo) GetUnlock() string {
+	if x != nil && x.Unlock != nil {
+		return *x.Unlock
 	}
 	return ""
 }
@@ -4353,6 +4361,8 @@ type SelfInfo struct {
 	RespawnAt     *int64                 `protobuf:"varint,10,opt,name=respawn_at,json=respawnAt" json:"respawn_at,omitempty"` // Frame.time of the respawn (while dead)
 	CdsSet        *bool                  `protobuf:"varint,11,opt,name=cds_set,json=cdsSet" json:"cds_set,omitempty"`
 	BuffsSet      *bool                  `protobuf:"varint,12,opt,name=buffs_set,json=buffsSet" json:"buffs_set,omitempty"`
+	Skins         []string               `protobuf:"bytes,13,rep,name=skins" json:"skins,omitempty"` // locked skins this character has earned (SkinInfo.unlock)
+	SkinsSet      *bool                  `protobuf:"varint,14,opt,name=skins_set,json=skinsSet" json:"skins_set,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4467,6 +4477,20 @@ func (x *SelfInfo) GetCdsSet() bool {
 func (x *SelfInfo) GetBuffsSet() bool {
 	if x != nil && x.BuffsSet != nil {
 		return *x.BuffsSet
+	}
+	return false
+}
+
+func (x *SelfInfo) GetSkins() []string {
+	if x != nil {
+		return x.Skins
+	}
+	return nil
+}
+
+func (x *SelfInfo) GetSkinsSet() bool {
+	if x != nil && x.SkinsSet != nil {
+		return *x.SkinsSet
 	}
 	return false
 }
@@ -5378,12 +5402,13 @@ const file_btdemo_proto_rawDesc = "" +
 	"\x04pick\x18\b \x01(\x05R\x04pick\x12\x1b\n" +
 	"\tcan_block\x18\t \x01(\bR\bcanBlock\x12&\n" +
 	"\x05skins\x18\n" +
-	" \x03(\v2\x10.btdemo.SkinInfoR\x05skins\"X\n" +
+	" \x03(\v2\x10.btdemo.SkinInfoR\x05skins\"p\n" +
 	"\bSkinInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x02(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x02(\tR\x04name\x12\x12\n" +
 	"\x04desc\x18\x03 \x01(\tR\x04desc\x12\x14\n" +
-	"\x05color\x18\x04 \x01(\tR\x05color\"\xe3\x03\n" +
+	"\x05color\x18\x04 \x01(\tR\x05color\x12\x16\n" +
+	"\x06unlock\x18\x05 \x01(\tR\x06unlock\"\xe3\x03\n" +
 	"\aWelcome\x12\x0e\n" +
 	"\x02id\x18\x01 \x02(\x05R\x02id\x12\x13\n" +
 	"\x05map_w\x18\x02 \x02(\x05R\x04mapW\x12\x13\n" +
@@ -5543,7 +5568,7 @@ const file_btdemo_proto_rawDesc = "" +
 	"\bready_at\x18\x02 \x02(\x03R\areadyAt\"4\n" +
 	"\bBuffInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x02(\tR\x04name\x12\x14\n" +
-	"\x05until\x18\x02 \x02(\x03R\x05until\"\xd2\x02\n" +
+	"\x05until\x18\x02 \x02(\x03R\x05until\"\x85\x03\n" +
 	"\bSelfInfo\x12\x0e\n" +
 	"\x02lv\x18\x01 \x01(\x05R\x02lv\x12\x10\n" +
 	"\x03exp\x18\x02 \x01(\x05R\x03exp\x12\x12\n" +
@@ -5558,7 +5583,9 @@ const file_btdemo_proto_rawDesc = "" +
 	"respawn_at\x18\n" +
 	" \x01(\x03R\trespawnAt\x12\x17\n" +
 	"\acds_set\x18\v \x01(\bR\x06cdsSet\x12\x1b\n" +
-	"\tbuffs_set\x18\f \x01(\bR\bbuffsSet\".\n" +
+	"\tbuffs_set\x18\f \x01(\bR\bbuffsSet\x12\x14\n" +
+	"\x05skins\x18\r \x03(\tR\x05skins\x12\x1b\n" +
+	"\tskins_set\x18\x0e \x01(\bR\bskinsSet\".\n" +
 	"\bZoneList\x12\"\n" +
 	"\x05zones\x18\x01 \x03(\v2\f.btdemo.ZoneR\x05zones\"\xf6\x01\n" +
 	"\x04Zone\x12\x0e\n" +

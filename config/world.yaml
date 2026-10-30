@@ -72,6 +72,7 @@ player:
   #   growth: 每升一级增加的基础属性，单位是万分之一点（15000 = 每级 +1.5 点，零头累积到下一级）；can_block: 能不能按住右键格挡
   #   starter: 第一次当这个职业时放进背包的物品（本职业的普通武器）
   #   skins: 外观，第一个是默认；color 是选择面板上的色块。皮肤只换配色和部件画法，骨骼和动作不变
+  #          写了 unlock 的皮肤一开始锁着（unlock 是怎么解锁的说明），由副本房间的 skins 解锁（scenes.yaml）
   classes:
     - id: knight
       name: 骑士
@@ -90,6 +91,7 @@ player:
         - { id: paladin,  name: 圣骑士,   color: "#4da3ff", desc: 蓝白相间的圣骑士铠甲 }
         - { id: obsidian, name: 黑曜骑士, color: "#3a3a46", desc: 黑曜石般的暗色重甲，血红披风，带角的全封闭头盔 }
         - { id: gilded,   name: 金辉卫士, color: "#e6b84a", desc: 金色板甲和白色披风，头盔两侧一对金翼 }
+        - { id: boneguard, name: 骸骨守卫, color: "#d8d0b8", desc: 骨白色的铠甲，骷髅面盔的眼窝里燃着灵火, unlock: 首次通关亡者地穴 }
     - id: ranger
       name: 游侠
       desc: 弓箭手，远程输出，灵活走位
@@ -107,6 +109,7 @@ player:
         - { id: woodland,   name: 林地游侠, color: "#8fd17a", desc: 绿褐相间的林地猎装 }
         - { id: nightshade, name: 夜影猎手, color: "#5b4a7a", desc: 深紫色的夜行斗篷和面罩 }
         - { id: snowfield,  name: 雪原猎人, color: "#dfeaf2", desc: 白色毛皮镶边的雪原猎装 }
+        - { id: gravewarden, name: 守墓人, color: "#3a4a4e", desc: 灰青色的守墓人兜帽，骨白镶边，面罩后一对灵火般的眼睛, unlock: 首次通关亡者地穴 }
 
 # 常驻回血区：站在里面的友方（和 faction 互不敌对的阵营）每隔 interval 毫秒回复 最大生命 × heal（万分比）
 #   look: 客户端画法 spring 泉水 | rune 法阵

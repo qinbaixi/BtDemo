@@ -336,6 +336,12 @@ export function duck(depth: number, ms: number): void {
   scheduleAmbience(0.015);
 }
 
+// musicOutput 给 music.ts 用：AudioContext、主音量（音乐自己乘设置里的“音乐”音量，不跟环境声走）和共享的白噪声。
+export function musicOutput(): { ctx: AudioContext; bus: GainNode; noise: AudioBuffer } | null {
+  if (!audio.ctx || audio.ctx.state !== 'running' || !audio.master || !audio.noise) return null;
+  return { ctx: audio.ctx, bus: audio.master, noise: audio.noise };
+}
+
 // ambienceOutput 给 ambience.ts 用：AudioContext、环境声总线和共享的白噪声；声音还没解锁时返回 null。
 export function ambienceOutput(): { ctx: AudioContext; bus: GainNode; noise: AudioBuffer } | null {
   if (!audio.ctx || audio.ctx.state !== 'running' || !audio.buses.amb || !audio.noise) return null;

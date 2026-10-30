@@ -89,6 +89,9 @@ type LevelRoom struct {
 	Dark bool `yaml:"dark"`
 	// Key 是清完这个房间拿到的钥匙名（比如 守墓人钥匙），开地图上 key 属性相同的门
 	Key string `yaml:"key"`
+	// Skins 是清完这个房间解锁的皮肤（首次通关奖励，world.yaml 职业皮肤里写了 unlock 的），
+	// 发给房间里的每个玩家，已经解锁过的不再提示
+	Skins []string `yaml:"skins"`
 
 	Area *RoomArea `yaml:"-"` // 地图上的范围，由 validateLevel 填上
 }
@@ -254,6 +257,11 @@ func (cfg *Config) validateLevel(scene *Scene, label string) error {
 		for _, excluded := range room.Excludes {
 			if areas[excluded] == nil || excluded == room.ID {
 				return fmt.Errorf("%s excludes unknown room %q", owner, excluded)
+			}
+		}
+		for _, skinID := range room.Skins {
+			if skin := cfg.World.Player.FindSkin(skinID); skin == nil || skin.Unlock == "" {
+				return fmt.Errorf("%s gives skin %q, which is not a locked class skin", owner, skinID)
 			}
 		}
 		for _, ally := range room.Allies {

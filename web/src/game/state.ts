@@ -99,6 +99,7 @@ export interface State {
   skillPick: number;              // 要挑几个
   classes: ClassInfo[];           // 可选职业（welcome 里带的，第一个是默认）
   playerClass: string;            // 当前职业 id
+  unlockedSkins: Set<string>;     // 解锁了的皮肤（首次通关奖励）
   canBlock: boolean;              // 当前职业能不能格挡（右键）
   pickerOpen: boolean;            // 选技能面板开着（这时不放技能）
   bagOpen: boolean;               // 装备面板开着（这时也不放技能）
@@ -182,6 +183,7 @@ export const state: State = {
   skillPick: 0,
   classes: [],
   playerClass: '',
+  unlockedSkins: new Set(),
   canBlock: true,
   pickerOpen: false,
   bagOpen: false,

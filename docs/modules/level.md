@@ -50,6 +50,8 @@
 - 模板 `blood_hammer`（`config/monsters.yaml`，外观用食人魔首领 `ogre_chief` 的模型，首领血条上画 60% 和 30% 两道阶段线），行为树 `bt/trees/blood_hammer.json`，和狼王是同一个结构（阶段、冲锋、召唤），参数不同。
 - **石柱**：献祭坑的四根石柱是 gates 图层里四扇“光门”（没有 `after`、`to`，`breakable: stone_pillar`），门里站着石柱实体。石柱阵营是 `scenery`（谁也不打、谁也打不了），模板 `charge_break: true`：冲锋撞墙时如果挡路的是它，它就碎掉（`combat/quake.go` 的 `breakObstacle`），门随之打开不再挡路。这种门协议里带 `bare`，客户端不画木桩。玩家死了首领重置，碎掉的石柱不会回来。
 - **敲地叫弓手**：二阶段每 15 秒放一次 `bone_knock`（重击范围），然后 `raise_bones` 在 (500, 3600) 和 (1100, 3600) 各刷一个骷髅弓手（`level.System.SummonAt`，算进献祭坑这一波，不清掉首领死了房间也不算清完）。
+- **首次通关**：献祭坑配了 `skins: [boneguard, gravewarden]`，打死血槌（房间清完）时解锁这两个皮肤，见 [items](items.md)。
+- **音乐**：副本里放程序化音乐（`web/src/audio/music.ts`），探索、房间打起来、首领在附近三段；地穴里还有滴水和骨头的环境声。
 - **震地**（`blood_quake`，kind `quake`）：前摇 1.1 秒（客户端画最远半径 420 的预警圈），落地后三圈冲击环，每圈隔 0.55 秒、每秒扩 300 像素。冲击环是地上压扁一半的椭圆（和客户端画的一样），环扫过谁打谁一下，每圈每人一下。算远程：举盾能挡、不能完美格挡。
 
 ### 第二关的机关和怪
@@ -120,6 +122,7 @@
       - id: r3a                   # 第二关
         dark: true                # 暗房
         key: 守墓人钥匙            # 清完拿到的钥匙，开地图上 key 属性相同的门
+        # skins: [boneguard, gravewarden]   # 清完解锁的皮肤（首次通关奖励，写了 unlock 的职业皮肤）；第二关写在 r6 献祭坑
     boons:                        # 写法同 skills.yaml 的 buff；duration 写长一点（祝福在副本里一直有效）
       - { name: 狼血, duration: 3600000, atk_pct: 2500, look: fire }
 ```
@@ -154,7 +157,6 @@
 - 第二关：`render/world.ts` 的 `cryptLights`（灵火盆、雕像、骨堆的光）和暗房过渡（`lighting.setDark`）；`render/scenery.ts` 的 `paintWater`；`render/gates.ts` 的 `drawLock`；进度条在灵火回廊显示“还有 N 个灵火盆没点亮”。
 - `render/gates.ts`：每扇门是一排削尖的木桩，每根木桩一张小画布放进深度层（按桩脚 y 排序）。关门时木桩 0.38 秒升起、符文发红光，伴随一声闷响（`director.gateSlam`）；开门时沉进土里只剩桩头。门开着、通往的房间还没人去过且有奖励时，门上方浮一个奖励圆牌。
 
-## 以后（设计稿里的第 2–3 期）
+## 以后
 
-- 音乐和环境音（第 3 期剩下的部分）；首次通关额外给皮肤；
 - 组队进副本（现在只做了单人，`Manager.pick` 留了口子：按队伍开实例即可）。

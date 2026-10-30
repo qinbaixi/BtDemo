@@ -28,10 +28,16 @@ export function skinKey(classId: string, skinId: string): string {
   return skinId || skinsOf(classId)[0]?.id || '';
 }
 
-// rememberedSkin 是这个职业上次选的外观；没存过或已经不存在时返回空串（默认）。
+// skinLocked 报告皮肤还锁着（要首次通关某个副本才解锁，见 SkinInfo.unlock）。
+export function skinLocked(skin: SkinInfo): boolean {
+  return !!skin.unlock && !state.unlockedSkins.has(skin.id);
+}
+
+// rememberedSkin 是这个职业上次选的外观；没存过、已经不存在或还锁着（换了个新角色）时返回空串（默认）。
 export function rememberedSkin(classId: string): string {
   const saved = readStore().skins?.[classId];
-  return typeof saved === 'string' && skinsOf(classId).some((skin) => skin.id === saved) ? saved : '';
+  const skin = typeof saved === 'string' ? skinsOf(classId).find((candidate) => candidate.id === saved) : undefined;
+  return skin && !skinLocked(skin) ? skin.id : '';
 }
 
 // 选择面板里换职业时选的外观：服务端真的换了职业（回 SkillBar）才发出去并记住，见 sync.ts
@@ -66,13 +72,15 @@ export function skinCards(skins: SkinInfo[], selected: string, onPick: (skin: Sk
   return skins.map((skin, i) => {
     const card = document.createElement('button');
     card.type = 'button';
-    card.className = 'skin-card' + (skin.id === selected ? ' selected' : '');
+    const locked = skinLocked(skin);
+    card.className = 'skin-card' + (skin.id === selected ? ' selected' : '') + (locked ? ' locked' : '');
+    card.disabled = locked;
     card.style.setProperty('--swatch', skin.color || '#e8b65a');
     card.title = skin.desc || skin.name;
     card.innerHTML = '<span class="skin-swatch"></span><span class="skin-text"><b class="skin-name"></b><span class="skin-desc"></span></span>';
     card.querySelector('.skin-name')!.textContent = skin.name;
-    card.querySelector('.skin-desc')!.textContent = i === 0 ? '默认' : (skin.desc || '');
-    card.addEventListener('click', () => onPick(skin));
+    card.querySelector('.skin-desc')!.textContent = locked ? `未解锁：${skin.unlock}` : i === 0 ? '默认' : (skin.desc || '');
+    if (!locked) card.addEventListener('click', () => onPick(skin));
     return card;
   });
 }

@@ -49,7 +49,7 @@ web/
       config.ts         插值时长、动画时长、配色、属性表等常量
       math.ts           clamp、lerp、hypot、fmt
       clock.ts          演出时钟 gameNow()：画面、动画、特效、声音排期都用它；清场慢放时走慢，之后追上真实时间
-      settings.ts       玩家设置（音效、环境声音量，震屏强度，闪白、震动、慢放开关），存在 localStorage
+      settings.ts       玩家设置（音效、环境声、音乐音量，震屏强度，闪白、震动、慢放开关），存在 localStorage
       state.ts          State 和 ClientEntity 类型、全局 state、插值 posOf、头顶位置 headY
       sync.ts           处理 Frame 里的 welcome / enter / leave / state / event / self / zones / ai / toast 等消息；welcome 后下载地图建场景
       map.ts            下载并解析所在场景的地图（/maps/*.tmj）（Tiled 地图，和服务端读同一份）
@@ -62,7 +62,8 @@ web/
       kit.ts            合成积木（噪声、振荡器、包络、滤波）
       recipes.ts        每个声音的配方（武器.材质.档位 命名，找不到时逐级回退）
       engine.ts         音频总线（sfx / ui / amb）：先用烘焙好的音频图集，没有或 ?sfx=live 时实时合成；duck() 压低环境声
-      ambience.ts       环境声：按所在区域混合风、营火底噪，随机鸟叫、乌鸦、钟声、火堆噼啪
+      ambience.ts       环境声：按所在区域混合风、营火底噪，随机鸟叫、乌鸦、钟声、火堆噼啪；亡者地穴里滴水和骨头声
+      music.ts          副本音乐（程序化合成）：探索 / 战斗 / 首领三段跟着局面切，每关一套音阶和回声；音量是设置里的“音乐”
       sprite.ts         读 audio/audio.json + sfx.webm / sfx.m4a，切成每个声音的变体
       bake.ts           ?sfxbake 时离线渲染全部配方，给 tools/sfxbake/bake.mjs 调用
       mix.ts            每个声音的音量 / 音高微调（sfxlab 导出后粘贴进来）
@@ -212,6 +213,7 @@ web/
 
 - 选技能面板：职业卡下面一排外观卡（名字 + 色块，选中的高亮），跟着选中的职业换。确认时：职业没换、外观和现在的不一样就在 `loadout` 之后发 `skin`；职业换了就先不发，等服务端回 `skillBar`（职业确实变了）后，`sync.ts` 再发这个职业记住的外观（服务端换职业时把外观重置成默认）。
 - 装备面板：同样一排外观卡，点了直接发 `skin`（当前职业）。
+- 锁着的外观（`SkinInfo.unlock` 不空、不在 `state.unlockedSkins` 里）卡片画灰、点不了，说明写“未解锁：首次通关亡者地穴”；解锁列表来自 `SelfInfo.skins`。
 - 记忆：每个职业上次选的外观存在 `localStorage` 的 `btdemo.loadout` 里，新加的 `skins` 字段（`{ cls, skills: { 职业: [技能] }, skins: { 职业: 外观 id } }`）；老数据没有 `skins` 也照常读，写的时候保留其他字段（`ui/skins.ts`）。记住的外观已经不存在时当作默认。
 - 只有一套外观（或服务端没发）时两处的外观行都不显示。
 

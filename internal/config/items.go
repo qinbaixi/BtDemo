@@ -140,6 +140,8 @@ type Skin struct {
 	Name  string `yaml:"name"`
 	Desc  string `yaml:"desc"`
 	Color string `yaml:"color"` // 选择面板上的色块
+	// Unlock 不空的皮肤一开始是锁着的，写的是怎么解锁（选择面板上显示）；由副本房间的 skins 发给清完房间的玩家
+	Unlock string `yaml:"unlock"`
 }
 
 // DefaultSkin 是职业的默认皮肤 id（列表里的第一个）；没配皮肤时为空。
@@ -148,6 +150,21 @@ func (class *Class) DefaultSkin() string {
 		return ""
 	}
 	return class.Skins[0].ID
+}
+
+// SkinLocked 报告 entity 用不用得了皮肤 skin：要解锁的皮肤得在它解锁过的列表里。
+func SkinLocked(skin *Skin, unlocked []string) bool {
+	return skin.Unlock != "" && !slices.Contains(unlocked, skin.ID)
+}
+
+// FindSkin 在所有职业里按 id 找皮肤，找不到返回 nil。
+func (player *Player) FindSkin(id string) *Skin {
+	for _, class := range player.Classes {
+		if skin := class.Skin(id); skin != nil {
+			return skin
+		}
+	}
+	return nil
 }
 
 // Skin 按 id 找职业的皮肤，找不到返回 nil。
@@ -286,6 +303,9 @@ func validateSkins(owner string, class *Class) error {
 		}
 		if seen[skin.ID] {
 			return fmt.Errorf("%s: duplicate skin id %q", owner, skin.ID)
+		}
+		if skin == class.Skins[0] && skin.Unlock != "" {
+			return fmt.Errorf("%s: the default skin %s cannot be locked", owner, skin.ID)
 		}
 		seen[skin.ID] = true
 	}

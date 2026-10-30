@@ -350,6 +350,20 @@ export const RECIPES: Record<string, Recipe> = {
     k.metal(t, 196 * p, [1, 2.76, 5.4, 8.93], 3, 0.03, 0.9);
     return 3.2;
   },
+  // 地穴：一滴水落进积水里（短促往下滑的“滴”，带一点回响）
+  'amb.drip': (k, t, p) => {
+    const base = (1400 + Math.random() * 900) * p;
+    k.tone(t, 'sine', base, base * 0.55, 0.07, 0.03, 0.002, 0.6);
+    return 0.5;
+  },
+  // 地穴：远处骨头碰在一起的咔啦声
+  'amb.rattle': (k, t, p) => {
+    for (let i = 0; i < 4; i++) {
+      const at = t + i * (0.05 + Math.random() * 0.05);
+      k.noise(at, 0.03, 'bandpass', (2400 + Math.random() * 900) * p, 1800, 6, 0.03, 0.001, 0.5);
+    }
+    return 0.5;
+  },
   // 火堆里木头爆一下
   'amb.crackle': (k, t, p) => {
     k.crackle(t, 0.5, 5, 0.06);

@@ -1,4 +1,4 @@
-// 玩家设置：音量（音效、环境声）、震屏强度、受击闪白、手柄 / 手机震动、清场慢放。
+// 玩家设置：音量（音效、环境声、音乐）、震屏强度、受击闪白、手柄 / 手机震动、清场慢放。
 // 存在浏览器本地（localStorage），设置面板（ui/settings.ts）改，各模块直接读 SETTINGS。
 // 总音量和静音还在 audio/engine.ts 里（M 键），这里不重复存。
 //
@@ -7,6 +7,7 @@
 export interface Settings {
   sfx: number;        // 音效音量 0..1
   ambience: number;   // 环境声音量 0..1
+  music: number;      // 副本音乐音量 0..1（audio/music.ts）
   shake: number;      // 震屏、镜头冲击、缩放冲击的强度 0..1
   flash: boolean;     // 受击闪白
   rumble: boolean;    // 手柄 / 手机震动
@@ -20,6 +21,7 @@ function defaults(): Settings {
   return {
     sfx: 1,
     ambience: 0.7,
+    music: 0.6,
     shake: reduced ? 0.3 : 1,
     flash: !reduced,
     rumble: true,
@@ -45,6 +47,7 @@ function load(): Settings {
   }
   base.sfx = clamp01(base.sfx);
   base.ambience = clamp01(base.ambience);
+  base.music = clamp01(base.music);
   base.shake = clamp01(base.shake);
   return base;
 }
@@ -54,6 +57,7 @@ export function updateSettings(change: Partial<Settings>): void {
   Object.assign(SETTINGS, change);
   SETTINGS.sfx = clamp01(SETTINGS.sfx);
   SETTINGS.ambience = clamp01(SETTINGS.ambience);
+  SETTINGS.music = clamp01(SETTINGS.music);
   SETTINGS.shake = clamp01(SETTINGS.shake);
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(SETTINGS));

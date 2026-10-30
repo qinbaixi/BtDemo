@@ -2,7 +2,7 @@
 //
 //   风      一直有一层很轻的风；墓地里风大、更低沉
 //   火      离营火、火盆近时有一层低沉的燃烧声，按方位左右声像
-//   一次性  村子、草地、树林里随机的鸟叫；墓地里乌鸦和远处的钟；火堆旁的噼啪（recipes.ts 的 amb.*）
+//   一次性  村子、草地、树林里随机的鸟叫；墓地里乌鸦和远处的钟；地穴里滴水和骨头声；火堆旁的噼啪（recipes.ts 的 amb.*）
 //
 // 全部走 amb 总线（engine.ts）：音量跟设置里的“环境声”，重击和完美格挡时被 duck() 压低。
 // 每帧调用 updateAmbience；声音还没解锁（还没点过页面）时什么都不做。
@@ -26,6 +26,7 @@ let windDrift = 0.5;             // 风的音高随机游走 0..1
 let nextBirdAt = 0;
 let nextGraveAt = 0;
 let nextCrackleAt = 0;
+let nextCryptAt = 0;
 
 // updateAmbience 每帧调用：算各层的权重，平滑地调过去，到时间就播一次性的声音。now 是演出时钟。
 export function updateAmbience(now: number, dt: number): void {
@@ -43,7 +44,9 @@ export function updateAmbience(now: number, dt: number): void {
     return Math.min(1, sum);
   };
   const birds = Math.min(1, BIRD_ZONES.reduce((sum, kind) => sum + weight(kind), 0));
-  const grave = weight('graveyard');
+  // 亡者地穴里全是 graveyard 区域；地穴另外有滴水和骨头声，风换成闷闷的地底气流
+  const crypt = state.scene?.id === 'crypt';
+  const grave = crypt ? 0.5 : weight('graveyard');
   const fire = nearestFire(listener);
   const t = out.ctx.currentTime;
 
@@ -69,11 +72,16 @@ export function updateAmbience(now: number, dt: number): void {
     nextBirdAt = now + 1800 + Math.random() * 4500;
   }
   if (now >= nextGraveAt) {
-    if (grave > 0.3 && Math.random() < grave) {
+    if (!crypt && grave > 0.3 && Math.random() < grave) {
       const side = (Math.random() - 0.5) * 700;
       play(Math.random() < 0.65 ? 'amb.crow' : 'amb.bell', { x: listener.x + side, y: listener.y - 200, gain: grave, bus: 'amb' });
     }
     nextGraveAt = now + 6000 + Math.random() * 9000;
+  }
+  if (crypt && now >= nextCryptAt) {
+    const side = (Math.random() - 0.5) * 600;
+    play(Math.random() < 0.7 ? 'amb.drip' : 'amb.rattle', { x: listener.x + side, y: listener.y - 80, gain: 0.8, bus: 'amb' });
+    nextCryptAt = now + 1500 + Math.random() * 3500;
   }
   if (fire && now >= nextCrackleAt) {
     play('amb.crackle', { x: fire.x, y: fire.y, gain: 0.3 + fireLevel * 3, bus: 'amb' });

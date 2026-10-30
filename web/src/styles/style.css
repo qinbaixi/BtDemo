@@ -629,6 +629,9 @@ h4 {
   background: color-mix(in srgb, var(--swatch) 14%, rgba(9, 6, 12, 0.9));
   box-shadow: 0 0 10px rgba(232, 182, 90, 0.35);
 }
+.skin-card.locked { cursor: not-allowed; opacity: 0.45; }
+.skin-card.locked:hover { background: rgba(255, 255, 255, 0.03); opacity: 0.45; }
+.skin-card.locked .skin-swatch { filter: grayscale(0.8) brightness(0.6); }
 .skin-swatch {
   flex: none;
   width: 22px;

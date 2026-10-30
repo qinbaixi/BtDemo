@@ -1,6 +1,8 @@
 package session
 
 import (
+	"slices"
+
 	"google.golang.org/protobuf/proto"
 
 	"github.com/qinbaixi/BtDemo/internal/config"
@@ -133,10 +135,11 @@ func skinInfos(skins []*config.Skin) []*pb.SkinInfo {
 	infos := make([]*pb.SkinInfo, 0, len(skins))
 	for _, skin := range skins {
 		infos = append(infos, &pb.SkinInfo{
-			Id:    proto.String(skin.ID),
-			Name:  proto.String(skin.Name),
-			Desc:  proto.String(skin.Desc),
-			Color: proto.String(skin.Color),
+			Id:     proto.String(skin.ID),
+			Name:   proto.String(skin.Name),
+			Desc:   proto.String(skin.Desc),
+			Color:  proto.String(skin.Color),
+			Unlock: proto.String(skin.Unlock),
 		})
 	}
 	return infos
@@ -220,6 +223,8 @@ func selfInfo(entity *core.Entity, now config.Millis) *pb.SelfInfo {
 		Dead:     proto.Bool(entity.Dead),
 		CdsSet:   proto.Bool(true),
 		BuffsSet: proto.Bool(true),
+		Skins:    entity.UnlockedSkins,
+		SkinsSet: proto.Bool(true),
 	}
 	if entity.Dead {
 		self.RespawnAt = core.I64(entity.RespawnAt)
@@ -280,6 +285,9 @@ func selfDelta(previous, current *pb.SelfInfo) *pb.SelfInfo {
 	}
 	if !sameList(previous.Buffs, current.Buffs) {
 		delta.Buffs, delta.BuffsSet, changed = current.Buffs, proto.Bool(true), true
+	}
+	if !slices.Equal(previous.Skins, current.Skins) {
+		delta.Skins, delta.SkinsSet, changed = current.Skins, proto.Bool(true), true
 	}
 	if !changed {
 		return nil

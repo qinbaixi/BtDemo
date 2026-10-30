@@ -857,7 +857,51 @@ const KNIGHT_SKINS = {
     steel: '#e6c46c', trim: '#fff1c2', legs: '#8a7656', boots: '#5a4630', hand: '#b0905a',
     cloth: '#f2efe6', cape: '#efe9da', plume: false, helm: 'winged', shield: '#f4f0e4', emblem: 'sun',
   },
+  // 骸骨守卫（首次通关亡者地穴解锁）：骨白色的甲，深青灰的布，骷髅面盔，盾上灵火色的十字
+  boneguard: {
+    steel: '#d8d0b8', trim: '#5fd8ff', legs: '#34363e', boots: '#202128', hand: '#b8ae96',
+    cloth: '#2a3440', cape: '#1e2a36', plume: false, helm: 'skull', shield: '#2a3038', emblem: 'cross', eye: '#7fe8ff',
+  },
 };
+
+// drawSkullHelm 是骸骨守卫的骷髅面盔：骨白的圆颅、深陷的眼窝里燃着灵火、颧骨和一排牙，额头一道裂纹。
+function drawSkullHelm(ctx, q, B, skin) {
+  const { hx, hy, hr } = B;
+  const bone = skin.steel;
+  // 颅顶和后脑
+  cel(ctx, (c) => {
+    c.moveTo(hx - hr - 0.6, hy + 3.5);
+    c.arc(hx, hy - 0.6, hr + 1.1, PI * 0.95, TAU + 0.1);
+    c.lineTo(hx + hr + 0.9, hy + 2.6);
+    c.lineTo(hx + 5.6, hy + 4.2);
+    c.lineTo(hx + 1, hy + 4.6);
+    c.lineTo(hx - hr + 0.4, hy + 6);
+    c.closePath();
+  }, bone, { sd: 2 });
+  // 下颌和牙
+  cel(ctx, (c) => {
+    c.moveTo(hx + 0.4, hy + 4.4);
+    c.lineTo(hx + hr + 0.4, hy + 3.4);
+    c.quadraticCurveTo(hx + hr + 0.6, hy + 7, hx + 4.4, hy + 7.6);
+    c.lineTo(hx - 0.6, hy + 7.2);
+    c.closePath();
+  }, shade(bone, -0.08), { sd: 1, lw: 1.1 });
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  for (let x = hx + 1.6; x <= hx + hr; x += 1.5) { ctx.moveTo(x, hy + 4.2); ctx.lineTo(x, hy + 5.8); }
+  ctx.stroke();
+  // 眼窝（近大远小）和里面的灵火
+  flat(ctx, (c) => { pEll(c, hx + 3.6, hy + 0.4, 1.9, 2.1); pEll(c, hx + 7, hy + 0.5, 1.3, 1.8); }, '#0b0710');
+  const flicker = 0.75 + 0.25 * Math.sin(q.time / 90);
+  flat(ctx, (c) => { pEll(c, hx + 3.7, hy + 0.7, 0.9 * flicker, 1.1); pEll(c, hx + 7, hy + 0.8, 0.6 * flicker, 0.9); }, skin.eye);
+  glint(ctx, hx + 3.7, hy + 0.6, 4.5, 'rgba(120,230,255,0.45)');
+  // 鼻孔、颧骨、额头的裂纹
+  flat(ctx, (c) => pPoly(c, [hx + 6.8, hy + 2.2, hx + 7.8, hy + 3.6, hx + 6.2, hy + 3.6]), '#1a1418');
+  line(ctx, [hx + 1.6, hy + 2.6, hx + 4.6, hy + 3.2], shade(bone, -0.35), 0.7);
+  line(ctx, [hx - 1.5, hy - hr - 0.2, hx - 0.4, hy - 4, hx + 1.4, hy - 3.2, hx + 1, hy - 1.6], 'rgba(40,30,24,0.75)', 0.8);
+  glint(ctx, hx - 2.5, hy - 5, 2.6, 'rgba(255,255,255,0.35)');
+}
 
 // drawHornedHelm 是黑曜骑士的全封闭头盔：圆顶、只留一道眼缝（缝里透出红光），两侧一对往前弯的角。
 function drawHornedHelm(ctx, q, B, skin) {
@@ -1052,6 +1096,17 @@ function drawKnightBody(ctx, q) {
       // 腹甲的分片和胸口的亮光
       folds(ctx, [[-B.ww + 0.5, B.hipY - 6, 0.5, B.hipY - 4.6, B.ww - 0.5, B.hipY - 6.2], [-B.ww + 1, B.hipY - 9.5, 0.5, B.hipY - 8.2, B.ww - 1, B.hipY - 9.6]], 'rgba(40,40,70,0.45)', 0.8);
       line(ctx, [-2.5, B.sy + 3.2, 1.5, B.sy + 2.6], 'rgba(255,255,255,0.7)', 0.9);
+      if (skin.helm === 'skull') {
+        // 骸骨守卫：胸甲铸成一副肋骨，中间一道胸骨，肋缝里透出灵火的光
+        const ribs = [];
+        for (let i = 0; i < 3; i++) {
+          const y = B.sy + 5.5 + i * 2.6;
+          ribs.push([-B.ww + 0.8, y + 1.2, -1, y - 0.4, 0.5, y], [0.5, y, 2, y - 0.4, B.ww - 0.4, y + 1.2]);
+        }
+        folds(ctx, ribs, 'rgba(30,26,36,0.75)', 0.9);
+        line(ctx, [0.5, B.sy + 4, 0.5, B.sy + 12.5], 'rgba(30,26,36,0.75)', 1.1);
+        flat(ctx, (c) => pEll(c, -2, B.sy + 9.4, 1.4, 0.5), 'rgba(127,232,255,0.55)');
+      }
       // pauldron
       cel(ctx, (c) => {
         c.moveTo(B.sw - 6, B.sy - 1);
@@ -1072,6 +1127,10 @@ function drawKnightBody(ctx, q) {
       eyes(ctx, hx + 2.6, hy + 1, '#16101c', 1.7);
       if (skin.helm === 'horned') {
         drawHornedHelm(ctx, q, B, skin);
+        return;
+      }
+      if (skin.helm === 'skull') {
+        drawSkullHelm(ctx, q, B, skin);
         return;
       }
       if (act?.name === 'buff') {
@@ -1229,6 +1288,11 @@ const RANGER_SKINS = {
   snowfield: {
     hood: '#dfe6ec', leather: '#8a6a4a', sleeve: '#b8c8d6', forearm: '#6a5040', legs: '#5a5650', boots: '#4a3a2c',
     quiver: '#7a5a3c', hair: '#c8a070', fur: '#f6f4ef',
+  },
+  // 守墓人（首次通关亡者地穴解锁）：灰青的兜帽和面罩，骨白镶边，面罩后一对灵火般的眼睛，白发
+  gravewarden: {
+    hood: '#3a4a4e', leather: '#3a3430', sleeve: '#4a5458', forearm: '#2a2a2e', legs: '#2a2c30', boots: '#1a1a1e',
+    quiver: '#2a2a30', hair: '#d8d0c0', mask: '#2e3a3e', eyeGlow: '#7fe8ff', fur: '#e8e0c8',
   },
 };
 

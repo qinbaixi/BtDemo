@@ -10,6 +10,7 @@
 - 玩家拥有的物品 `core.OwnedItem`：`UID`（每个玩家自己从 1 开始编号）、`Cfg`、`Slot`（空 = 在背包里）。都在实体的 `Inventory` 组件里（`entity.Items`），按 UID 排好。
 - 背包 `player.bag` 格（默认 24），**装备着的不占格子**（`BagCount` 只数 `Slot` 为空的）。
 - 皮肤存在 `entity.Skin`（总是具体的 id，比如 `paladin`），职业的第一个皮肤是默认。
+- 写了 `unlock` 的皮肤一开始锁着（`unlock` 是给玩家看的解锁说明，比如“首次通关亡者地穴”），`SetSkin` 换不上（`ReasonLockedSkin`）。副本房间配了 `skins`（`scenes.yaml`）时，清完房间给房间里每个玩家解锁（`entity.UnlockedSkins`，换职业也留着，新解锁的发一条提示）。现在打死第二关首领血槌解锁 `boneguard`（骸骨守卫，骑士）和 `gravewarden`（守墓人，游侠）。解锁列表在 `SelfInfo.skins`（`skins_set`）里发给自己，客户端把锁着的外观卡画灰、写解锁条件。
 
 ## 属性加成（attr）
 

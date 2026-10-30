@@ -38,6 +38,7 @@ export interface SkinInfo {
   name: string;
   desc: string;
   color: string;   // 选择面板上的色块
+  unlock: string;  // 不空 = 一开始锁着，写的是怎么解锁（解锁了的在 state.unlockedSkins 里）
 }
 
 // PetInfo 是一种宠物（config/pets.yaml，welcome 里一次发全）；第一个是默认。
@@ -194,6 +195,7 @@ export interface SelfUpdate {
   buffs?: { name: string; until: number }[];    // 只在整份 Buff 列表有变化时出现（buffs_set）
   dead?: boolean;
   respawnAt?: number; // 复活的服务端时间；0 = 没死
+  skins?: string[];   // 解锁了的皮肤，只在列表有变化时出现（skins_set）
 }
 
 // SelfInfo 是合并后的完整自己信息（state.self）。时间点是本地 performance.now() 毫秒。

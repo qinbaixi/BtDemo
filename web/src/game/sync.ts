@@ -324,6 +324,7 @@ function onSelf(u: SelfUpdate, now: number): void {
     for (const c of u.cds) state.cds[c.skill] = localTime(c.readyAt);
   }
   if (u.respawnAt !== undefined) merged.respawnAt = localTime(u.respawnAt);
+  if (u.skins) state.unlockedSkins = new Set(u.skins);
   const wasDead = !!prev?.dead;
   if (u.dead !== undefined) merged.dead = u.dead;
   state.self = merged;

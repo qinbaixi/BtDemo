@@ -263,6 +263,7 @@ message SkinInfo {
   required string name = 2;
   optional string desc = 3;
   optional string color = 4;   // swatch colour for the picker
+  optional string unlock = 5;  // locked until earned (SelfInfo.skins): how to earn it, e.g. "首次通关亡者地穴"
 }
 
 // Welcome is the first message after connecting: a new character was created.
@@ -533,6 +534,8 @@ message SelfInfo {
   optional int64 respawn_at = 10;   // Frame.time of the respawn (while dead)
   optional bool cds_set = 11;
   optional bool buffs_set = 12;
+  repeated string skins = 13;       // locked skins this character has earned (SkinInfo.unlock)
+  optional bool skins_set = 14;
 }
 
 // ZoneList is the whole new list of heal zones (sent when it changes).

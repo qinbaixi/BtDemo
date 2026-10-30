@@ -25,6 +25,7 @@ interface FlagSpec {
 const SLIDERS: SliderSpec[] = [
   { key: 'volume', label: '总音量', read: getVolume, write: setVolume },
   { key: 'sfx', label: '音效', read: () => SETTINGS.sfx, write: (value) => updateSettings({ sfx: value }) },
+  { key: 'music', label: '音乐', read: () => SETTINGS.music, write: (value) => updateSettings({ music: value }) },
   { key: 'ambience', label: '环境声', read: () => SETTINGS.ambience, write: (value) => updateSettings({ ambience: value }) },
   { key: 'shake', label: '震屏强度', read: () => SETTINGS.shake, write: (value) => updateSettings({ shake: value }) },
 ];

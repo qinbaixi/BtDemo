@@ -60,7 +60,7 @@ cfg, err := config.Load("config", game.TreeNames())
    - `player.classes` 至少一个职业：`id` 非空且不重复，`speed`、`radius` 为正，`model` 不写时默认用 `id`；每个职业的 `skills` 至少一个，第 2 个起的默认技能都在 `skill_pool` 里，`skills` 和 `skill_pool` 里的技能都存在。
    - 模板引用的技能都存在，且怪物不能用 `dash`、`line`、`rain`（行为树放技能不给方向）；模板的 `kind` 是 monster 或 npc；`tree` 是编译进程序的行为树（由调用方传入 `knownTrees`）；`faction` 在敌对表里。
    - 刷怪点引用的模板存在。
-   - 每个职业的 `skins` 至少一个（第一个是默认），`id`、`name`、`color` 都有，`id` 不重复。
+   - 每个职业的 `skins` 至少一个（第一个是默认，不能写 `unlock`），`id`、`name`、`color` 都有，`id` 不重复；副本房间 `skins` 里的每个皮肤都要是写了 `unlock` 的职业皮肤。
    - `items.yaml`：`id`、`name` 都有且 `id` 不重复；`slot` 是 weapon、armor、trinket 之一；`class` 为空或是已有职业；`rarity` 是 common、rare、epic 之一；`stats` 的名字在 `config.StatNames` 里（换算成 `Item.Bonus`）；`effect` 的 `kind` 已知且参数齐（概率在 (0, 10000]，比例、时长为正，chill 的 `speed` 在 -10000 和 0 之间；chill 的减速 Buff 在这里生成）。
    - `player.bag` 默认 24；`player.starter` 和职业的 `starter` 里的物品存在，职业的还要本职业能用。
    - `loot`：`chance`、`bosses` 的概率、`class_bias` 在 0..10000，`bosses` 的模板存在，`rarity` 的 key 是已知稀有度、权重不为负且有物品时至少一个为正。

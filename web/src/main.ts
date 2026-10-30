@@ -9,6 +9,7 @@
 //   input.ts  键盘鼠标
 
 import { updateAmbience } from './audio/ambience';
+import { updateMusic } from './audio/music';
 import { gameNow, tickClock } from './game/clock';
 import './styles/style.css';
 import './styles/debug.css';
@@ -82,6 +83,7 @@ function frame(): void {
   updateCamera(now, dt);
   drawWorld(now, dt, debug.open);
   updateAmbience(now, dt);
+  updateMusic();
   renderTarget();
   renderSkillBar(now);
   renderDeath(now);

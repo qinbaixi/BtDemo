@@ -202,7 +202,7 @@ func TestShippedItems(t *testing.T) {
 		t.Fatal("bag or boss loot wrong")
 	}
 	for _, class := range cfg.World.Player.Classes {
-		if len(class.Skins) != 3 || len(class.Starter) != 1 {
+		if len(class.Skins) != 4 || len(class.Starter) != 1 {
 			t.Fatalf("class %s: %d skins, starter %v", class.ID, len(class.Skins), class.Starter)
 		}
 	}

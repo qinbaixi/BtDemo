@@ -44,6 +44,7 @@ const (
 // 给玩家的提示。
 const (
 	NoticeCheckpoint = "已记录存档点"
+	NoticeSkin       = "解锁皮肤"
 	NoticeHeal       = "生命回满了"
 )
 
@@ -482,11 +483,26 @@ func (sys *System) clear(current *room) {
 			player.Notices = append(player.Notices, "获得「"+current.cfg.Key+"」")
 		}
 	}
-	if current.cfg == nil || current.cfg.Reward == "" {
+	if current.cfg == nil {
 		return
 	}
 	for _, player := range sys.playersInside(current.area) {
-		sys.reward(player, current.cfg.Reward)
+		unlockSkins(player, current.cfg.Skins, sys.state.Cfg)
+		if current.cfg.Reward != "" {
+			sys.reward(player, current.cfg.Reward)
+		}
+	}
+}
+
+// unlockSkins 给玩家解锁皮肤 skinIDs（首次通关奖励），新解锁的每个发一条提示。
+func unlockSkins(player *core.Entity, skinIDs []string, cfg *config.Config) {
+	for _, skinID := range skinIDs {
+		if slices.Contains(player.UnlockedSkins, skinID) {
+			continue
+		}
+		player.UnlockedSkins = append(player.UnlockedSkins, skinID)
+		skin := cfg.World.Player.FindSkin(skinID)
+		player.Notices = append(player.Notices, NoticeSkin+"「"+skin.Name+"」，在皮肤面板里换上")
 	}
 }
 

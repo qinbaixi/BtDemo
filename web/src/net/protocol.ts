@@ -98,7 +98,7 @@ function classInfo(c: any): ClassInfo {
   return {
     id: c.id, name: c.name, desc: c.desc || '', model: c.model || '', color: c.color || '#e8b65a',
     skills: (c.skills || []).map(skill), pool: (c.pool || []).map(skill), pick: c.pick || 0, canBlock: !!c.canBlock,
-    skins: (c.skins || []).map((s: any) => ({ id: s.id, name: s.name, desc: s.desc || '', color: s.color || '#e8b65a' })),
+    skins: (c.skins || []).map((s: any) => ({ id: s.id, name: s.name, desc: s.desc || '', color: s.color || '#e8b65a', unlock: s.unlock || '' })),
   };
 }
 
@@ -120,13 +120,14 @@ function petInfo(p: any): PetInfo {
   return { id: p.id, name: p.name, desc: p.desc || '', color: p.color || '#e8b65a', model: p.model || '' };
 }
 
-// 自己的信息是增量：只保留出现了的字段；cds、buffs 只在 cdsSet、buffsSet 为 true 时出现
+// 自己的信息是增量：只保留出现了的字段；cds、buffs、skins 只在 cdsSet、buffsSet、skinsSet 为 true 时出现
 function self(s: any): SelfUpdate {
-  const { cds, buffs, cdsSet, buffsSet, ...rest } = s;
+  const { cds, buffs, cdsSet, buffsSet, skins, skinsSet, ...rest } = s;
   const out: SelfUpdate = rest;
   if (rest.respawnAt !== undefined) out.respawnAt = sec(rest.respawnAt);
   if (rest.attr) out.attr = { ...rest.attr, crit: frac(rest.attr.crit), critDmg: frac(rest.attr.critDmg) };
   if (cdsSet) out.cds = (cds || []).map((c: any) => ({ skill: c.skill, readyAt: sec(c.readyAt) }));
+  if (skinsSet) out.skins = skins || [];
   if (buffsSet) out.buffs = (buffs || []).map((b: any) => ({ name: b.name, until: sec(b.until) }));
   return out;
 }
