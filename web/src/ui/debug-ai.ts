@@ -3,28 +3,11 @@
 // 最近若干帧留在历史里，可以暂停后逐帧回看；点节点看详情和它最近的结果走势。
 
 import type { AiCheck, AiNode, AiTick, AiTrace, AiTreeDef, AiTreeNode } from '../net/types';
+import { COMPOSITE_HINT, STATUS_TEXT, decision, nodeTitle, noteText, propsText, subText } from '../btview/model';
+import { BtRecorder } from './bt-record';
 
 const HIST_CAP = 200;          // 留多少帧（20 帧/秒时约 10 秒）
 const LOG_CAP = 300;
-const STATUS_TEXT: Record<string, string> = { success: '成功', failure: '失败', running: '运行中' };
-
-// 子类型的中文名；没列出的直接显示代码名
-const SUB_TEXT: Record<string, string> = {
-  selector: '选择', sequence: '序列', parallel: '并行', random_selector: '随机选择',
-  find_target: '索敌', clear_target: '清除目标', chase_target: '追击目标', cast_skill: '施放技能',
-  wander: '闲逛', return_home: '回家', flee: '逃跑', wait: '等待', say: '说话',
-  has_target: '有目标', target_in_range: '目标在范围内', hp_below: '生命低于', far_from_home: '离家太远',
-  was_attacked: '刚被攻击', update_target: '刷新目标', cooldown: '冷却', invert: '结果取反', force_success: '强制成功',
-  // 宠物节点
-  guard_owner: '守护主人', follow_owner: '跟随主人', keep_distance: '保持距离', cast_on_owner: '对主人施法',
-  owner_far: '离主人太远', owner_hp_below: '主人生命低于', owner_in_combat: '主人在战斗',
-};
-const COMPOSITE_HINT: Record<string, string> = {
-  selector: '按顺序尝试子节点，第一个不失败的就是结果',
-  sequence: '按顺序执行子节点，有一个不成功就停',
-  parallel: '同时执行所有子节点',
-  random_selector: '打乱顺序后像选择节点一样尝试',
-};
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string | null, text?: string | null): HTMLElementTagNameMap[K] {
   const n = document.createElement(tag);
@@ -32,15 +15,6 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string | null, 
   if (text != null) n.textContent = text;
   return n;
 }
-
-const subText = (s: string) => SUB_TEXT[s] || s;
-
-// nodeTitle 是节点在树里的名字：有编辑器起的名字就用它，否则用子类型。
-function nodeTitle(n: AiTreeNode): string {
-  return n.label || subText(n.subType);
-}
-
-const propsText = (n: AiTreeNode) => n.props.map((p) => `${p.key}=${p.value}`).join(' ');
 
 interface Entry { tick: AiTick; bb: { key: string; value: string }[]; tree: string }
 
@@ -64,21 +38,6 @@ function serviceNote(v: Visit | undefined, sub: string): string | null {
   return null;
 }
 
-// decision 挑出一帧“决定做什么”：最后一个没失败的任务，以及它上面的组合节点链。
-function decision(nodes: AiNode[]) {
-  let leaf = -1;
-  for (let i = nodes.length - 1; i >= 0; i--) {
-    if (nodes[i].kind === 'task' && nodes[i].status !== 'failure') { leaf = i; break; }
-  }
-  if (leaf < 0) return null;
-  const path = [nodes[leaf]];
-  let depth = nodes[leaf].depth;
-  for (let i = leaf - 1; i >= 0 && depth > 0; i--) {
-    if (nodes[i].depth === depth - 1) { path.unshift(nodes[i]); depth--; }
-  }
-  return { leaf: nodes[leaf], path };
-}
-
 export interface AiPanel {
   trace(t: AiTrace): void;      // 每次同步带来的追踪
   clear(): void;                // 换了观察对象
@@ -88,9 +47,14 @@ export interface AiPanel {
 
 /**
  * createAiPanel 在 host 里建出行为树视图。sub 是头部的副标题（显示树名和时间），
- * needDef 在缺少某棵树的结构时调用（让上层重新请求一次）。
+ * needDef 在缺少某棵树的结构时调用（让上层重新请求一次）；title 返回被观察实体的名字（录像标题用）。
  */
-export function createAiPanel(host: HTMLElement, sub: HTMLElement, needDef: () => void): AiPanel {
+export function createAiPanel(
+  host: HTMLElement,
+  sub: HTMLElement,
+  needDef: () => void,
+  title: () => string,
+): AiPanel {
   const defs = new Map<string, AiTreeDef>();     // 树名 -> 结构，换观察对象也保留
   const collapsed = new Map<string, Set<number>>(); // 树名 -> 折叠的节点
   let hist: Entry[] = [];
@@ -98,6 +62,7 @@ export function createAiPanel(host: HTMLElement, sub: HTMLElement, needDef: () =
   let paused = false;
   let selected = 0;       // 选中的节点 id
   let lastSig = '';
+  const recorder = new BtRecorder();   // 长录像：导出 HTML、实时窗口
 
   // ---- 布局 ----
   const bar = el('div', 'bt-bar');
@@ -118,6 +83,22 @@ export function createAiPanel(host: HTMLElement, sub: HTMLElement, needDef: () =
   legend.innerHTML = '<i class="st-success"></i>成功 <i class="st-failure"></i>失败 <i class="st-running"></i>运行中 <i class="st-none"></i>未执行';
   bar2.append(expandBtn, collapseBtn, pathBtn, legend);
 
+  const bar3 = el('div', 'bt-bar');
+  const exportBtn = el('button', 'dbg-btn', '导出 HTML');
+  const liveWinBtn = el('button', 'dbg-btn', '新窗口实时看');
+  const recText = el('span', 'bt-frame', '');
+  exportBtn.title = '把观察开始以来录下的帧（最多约两分半）存成一个能单独打开、能发给别人的网页';
+  liveWinBtn.title = '开一个大窗口，带时间轴实时显示这棵树（可以拖到另一块屏幕）';
+  bar3.append(exportBtn, liveWinBtn, recText);
+  // 录像标题在收到追踪时更新（见 trace），这里不再取：点按钮时目标可能已经离开视野
+  exportBtn.addEventListener('click', () => {
+    exportBtn.disabled = true;
+    recorder.exportHtml().finally(() => (exportBtn.disabled = false));
+  });
+  liveWinBtn.addEventListener('click', () => {
+    recorder.openLive();
+  });
+
   const treeBox = el('div', 'bt-tree');
   const detail = el('div', 'dbg-section bt-detail');
   const bbBox = el('div', 'dbg-section');
@@ -129,7 +110,7 @@ export function createAiPanel(host: HTMLElement, sub: HTMLElement, needDef: () =
   logBar.append(el('h5', null, '决策日志（点一行跳到那一帧）'), clearBtn);
   const log = el('div', 'dbg-log');
   logBox.append(logBar, log);
-  host.append(bar, bar2, treeBox, detail, bbBox, logBox);
+  host.append(bar, bar2, bar3, treeBox, detail, bbBox, logBox);
 
   const current = (): Entry | undefined => (view >= 0 ? hist[view] : hist[hist.length - 1]);
 
@@ -376,12 +357,6 @@ export function createAiPanel(host: HTMLElement, sub: HTMLElement, needDef: () =
     detail.replaceChildren(el('h5', null, '节点详情'), grid, el('h5', 'bt-strip-title', '最近各帧的结果（点一格跳过去）'), strip);
   }
 
-  function noteText(n: string) {
-    if (n.startsWith('blocked:')) return `被条件 ${n.slice(8)} 拦下`;
-    if (n.startsWith('service:')) return `服务 ${n.slice(8)}`;
-    return `装饰器 ${n} 改变了结果`;
-  }
-
   function appendLog(tick: AiTick, tree: string) {
     const d = decision(tick.nodes);
     if (!d) return;
@@ -425,6 +400,10 @@ export function createAiPanel(host: HTMLElement, sub: HTMLElement, needDef: () =
     trace(t) {
       if (t.def) defs.set(t.tree, t.def);
       else if (!defs.has(t.tree)) needDef();
+      // 录像不管暂停，一直录
+      recorder.setTitle(title());
+      recorder.add(t, defs.get(t.tree));
+      recText.textContent = recorder.length ? `已录 ${recorder.length} 帧` : '';
       // 暂停时历史和日志都冻结（新帧丢弃），方便慢慢逐帧看
       if (!t.ticks.length || paused) return;
       for (const tick of t.ticks) {
@@ -442,6 +421,8 @@ export function createAiPanel(host: HTMLElement, sub: HTMLElement, needDef: () =
       selected = 0;
       lastSig = '';
       log.replaceChildren();
+      recorder.reset();
+      recText.textContent = '';
       render();
     },
     stale() {

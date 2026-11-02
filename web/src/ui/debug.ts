@@ -55,7 +55,7 @@ export function createDebug({ send, entity }: {
       defAskedAt = now;
       send({ t: 'watch', id: watching });
     }
-  });
+  }, () => title.textContent || '');
 
   tabs.addEventListener('click', (ev) => {
     const b = (ev.target as Element).closest('button');
