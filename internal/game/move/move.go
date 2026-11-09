@@ -170,7 +170,8 @@ func (sys *System) Tick() {
 }
 
 // knock 把 entity 沿击退路线推到 now 时的位置（先快后慢），走完就结束击退。
-// 路线在击退开始时已经用 nav.Reach 避开了障碍物，所以这里直接放上去。
+// 路线在击退开始时已经用 nav.Reach 避开了障碍物，但途中地形可能变了（门关上、
+// 石柱复原），所以每一步都再查一次：下一个位置放不下就停在原地，提前结束击退。
 func (sys *System) knock(entity *core.Entity, now config.Millis) {
 	knock := entity.Knock
 	progress := 1.0
@@ -182,9 +183,14 @@ func (sys *System) knock(entity *core.Entity, now config.Millis) {
 		entity.Knock = nil
 	}
 	eased := 1 - (1-progress)*(1-progress)
-	entity.SetPos(
-		knock.From.X+(knock.To.X-knock.From.X)*eased,
-		knock.From.Y+(knock.To.Y-knock.From.Y)*eased,
-	)
+	next := nav.Vec{
+		X: knock.From.X + (knock.To.X-knock.From.X)*eased,
+		Y: knock.From.Y + (knock.To.Y-knock.From.Y)*eased,
+	}
+	if next.Dist(pos(entity)) > 1e-9 && !sys.nav.Free(next, entity.Radius) {
+		entity.Knock = nil // 被途中出现的障碍物截停
+		return
+	}
+	entity.SetPos(next.X, next.Y)
 	sys.grid.Moved(entity)
 }

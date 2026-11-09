@@ -63,9 +63,10 @@ func New(
 	}
 }
 
-// Tick 结算前摇到点的出招和震地的冲击环，清除已过期的 Buff，并结算装备的持续回血（regen）。
+// Tick 结算前摇到点的出招、冲到终点的冲锋撞击和震地的冲击环，清除已过期的 Buff，并结算装备的持续回血（regen）。
 func (sys *System) Tick() {
 	sys.resolveWindups()
+	sys.resolveChargeHits()
 	sys.tickQuakes()
 	sys.state.Ents.Each(func(entity *core.Entity) {
 		if !entity.Dead {

@@ -70,6 +70,10 @@ func (sys *System) charge(entity *core.Entity, windup *core.Windup) {
 	if length >= 1 {
 		entity.Knock = &core.Knock{From: from, To: end, Start: now, Duration: max(1, duration)}
 	}
+	if victim != nil && entity.Knock != nil {
+		// 伤害等冲到被撞的人面前再结算，见 resolveChargeHits
+		entity.Knock.Charge = &core.ChargeHit{Skill: skill, Victim: victim.ID}
+	}
 	event := &core.Event{
 		Kind:  pb.EventKind_CAST.Enum(),
 		Src:   core.I32(entity.ID),
@@ -95,9 +99,45 @@ func (sys *System) charge(entity *core.Entity, windup *core.Windup) {
 		}
 	}
 	sys.state.Events.Emit(entity, event)
-	if victim != nil {
+	if victim != nil && entity.Knock == nil {
+		// 贴脸冲锋（没走出 1 像素）：当场撞上
 		dmg, crit := sys.CalcDamage(entity, victim, skill)
 		sys.applyDamage(entity, victim, dmg, crit, skill)
+	}
+}
+
+// resolveChargeHits 结算冲到终点的冲锋撞击。在 Move.Tick 之前跑，
+// 所以冲锋者的位置用冲锋终点 Knock.To 来算距离。
+// 被撞的人这段时间里跑开超过 hit.reach 就撞空；冲锋途中冲锋者被别的击退
+// 覆盖了 Knock（或被障碍物截停），Charge 跟着没了，也就不会结算。
+func (sys *System) resolveChargeHits() {
+	now := sys.state.Now()
+	type chargeArrival struct {
+		attacker *core.Entity
+		hit      *core.ChargeHit
+		end      nav.Vec
+	}
+	var arrived []chargeArrival
+	sys.state.Ents.Each(func(entity *core.Entity) {
+		knock := entity.Knock
+		if knock != nil && knock.Charge != nil && now >= knock.End() {
+			arrived = append(arrived, chargeArrival{attacker: entity, hit: knock.Charge, end: knock.To})
+			knock.Charge = nil
+		}
+	})
+	// 先收集再结算：结算里的击杀和击退不会打乱遍历
+	for _, arrival := range arrived {
+		attacker := arrival.attacker
+		victim := sys.state.Ents.Get(arrival.hit.Victim)
+		if !attacker.Alive() || !victim.Alive() {
+			continue
+		}
+		gap := arrival.end.Dist(nav.Vec{X: victim.X, Y: victim.Y}) - attacker.Radius - victim.Radius
+		if gap > float64(sys.state.Cfg.World.Hit.Reach) {
+			continue // 被撞的人已经躲开了
+		}
+		dmg, crit := sys.CalcDamage(attacker, victim, arrival.hit.Skill)
+		sys.applyDamage(attacker, victim, dmg, crit, arrival.hit.Skill)
 	}
 }
 

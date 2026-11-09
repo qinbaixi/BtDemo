@@ -162,7 +162,19 @@ type Knock struct {
 	From, To nav.Vec
 	Start    config.Millis
 	Duration config.Millis
+	// Charge 不为 nil 表示这段位移是冲锋：冲到终点时才对被撞的人结算伤害。
+	// 冲锋途中被别的击退覆盖掉，这一下也就跟着作废。
+	Charge *ChargeHit
 }
+
+// ChargeHit 是冲锋冲到终点时要结算的那一下撞击。
+type ChargeHit struct {
+	Skill  *config.Skill
+	Victim int // 被撞的人的 ID
+}
+
+// End 是这段位移走完的时刻。
+func (knock *Knock) End() config.Millis { return knock.Start + knock.Duration }
 
 // Stunned 报告 entity 在 now 时是否处于硬直。
 func (impact *Impact) Stunned(now config.Millis) bool { return now < impact.StunUntil }
