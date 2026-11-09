@@ -39,6 +39,8 @@ type Registry struct {
 	tasks      map[string]TaskFunc
 	conditions map[string]ConditionFunc
 	services   map[string]ServiceFunc
+	scores     map[string]ScoreFunc // 游戏自定义的打分装饰器，见 utility.go
+	inputs     map[string]InputFunc // consideration 能读的计算型输入
 }
 
 // NewRegistry 返回一个空的注册表。
@@ -47,6 +49,8 @@ func NewRegistry() *Registry {
 		tasks:      map[string]TaskFunc{},
 		conditions: map[string]ConditionFunc{},
 		services:   map[string]ServiceFunc{},
+		scores:     map[string]ScoreFunc{},
+		inputs:     map[string]InputFunc{},
 	}
 }
 
@@ -72,18 +76,25 @@ type Ctx struct {
 	inst  *Instance
 	step  int // 追踪时本节点对应的追踪步骤下标，不追踪时为 -1
 	check int // 正在检查的条件装饰器在 Checks 里的下标，不是条件时为 -1
+	// explainTo 不为 nil 时 Explain 写到这里（打分装饰器的依据），只在追踪时生效
+	explainTo *[]string
 }
 
 // Tracing 表示是否在记录调试追踪；为 false 时处理函数不必拼说明文字。
 func (ctx *Ctx) Tracing() bool { return ctx.step >= 0 }
 
 // Explain 为调试面板记下一句判断依据，例如“距离 85 > 60”。只在追踪时生效：
-// 条件里调用时写到这次条件检查上，任务和服务里调用时写到节点的说明里。
+// 条件里调用时写到这次条件检查上，打分装饰器里调用时写到这个分数旁边，
+// 任务和服务里调用时写到节点的说明里。
 func (ctx *Ctx) Explain(format string, args ...any) {
 	if ctx.step < 0 {
 		return
 	}
 	text := fmt.Sprintf(format, args...)
+	if ctx.explainTo != nil {
+		*ctx.explainTo = append(*ctx.explainTo, text)
+		return
+	}
 	step := &ctx.inst.Trace[ctx.step]
 	switch {
 	case ctx.check >= 0:
@@ -110,6 +121,7 @@ type nodeMem struct {
 	lastRunning int // 节点上一次返回 Running 时的 tick 编号
 	child       int
 	order       []int
+	scores      []Score // utility_selector 进入时打的分，接着运行时也带进追踪
 	results     []Status
 	data        map[string]any
 }
@@ -174,8 +186,11 @@ type TraceStep struct {
 	Fresh bool
 	// Checks 是本次检查过的条件装饰器（含冷却）及结果，按检查顺序。
 	Checks []Check
-	// Why 是任务通过 Explain 写下的说明。
+	// Why 是任务通过 Explain 写下的说明；utility_selector 打分时还有一句打分汇总。
 	Why []string
+	// Scores 只出现在 utility_selector 上：每个子节点的总分，以及子节点上每个打分装饰器的分数。
+	// 接着上一帧运行（Fresh 为 false）时是进入时打的分，没有重新打分。
+	Scores []Score
 }
 
 // Check 是一次条件装饰器检查。
@@ -210,7 +225,7 @@ func (instance *Instance) memOf(node *Node) (*nodeMem, bool) {
 	}
 	fresh := mem.lastRunning != instance.tick-1
 	if fresh {
-		mem.child, mem.order, mem.results, mem.data = 0, nil, nil, nil
+		mem.child, mem.order, mem.scores, mem.results, mem.data = 0, nil, nil, nil, nil
 	}
 	return mem, fresh
 }
@@ -298,7 +313,7 @@ func (instance *Instance) run(node *Node) Status {
 
 	var status Status
 	if node.Kind == KindComposite {
-		status = composites[node.SubType](instance, node, mem)
+		status = composites[node.SubType](instance, node, mem, step)
 	} else {
 		status = instance.Reg.tasks[node.SubType](instance.ctx(node, fresh, mem, step))
 		instance.Active = node.SubType
@@ -335,6 +350,9 @@ func (instance *Instance) checkDecorator(decorator *Node, step int) bool {
 	switch decorator.SubType {
 	case "invert", "force_success":
 		return true
+	}
+	if instance.Reg.isScoreDecorator(decorator) {
+		return true // 打分装饰器只给 utility_selector 打分，不拦节点
 	}
 	checkIdx := -1
 	if step >= 0 {
@@ -385,20 +403,21 @@ func applyDecorator(instance *Instance, decorator *Node, status Status) Status {
 	return status
 }
 
-type compositeFunc func(instance *Instance, node *Node, mem *nodeMem) Status
+type compositeFunc func(instance *Instance, node *Node, mem *nodeMem, step int) Status
 
 var composites map[string]compositeFunc
 
 func init() {
 	composites = map[string]compositeFunc{
-		"selector":        selector,
-		"sequence":        sequence,
-		"parallel":        parallel,
-		"random_selector": randomSelector,
+		"selector":         selector,
+		"sequence":         sequence,
+		"parallel":         parallel,
+		"random_selector":  randomSelector,
+		"utility_selector": utilitySelector,
 	}
 }
 
-func selector(instance *Instance, node *Node, _ *nodeMem) Status {
+func selector(instance *Instance, node *Node, _ *nodeMem, _ int) Status {
 	for _, child := range node.Children {
 		if status := instance.run(child); status != Failure {
 			return status
@@ -407,7 +426,7 @@ func selector(instance *Instance, node *Node, _ *nodeMem) Status {
 	return Failure
 }
 
-func sequence(instance *Instance, node *Node, mem *nodeMem) Status {
+func sequence(instance *Instance, node *Node, mem *nodeMem, _ int) Status {
 	for mem.child < len(node.Children) {
 		status := instance.run(node.Children[mem.child])
 		if status != Success {
@@ -418,7 +437,7 @@ func sequence(instance *Instance, node *Node, mem *nodeMem) Status {
 	return Success
 }
 
-func randomSelector(instance *Instance, node *Node, mem *nodeMem) Status {
+func randomSelector(instance *Instance, node *Node, mem *nodeMem, _ int) Status {
 	if mem.order == nil {
 		mem.order = instance.Rand.Perm(len(node.Children))
 	}
@@ -432,7 +451,7 @@ func randomSelector(instance *Instance, node *Node, mem *nodeMem) Status {
 	return Failure
 }
 
-func parallel(instance *Instance, node *Node, mem *nodeMem) Status {
+func parallel(instance *Instance, node *Node, mem *nodeMem, _ int) Status {
 	if mem.results == nil {
 		mem.results = make([]Status, len(node.Children))
 		for i := range mem.results {

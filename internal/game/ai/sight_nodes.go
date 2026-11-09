@@ -69,6 +69,11 @@ func (sys *System) registerSight() {
 			return bt.Running
 		}
 		sys.move.Toward(entity, goalX, goalY, agent.step(1))
+		// 这一步走出来就看得见了：当帧就算成功，父节点（比如效用选择）下一帧马上能射，不白等一帧
+		if core.EdgeDist(entity, target) <= shotRange && sys.combat.HasSight(entity, target) {
+			ctx.Explain("横移到 (%.0f, %.0f)，看得见 %s 了", entity.X, entity.Y, who(target))
+			return bt.Success
+		}
 		ctx.Explain("视线被挡住，横移到 (%.0f, %.0f) 找射击位", goalX, goalY)
 		return bt.Running
 	})

@@ -571,6 +571,15 @@ message AiNode {
   repeated AiCheck checks = 7;  // condition decorators (and cooldowns) checked this tick, in order
   optional bool fresh = 8;      // entered this tick; false = still running from the last tick (only periodic conditions re-checked)
   repeated string why = 9;      // what the task saw, e.g. "distance 85 > 60"
+  repeated AiScore scores = 10; // utility_selector only: scores given when it was entered
+}
+
+// AiScore is one utility score on a utility_selector: the total of a child,
+// or one score decorator of a child.
+message AiScore {
+  required int32 node = 1;      // child node id, or score decorator node id
+  required int32 score = 2;     // basis points: 10000 = 1.0 (may exceed 10000 for weights)
+  optional string why = 3;      // what the score decorator saw, e.g. "TargetDistance=85 -> 0.47"
 }
 
 // AiCheck is one condition decorator check on a visited node.

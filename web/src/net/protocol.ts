@@ -74,6 +74,8 @@ function aiTrace(a: any): AiTrace {
         ...n, status: String(n.status || 'FAILURE').toLowerCase(), notes: n.notes || [],
         checks: (n.checks || []).map((c: any) => ({ node: c.node, pass: !!c.pass, why: c.why || '' })),
         fresh: !!n.fresh, why: n.why || [],
+        // 效用分数：协议里是万分比
+        scores: (n.scores || []).map((s: any) => ({ node: s.node, score: (s.score || 0) / 10000, why: s.why || '' })),
       })),
     })),
     bb: a.blackboard || [],

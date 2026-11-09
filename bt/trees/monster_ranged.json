@@ -40,8 +40,9 @@
       ]
     },
     {
-      "type": "Selector",
+      "type": "UtilitySelector",
       "label": "战斗",
+      "comment": "效用 AI 示例：进入时按目标距离、自身血量给四个子节点打分，执行分数最高的；选中的一直做完才重新打分，条件不满足时按分数试下一个",
       "decorators": [
         {
           "type": "HasTarget"
@@ -75,6 +76,36 @@
                   "value": 4
                 }
               ]
+            },
+            {
+              "type": "Consideration",
+              "properties": [
+                {
+                  "name": "Input",
+                  "value": "TargetDistance"
+                },
+                {
+                  "name": "Min",
+                  "value": 0
+                },
+                {
+                  "name": "Max",
+                  "value": 120
+                },
+                {
+                  "name": "Curve",
+                  "value": "InverseQuadratic"
+                }
+              ]
+            },
+            {
+              "type": "Utility",
+              "properties": [
+                {
+                  "name": "Score",
+                  "value": 0.9
+                }
+              ]
             }
           ]
         },
@@ -99,6 +130,15 @@
             },
             {
               "type": "HasSight"
+            },
+            {
+              "type": "Utility",
+              "properties": [
+                {
+                  "name": "Score",
+                  "value": 0.6
+                }
+              ]
             }
           ]
         },
@@ -125,6 +165,15 @@
             {
               "type": "HasSight",
               "inverseCheckCondition": true
+            },
+            {
+              "type": "Utility",
+              "properties": [
+                {
+                  "name": "Score",
+                  "value": 0.4
+                }
+              ]
             }
           ]
         },
@@ -135,6 +184,38 @@
             {
               "name": "StopRange",
               "value": 200
+            }
+          ],
+          "decorators": [
+            {
+              "type": "Consideration",
+              "properties": [
+                {
+                  "name": "Input",
+                  "value": "HpPercent"
+                },
+                {
+                  "name": "Min",
+                  "value": 0
+                },
+                {
+                  "name": "Max",
+                  "value": 100
+                },
+                {
+                  "name": "Curve",
+                  "value": "Linear"
+                }
+              ]
+            },
+            {
+              "type": "Utility",
+              "properties": [
+                {
+                  "name": "Score",
+                  "value": 0.2
+                }
+              ]
             }
           ]
         }

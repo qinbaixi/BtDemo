@@ -8,14 +8,17 @@
 // 只依赖 model.ts 和 DOM，不引游戏代码：它会被单独打包塞进 HTML 文件里。
 
 import css from './viewer.css?inline';
-import type { AiNode, AiTreeNode } from '../net/types';
+import type { AiNode, AiScore, AiTreeNode } from '../net/types';
 import {
   COMPOSITE_HINT,
+  SCORE_DECORATORS,
   STATUS_TEXT,
   decision,
   nodeTitle,
   noteText,
   propsText,
+  scoreText,
+  scoresOf,
   subText,
   type BtRecording,
   type KeyValue,
@@ -41,6 +44,7 @@ const COLOR = {
   fail: '#b8463e',
   changed: '#a678e6',
   service: '#4fa3e8',
+  score: '#6fa8ff',
   skipped: '#3a4252',
   grid: '#1b2029',
   current: 'rgba(255,255,255,0.16)',
@@ -69,6 +73,7 @@ interface Tick {
   nodes: AiNode[];
   blackboard: KeyValue[];
   visitCache?: Map<number, Visit>;
+  scoreCache?: Map<number, AiScore>;
   decisionCache?: { leafId: number; pathIds: number[]; leaf: AiNode } | null;
 }
 
@@ -96,6 +101,17 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (className) element.className = className;
   if (text != null) element.textContent = text;
   return element;
+}
+
+// tickScores 是一帧里效用选择打的分（子节点或打分装饰器 id -> 分数），算一次后缓存。
+function tickScores(tick: Tick): Map<number, AiScore> {
+  if (!tick.scoreCache) tick.scoreCache = scoresOf(tick.nodes);
+  return tick.scoreCache;
+}
+
+// isScoreDecorator 判断装饰器是不是打分装饰器：内置的，或者这一帧有它的分数（游戏自定义的）。
+function isScoreDecorator(node: AiTreeNode, scores: Map<number, AiScore>): boolean {
+  return SCORE_DECORATORS.has(node.subType) || scores.has(node.id);
 }
 
 function visitsOf(tick: Tick): Map<number, Visit> {
@@ -216,7 +232,7 @@ export function createViewer(root: HTMLElement, options: { live: boolean }): Vie
   const legend = el('span', 'btv-legend');
   legend.innerHTML =
     '<i class="st-success"></i>成功 <i class="st-failure"></i>失败 <i class="st-running"></i>运行中 ' +
-    '<i class="ck-pass"></i>条件通过 <i class="ck-fail"></i>未通过 <i class="ck-changed"></i>改了结果 <i class="ck-service"></i>服务触发';
+    '<i class="ck-pass"></i>条件通过 <i class="ck-fail"></i>未通过 <i class="ck-changed"></i>改了结果 <i class="ck-service"></i>服务触发 <i class="ck-score"></i>打分';
   bar2.append(el('span', 'btv-label', '时间轴'), zoomOut, zoomIn, expandButton, collapseButton, pathButton, legend);
 
   const main = el('div', 'btv-main');
@@ -337,6 +353,7 @@ export function createViewer(root: HTMLElement, options: { live: boolean }): Vie
       return;
     }
     const visits = tick ? visitsOf(tick) : new Map<number, Visit>();
+    const scores = tick ? tickScores(tick) : new Map<number, AiScore>();
     const pathIds = new Set(tick ? decisionOf(tick)?.pathIds || [] : []);
     const folded = foldSet(tick?.tree || '');
     const focus = selected || (tick && decisionOf(tick)?.leafId) || 0;
@@ -360,7 +377,18 @@ export function createViewer(root: HTMLElement, options: { live: boolean }): Vie
         const name = node.kind === 'composite' ? node.label : nodeTitle(node);
         if (name) line.append(el('span', 'btv-name', name));
         if (node.props.length) line.append(el('span', 'btv-props', propsText(node)));
+        const childScore = scores.get(row.id);
+        if (childScore) line.append(el('span', 'btv-score', `分 ${scoreText(childScore.score)}`));
         line.title = `#${node.id} ${node.subType}${COMPOSITE_HINT[node.subType] ? '：' + COMPOSITE_HINT[node.subType] : ''}`;
+      } else if (row.kind === 'decorator' && isScoreDecorator(node, scores)) {
+        // 打分装饰器：不当条件，显示分数和依据
+        const score = scores.get(row.id);
+        line.classList.add(score ? 'ck-score' : 'ck-none');
+        line.append(el('span', 'btv-glyph', '★'));
+        line.append(el('span', 'btv-name', node.label || subText(node.subType)));
+        if (node.props.length) line.append(el('span', 'btv-props', propsText(node)));
+        if (score) line.append(el('span', 'btv-score', scoreText(score.score)));
+        line.title = score?.why || node.subType;
       } else if (row.kind === 'decorator') {
         const check = visit?.node.checks.find((item) => item.node === row.id);
         const changed = visit?.node.notes.includes(node.subType);
@@ -466,6 +494,7 @@ export function createViewer(root: HTMLElement, options: { live: boolean }): Vie
     }
     const node = def.nodes.get(row.id);
     if (row.kind === 'decorator') {
+      if (tickScores(tick).has(row.id)) return COLOR.score;
       const check = visit?.node.checks.find((item) => item.node === row.id);
       if (check) return check.pass ? COLOR.pass : COLOR.fail;
       if (visit?.node.notes.includes(node.subType)) return COLOR.changed;
@@ -703,10 +732,25 @@ export function createViewer(root: HTMLElement, options: { live: boolean }): Vie
     ]);
     for (const note of visit?.node.notes || []) if (!note.startsWith('service:')) pairs.push(['备注', noteText(note)]);
     for (const why of visit?.node.why || []) pairs.push(['说明', why]);
+    const scores = tickScores(tick);
+    const childScore = scores.get(node.id);
+    if (childScore) pairs.push(['效用分数', scoreText(childScore.score)]);
     const checks = el('ul', 'btv-checks');
     for (const decoratorId of node.decorators) {
       const decorator = def.nodes.get(decoratorId);
       if (!decorator) continue;
+      if (isScoreDecorator(decorator, scores)) {
+        const score = scores.get(decoratorId);
+        const item = el('li', score ? 'ck-score' : 'ck-none');
+        item.append(
+          el('span', 'badge', score ? `★ ${scoreText(score.score)}` : '没打分'),
+          el('b', null, decorator.label || subText(decorator.subType)),
+          el('span', 'btv-props', propsText(decorator)),
+        );
+        if (score?.why) item.append(el('div', 'btv-why', score.why));
+        checks.append(item);
+        continue;
+      }
       const check = visit?.node.checks.find((item) => item.node === decoratorId);
       const changed = visit?.node.notes.includes(decorator.subType);
       const state = check ? (check.pass ? 'pass' : 'fail') : changed ? 'changed' : 'none';
@@ -750,7 +794,7 @@ export function createViewer(root: HTMLElement, options: { live: boolean }): Vie
     heading.append(el('h3', null, `节点详情 · ${nodeTitle(node)}`));
     if (unpin) heading.append(unpin);
     detailBox.replaceChildren(heading, grid(pairs));
-    if (checks.childElementCount) detailBox.append(el('div', 'btv-subhead', '条件和服务'), checks);
+    if (checks.childElementCount) detailBox.append(el('div', 'btv-subhead', '条件、打分和服务'), checks);
   }
 
   let switchesRendered = '';
@@ -937,6 +981,9 @@ export function createViewer(root: HTMLElement, options: { live: boolean }): Vie
     if (found.row.kind === 'node') {
       text += visit ? `${STATUS_TEXT[visit.node.status]}${visit.node.fresh ? '' : '（接着上一帧）'}` : '未执行';
       if (visit?.node.why.length) text += '\n→ ' + visit.node.why.join('；');
+    } else if (found.row.kind === 'decorator' && tickScores(tick).has(found.row.id)) {
+      const score = tickScores(tick).get(found.row.id);
+      text += `分数 ${scoreText(score.score)}${score.why ? '：' + score.why : ''}`;
     } else if (found.row.kind === 'decorator') {
       const check = visit?.node.checks.find((item) => item.node === found.row.id);
       text += check ? `${check.pass ? '通过' : '未通过'}${check.why ? '：' + check.why : ''}` : visit ? '本帧没检查' : '未执行';

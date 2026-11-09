@@ -194,6 +194,8 @@
 .bt-badge.fail { background: rgba(230, 90, 90, 0.2); color: #ff8f8f; }
 .bt-badge.on { background: rgba(255, 213, 74, 0.16); color: var(--gold); }
 .bt-badge.off { color: var(--muted); }
+.bt-badge.score { background: rgba(120, 180, 255, 0.18); color: #9cc8ff; }
+.bt-score { padding: 0 5px; border-radius: 3px; font: 11px var(--font); background: rgba(120, 180, 255, 0.18); color: #9cc8ff; }
 .bt-why { color: #e6e1d3; font-family: var(--font); white-space: normal; }
 .bt-task .bt-why { color: #bfe8b8; }
 .bt-inner .bt-why { color: var(--gold); }

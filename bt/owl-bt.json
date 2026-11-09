@@ -2,6 +2,10 @@
   "types": {
     "seconds": {
       "type": "number"
+    },
+    "blackboardKey": {
+      "type": "string",
+      "pattern": "[A-Za-z_][A-Za-z0-9_]*"
     }
   },
   "nodes": [
@@ -40,6 +44,51 @@
       "color": "#c0a030",
       "isComposite": true,
       "description": "每次进入时随机打乱子节点顺序，直到有一个成功"
+    },
+    {
+      "name": "UtilitySelector",
+      "icon": "scale-balanced",
+      "isComposite": true,
+      "description": "效用选择：给每个子节点打分，执行分数最高的（{{Selection}}）",
+      "properties": [
+        {
+          "name": "OnChildFailure",
+          "type": "enum",
+          "values": [
+            "TryNext",
+            "Fail"
+          ],
+          "default": "TryNext",
+          "description": "TryNext：选中的子节点失败后按分数试下一个；Fail：直接失败"
+        },
+        {
+          "name": "Selection",
+          "type": "enum",
+          "values": [
+            "Highest",
+            "WeightedRandom"
+          ],
+          "default": "Highest",
+          "description": "Highest：选最高分；WeightedRandom：在前 RandomTop 名里按分数加权随机"
+        },
+        {
+          "name": "RandomTop",
+          "type": "number",
+          "min": 0,
+          "default": 0,
+          "description": "WeightedRandom 时参与随机的名次数，0 = 全部"
+        },
+        {
+          "name": "MinScore",
+          "type": "number",
+          "min": 0,
+          "default": 0,
+          "description": "低于这个分数的子节点不执行"
+        }
+      ],
+      "simulate": {
+        "composite": "utility"
+      }
     },
     {
       "name": "FindTarget",
@@ -540,6 +589,64 @@
           "default": 1
         }
       ]
+    },
+    {
+      "name": "Utility",
+      "icon": "scale-balanced",
+      "description": "固定分数 {{Score}}",
+      "properties": [
+        {
+          "name": "Score",
+          "type": "number",
+          "min": 0,
+          "default": 0.5,
+          "description": "效用分数，父节点为 UtilitySelector 时使用"
+        }
+      ],
+      "simulate": {
+        "score": "{{Score}}"
+      }
+    },
+    {
+      "name": "Consideration",
+      "icon": "chart-line",
+      "description": "{{Input}}（{{Min}}–{{Max}}）经 {{Curve}} 曲线打分",
+      "properties": [
+        {
+          "name": "Input",
+          "type": "blackboardKey",
+          "description": "作为输入的黑板键"
+        },
+        {
+          "name": "Min",
+          "type": "number",
+          "default": 0
+        },
+        {
+          "name": "Max",
+          "type": "number",
+          "default": 100
+        },
+        {
+          "name": "Curve",
+          "type": "enum",
+          "values": [
+            "Linear",
+            "InverseLinear",
+            "Quadratic",
+            "InverseQuadratic",
+            "Logistic",
+            "InverseLogistic",
+            "Step",
+            "InverseStep"
+          ],
+          "default": "Linear",
+          "description": "把归一化到 0–1 的输入映射成分数的响应曲线"
+        }
+      ],
+      "simulate": {
+        "score": "curve({{Curve}}, normalize(get({{Input}}), {{Min}}, {{Max}}))"
+      }
     }
   ],
   "services": [
@@ -584,5 +691,25 @@
       "fileName": "{name}",
       "package": "trees"
     }
-  }
+  },
+  "blackboard": [
+    {
+      "name": "TargetDistance",
+      "type": "number",
+      "default": 0,
+      "description": "到当前目标的距离（像素，边缘到边缘），没有目标时很大。游戏每帧计算，不写进黑板"
+    },
+    {
+      "name": "HpPercent",
+      "type": "number",
+      "default": 100,
+      "description": "自身生命百分比 0–100。游戏每帧计算，不写进黑板"
+    },
+    {
+      "name": "TargetHpPercent",
+      "type": "number",
+      "default": 100,
+      "description": "目标生命百分比 0–100，没有目标时为 100。游戏每帧计算，不写进黑板"
+    }
+  ]
 }

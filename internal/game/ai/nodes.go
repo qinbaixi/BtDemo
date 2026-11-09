@@ -226,6 +226,7 @@ func (sys *System) register() {
 	sys.registerPack()
 	sys.registerSight()
 	sys.registerCrypt()
+	sys.registerUtilityInputs()
 
 	reg.Condition("has_target", func(ctx *bt.Ctx) bool {
 		target := ctx.Agent.(*Agent).target()

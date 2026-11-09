@@ -38,6 +38,17 @@ func (sys *System) recordTrace(entity *core.Entity) {
 			}
 			aiNode.Checks = append(aiNode.Checks, pbCheck)
 		}
+		for _, score := range step.Scores {
+			pbScore := &pb.AiScore{
+				Node: core.I32(score.Node.ID),
+				// 协议不下发浮点：分数转成万分比。这里是显示用，四舍五入免得 0.29 显示成 0.2899
+				Score: core.I32(int(math.Round(score.Value * 10000))),
+			}
+			if score.Why != "" {
+				pbScore.Why = proto.String(score.Why)
+			}
+			aiNode.Scores = append(aiNode.Scores, pbScore)
+		}
 	}
 	// 至少保留一个同步间隔的 tick，同步较慢时也不会丢弃任何数据
 	limit := max(maxTraceTicks, sys.state.Cfg.World.TickRate/max(1, sys.state.Cfg.World.SyncRate))

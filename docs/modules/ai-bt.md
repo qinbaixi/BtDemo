@@ -66,6 +66,7 @@ var All = map[string]Exported{
 | `sequence` | 依次执行子节点，有一个不成功就停。运行中的序列下一帧**从上次运行的那个子节点继续** |
 | `random_selector` | 进入时随机打乱顺序，再按 selector 的方式执行 |
 | `parallel` | 同时执行所有子节点；`Policy: RequireAll` 全部成功才成功，`RequireOne` 一个成功就成功 |
+| `utility_selector` | 效用选择：进入时给每个子节点打分，按分数从高到低像 selector 一样尝试；**选中的子节点做完之前不重新打分**。见下面的[效用 AI](#效用-aiutilitygo) |
 | task | 叶子节点，调用游戏代码，返回 Success / Failure / Running |
 
 节点返回三种状态：`Success`、`Failure`、`Running`（还没做完，下一帧继续，比如正在追击）。
@@ -77,11 +78,34 @@ var All = map[string]Exported{
 - 条件装饰器（`has_target`、`target_in_range`、`hp_below`、`far_from_home`、`was_attacked`）：只在新进入时检查（标了 `periodic` 的每帧都检查）。不满足就直接 Failure。`inverse_check_condition` 把条件取反。
 - 结果装饰器（内置，不需要游戏代码）：`cooldown`（成功后 N 秒内不能再进入）、`invert`（成功和失败互换）、`force_success`（失败也当成功，用来包装“可有可无”的步骤，比如说一句台词）。
 
+- 打分装饰器（`utility`、`consideration`，以及游戏用 `reg.Score` 注册的）：只给父节点 `utility_selector` 打分，**不当条件**，不会让节点失败。
+
 **服务**挂在组合节点上，按 `time_between_ticks` 定期执行，用来做后台工作，比如 `update_target` 每 0.5 秒刷新一次仇恨目标。
 
 **Active**：每帧记录最后执行的叶子节点名，显示在角色头上（“追击”“待机”）。
 
 **Tracing**：打开后记录这一帧访问过的每个节点、深度、结果，以及原因（被哪个装饰器挡住、哪个装饰器改了结果、哪个服务触发了）。调试面板就是用它显示决策过程的，只有被观察的实体才会打开。
+
+### 效用 AI（utility.go）
+
+BtTree 编辑器的 `UtilitySelector` 导出为普通组合节点 `utility_selector`，打分装饰器 `Utility`、`Consideration` 导出为 `utility`、`consideration`，导出器不用改。规则和编辑器的运行模式一致（编辑器里跑出来什么样，游戏里就什么样）：
+
+- **什么时候打分**：`utility_selector` 新进入时给每个子节点打一次分，按分数排好顺序存在节点内存里；之后像 `random_selector` 一样从正在运行的子节点继续，不重新打分。子节点成功、或全部失败后，下次进入才重新打分。注意它不像 `selector` 那样每帧抢占，所以子任务要能自己结束（比如 `find_shot_spot` 一看得见就当帧成功）。
+- **子节点的分数**：它所有打分装饰器的分数相乘。有多个打分装饰器时，0–1 之间的分数先做补偿 `s + (1 - s) × (1 - 1/n) × s`（n 为个数），免得因子越多分越低；0–1 以外的数当权重原样相乘。没有打分装饰器的子节点 0 分。
+- **谁会被执行**：分数 ≤ 0 或低于 `MinScore` 的不执行；同分保持原来的顺序。子节点自己的条件装饰器照常检查，没通过就算失败。
+- **属性**：`OnChildFailure`（`TryNext` 默认：选中的失败了按分数试下一个；`Fail`：只试最高分的）、`Selection`（`Highest` 默认；`WeightedRandom`：前 `RandomTop` 名按分数加权随机排序，0 = 全部，用实例的随机数）、`MinScore`（默认 0）。
+- **内置打分装饰器**：`utility` 固定分数 `Score`；`consideration` 读输入 `Input`，按 `Min`–`Max` 归一化到 0–1（截断），再经响应曲线 `Curve` 得到分数。曲线（不区分大小写）：`Linear`、`InverseLinear`、`Quadratic`、`InverseQuadratic`、`Sqrt`、`InverseSqrt`、`Logistic`、`InverseLogistic`（S 形，0→0、0.5→0.5、1→1）、`Step`、`InverseStep`（0.5 处跳变）。曲线名写错启动时 `Validate` 报错。
+- **输入从哪来**：`consideration` 的 `Input` 先找游戏用 `reg.Input(name, fn)` 注册的计算型输入（每次打分时现算，不写黑板），找不到再读黑板里同名的数值（布尔按 1 / 0），都没有按 0。现在注册了三个（`game/ai/utility_inputs.go`）：`TargetDistance`（到目标的边缘距离，像素；没目标时很大）、`HpPercent`（自身生命 0–100）、`TargetHpPercent`（目标生命 0–100）。它们也在 `bt/owl-bt.json` 的 `blackboard` 里声明了，编辑器里可以直接选，运行模式里可以手动改值试分数。
+- **自定义打分装饰器**：`reg.Score("my_score", func(ctx *bt.Ctx) float64 {...})`，在 `bt/owl-bt.json` 里声明同名装饰器即可；函数里 `ctx.Explain` 写的依据会显示在调试面板这个分数旁边。
+
+示例：骷髅弓手（`monster_ranged`）的“战斗”分支是 `utility_selector`：
+
+| 子节点 | 打分 | 条件 |
+| --- | --- | --- |
+| 拉开距离（flee） | `Consideration TargetDistance 0–120 InverseQuadratic` × `Utility 0.9`：贴脸时接近 0.9，60 像素约 0.8，100 像素以外很低 | 目标在 90 内、冷却 4 秒 |
+| 射击（cast_skill） | `Utility 0.6` | 目标在 240 内、看得见 |
+| 找射击位（find_shot_spot） | `Utility 0.4` | 目标在 320 内、看不见 |
+| 靠近（chase_target） | `Consideration HpPercent 0–100 Linear` × `Utility 0.2`：血越少越不想追 | — |
 
 ## ai：游戏节点（nodes.go）
 
@@ -194,7 +218,8 @@ selector（根）   服务：update_target Range=220，每 0.5 秒
 
 - 结果，以及是新进入还是接着上一帧运行（`fresh`；接着运行时只复查 `periodic` 条件）；
 - 检查过的每个条件装饰器（含冷却）过没过、依据是什么（`checks`）；
-- 服务有没有触发、做了什么，以及任务看到了什么（`notes`、`why`）。
+- 服务有没有触发、做了什么，以及任务看到了什么（`notes`、`why`）；
+- `utility_selector` 上还有 `scores`：每个子节点的总分和每个打分装饰器的分数（协议里是万分比整数，`score / 10000` 就是分数，可能超过 10000），以及打分装饰器的依据（如 `TargetDistance=85 → 归一 0.708 → InverseQuadratic 0.498`）；新进入那帧的 `why` 里有一句汇总 `打分：拉开距离 0、射击 0.6、找射击位 0.4、靠近 0.28 → 射击`。接着运行的帧（`fresh` 为 false）带的是进入时打的分。调试面板和行为树查看器在子节点后面显示“分 0.6”，打分装饰器用 ★ 标出，显示分数和依据，热力图上打分装饰器那一行是蓝色。
 
 “依据”由节点函数自己写：在条件、任务、服务里调用 `ctx.Explain("到 %s 的距离 %.0f > %.0f", ...)`。不追踪时 `Explain` 直接返回，没有开销；需要先算一堆东西才能写说明时，用 `ctx.Tracing()` 判断一下。新增节点时顺手写上 Explain，调试面板就能看到它为什么成功或失败。
 
@@ -203,6 +228,6 @@ selector（根）   服务：update_target Range=220，每 0.5 秒
 ## 新增一个节点类型的步骤
 
 1. 在 `bt/owl-bt.json` 里声明节点（名字、参数），用 BtTree 打开就能在树里使用。
-2. 在 `internal/game/ai/nodes.go` 的 `register()` 里用 `reg.Task` / `reg.Condition` / `reg.Service` 注册同名（snake_case）的函数。
+2. 在 `internal/game/ai/nodes.go` 的 `register()` 里用 `reg.Task` / `reg.Condition` / `reg.Service`（打分装饰器用 `reg.Score`，Consideration 的输入用 `reg.Input`）注册同名（snake_case）的函数。
 3. 在编辑器里把节点放进树，导出 Go（Windows 下可以用 `scripts\export-bt.bat`），再 `go generate ./internal/ai/trees`。
 4. `go test ./...`；启动时如果有节点没实现，会报出是哪棵树的哪个节点。

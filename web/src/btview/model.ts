@@ -1,13 +1,14 @@
 // 行为树查看器和调试面板共用的数据和文字：录像格式、节点中文名、“这一帧决定做什么”的算法。
 // 这个文件会被打进独立的查看器（导出的 HTML 和实时窗口），所以只能依赖类型，不能引游戏代码。
 
-import type { AiNode, AiTreeNode } from '../net/types';
+import type { AiNode, AiScore, AiTreeNode } from '../net/types';
 
 export const STATUS_TEXT: Record<string, string> = { success: '成功', failure: '失败', running: '运行中' };
 
 // 子类型的中文名；没列出的直接显示代码名
 export const SUB_TEXT: Record<string, string> = {
-  selector: '选择', sequence: '序列', parallel: '并行', random_selector: '随机选择',
+  selector: '选择', sequence: '序列', parallel: '并行', random_selector: '随机选择', utility_selector: '效用选择',
+  utility: '固定分数', consideration: '打分',
   find_target: '索敌', clear_target: '清除目标', chase_target: '追击目标', cast_skill: '施放技能',
   wander: '闲逛', return_home: '回家', flee: '逃跑', wait: '等待', say: '说话',
   has_target: '有目标', target_in_range: '目标在范围内', hp_below: '生命低于', far_from_home: '离家太远',
@@ -22,7 +23,22 @@ export const COMPOSITE_HINT: Record<string, string> = {
   sequence: '按顺序执行子节点，有一个不成功就停',
   parallel: '同时执行所有子节点',
   random_selector: '打乱顺序后像选择节点一样尝试',
+  utility_selector: '进入时给每个子节点打分，按分数从高到低尝试；选中的做完之前不重新打分',
 };
+
+// 内置的打分装饰器（游戏注册的打分装饰器靠追踪里有没有分数来认）
+export const SCORE_DECORATORS = new Set(['utility', 'consideration']);
+
+// scoresOf 收集一帧里所有效用选择节点打的分：键是子节点或打分装饰器的 id（同一棵树里 id 不重复）。
+// 旧录像没有 scores 字段，按没有分数处理。
+export function scoresOf(nodes: AiNode[]): Map<number, AiScore> {
+  const map = new Map<number, AiScore>();
+  for (const node of nodes) for (const score of node.scores || []) if (!map.has(score.node)) map.set(score.node, score);
+  return map;
+}
+
+// scoreText 把分数保留三位小数，和编辑器一致。
+export const scoreText = (score: number) => String(Math.round(score * 1000) / 1000);
 
 export const subText = (subType: string) => SUB_TEXT[subType] || subType;
 

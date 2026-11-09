@@ -2,8 +2,10 @@
 // 每个节点访问顺序、结果、条件装饰器的判断依据、服务做了什么、任务看到了什么。
 // 最近若干帧留在历史里，可以暂停后逐帧回看；点节点看详情和它最近的结果走势。
 
-import type { AiCheck, AiNode, AiTick, AiTrace, AiTreeDef, AiTreeNode } from '../net/types';
-import { COMPOSITE_HINT, STATUS_TEXT, decision, nodeTitle, noteText, propsText, subText } from '../btview/model';
+import type { AiCheck, AiNode, AiScore, AiTick, AiTrace, AiTreeDef, AiTreeNode } from '../net/types';
+import {
+  COMPOSITE_HINT, SCORE_DECORATORS, STATUS_TEXT, decision, nodeTitle, noteText, propsText, scoreText, scoresOf, subText,
+} from '../btview/model';
 import { BtRecorder } from './bt-record';
 
 const HIST_CAP = 200;          // 留多少帧（20 帧/秒时约 10 秒）
@@ -211,24 +213,27 @@ export function createAiPanel(
       return;
     }
     const vis = visits(e.tick);
+    const scores = scoresOf(e.tick.nodes);
     const folds = foldSet(e.tree);
     const rows: HTMLElement[] = [];
     const walk = (id: number, depth: number) => {
       const n = def.nodes.get(id);
       if (!n) return;
       const folded = folds.has(id);
-      rows.push(...nodeRows(def, n, depth, vis, folded));
+      rows.push(...nodeRows(def, n, depth, vis, scores, folded));
       if (!folded) for (const c of n.children) walk(c, depth + 1);
     };
     walk(def.root, 0);
     const top = treeBox.scrollTop;
     treeBox.replaceChildren(...rows);
     treeBox.scrollTop = top;
-    renderDetail(def, vis);
+    renderDetail(def, vis, scores);
   }
 
   // nodeRows 是一个节点的行：节点本身，下面跟着它的条件、服务和说明。
-  function nodeRows(def: AiTreeDef, n: AiTreeNode, depth: number, vis: Map<number, Visit>, folded: boolean): HTMLElement[] {
+  function nodeRows(
+    def: AiTreeDef, n: AiTreeNode, depth: number, vis: Map<number, Visit>, scores: Map<number, AiScore>, folded: boolean,
+  ): HTMLElement[] {
     const v = vis.get(n.id);
     const pad = 4 + depth * 16;
     const row = el('div', `bt-row ${v ? `st-${v.n.status}` : 'st-none'}${selected === n.id ? ' sel' : ''}`);
@@ -240,6 +245,9 @@ export function createAiPanel(
     row.append(el('span', `bt-kind k-${n.kind}`, n.kind === 'composite' ? subText(n.subType) : '任务'));
     if (n.kind !== 'composite' || n.label) row.append(el('span', 'bt-name', n.kind === 'composite' ? n.label : nodeTitle(n)));
     if (n.props.length) row.append(el('span', 'bt-props', propsText(n)));
+    // 效用选择的子节点：进入时打的分
+    const childScore = scores.get(n.id);
+    if (childScore) row.append(el('span', 'bt-score', `分 ${scoreText(childScore.score)}`));
     const res = v ? STATUS_TEXT[v.n.status] + (v.n.fresh ? '' : ' · 接着上一帧') : '未执行';
     row.append(el('span', 'bt-res', res));
     row.title = `#${n.id} ${n.subType}${COMPOSITE_HINT[n.subType] ? '：' + COMPOSITE_HINT[n.subType] : ''}`;
@@ -256,6 +264,18 @@ export function createAiPanel(
     for (const did of n.decorators) {
       const d = def.nodes.get(did);
       if (!d) continue;
+      const score = scores.get(did);
+      if (score || SCORE_DECORATORS.has(d.subType)) {
+        // 打分装饰器：不当条件，只显示分数和依据
+        const name = el('span', 'bt-dname', `★ ${d.label || subText(d.subType)}`);
+        name.title = d.subType;
+        const parts: (HTMLElement | string)[] = [name];
+        if (d.props.length) parts.push(el('span', 'bt-props', propsText(d)));
+        parts.push(el('span', `bt-badge ${score ? 'score' : 'off'}`, score ? `分数 ${scoreText(score.score)}` : '本帧没打分'));
+        if (score?.why) parts.push(el('span', 'bt-why', score.why));
+        subRow('bt-deco', parts);
+        continue;
+      }
       const ck = v?.n.checks.find((c) => c.node === did);
       const flags = [d.inverse ? '取反' : '', d.periodic ? '运行中也复查' : ''].filter(Boolean).join('、');
       const name = el('span', 'bt-dname', `◆ ${d.label || subText(d.subType)}`);
@@ -313,7 +333,7 @@ export function createAiPanel(
   }
 
   // renderDetail 显示选中节点的完整信息和最近每一帧的结果。
-  function renderDetail(def: AiTreeDef, vis: Map<number, Visit>) {
+  function renderDetail(def: AiTreeDef, vis: Map<number, Visit>, scores: Map<number, AiScore>) {
     const n = selected ? def.nodes.get(selected) : null;
     if (!n) {
       detail.replaceChildren(el('div', 'bt-hint', '点树里的节点看详情；▸ 折叠/展开。'));
@@ -325,8 +345,15 @@ export function createAiPanel(
     kv('节点', `#${n.id} ${n.label ? n.label + ' · ' : ''}${n.subType}（${n.kind === 'composite' ? '组合' : '任务'}）`);
     if (COMPOSITE_HINT[n.subType]) kv('规则', COMPOSITE_HINT[n.subType]);
     for (const p of n.props) kv(`参数 ${p.key}`, p.value);
+    const childScore = scores.get(n.id);
+    if (childScore) kv('效用分数', scoreText(childScore.score));
     for (const did of n.decorators) {
       const d = def.nodes.get(did);
+      const score = scores.get(did);
+      if (d && (score || SCORE_DECORATORS.has(d.subType))) {
+        kv('打分', `${d.subType}${d.props.length ? ' ' + propsText(d) : ''}${score ? ` → ${scoreText(score.score)}${score.why ? '（' + score.why + '）' : ''}` : ''}`);
+        continue;
+      }
       if (d) kv('条件', `${d.subType}${d.props.length ? ' ' + propsText(d) : ''}${d.inverse ? '（取反）' : ''}${d.periodic ? '（运行中也复查）' : ''}`);
     }
     for (const sid of n.services) {

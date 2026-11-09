@@ -223,6 +223,13 @@ export interface AiNode {
   checks: AiCheck[];   // 本帧检查过的条件装饰器（含冷却）
   fresh: boolean;      // 本帧新进入；false 表示接着上一帧继续运行
   why: string[];       // 任务给出的说明
+  scores: AiScore[];   // 只在效用选择（utility_selector）上：进入时给子节点和打分装饰器打的分
+}
+
+export interface AiScore {
+  node: number;        // 子节点或打分装饰器的 id
+  score: number;       // 分数，1 = 1.0（协议里是万分比，读入时换算）
+  why: string;         // 打分装饰器的依据，例如“TargetDistance=85 → 归一 0.71 → InverseQuadratic 0.5”
 }
 
 export interface AiCheck {

@@ -149,6 +149,12 @@ func (tree *Tree) Validate(reg *Registry) error {
 			if !ok {
 				_, ok = builtinDecorators[node.SubType]
 			}
+			if !ok && reg.isScoreDecorator(node) {
+				if err := validateScoreDecorator(tree, node); err != nil {
+					return err
+				}
+				ok = true
+			}
 		case KindService:
 			_, ok = reg.services[node.SubType]
 		}
