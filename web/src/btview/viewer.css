@@ -174,3 +174,14 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   .btv-props, .btv-flag { display: none; }
   .btv-legend { margin-left: 0; }
 }
+
+/* 画板视图：画板叠在树 + 热力图上面，树那一列收窄，让决策带（进度条）占满宽度 */
+.btv-modes { display: inline-flex; margin-right: 8px; }
+.btv-modes .btv-btn:first-child { border-radius: 6px 0 0 6px; }
+.btv-modes .btv-btn:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+.btv-timeline-tools { display: inline-flex; align-items: center; gap: 5px; }
+.btv .gv { display: none; }
+.btv.mode-graph { --tree-width: 76px; }
+.btv.mode-graph .gv { display: block; z-index: 4; }
+.btv.mode-graph .btv-scroller, .btv.mode-graph .btv-heat { visibility: hidden; }
+.btv.mode-graph .btv-timeline-tools, .btv.mode-graph .btv-legend { display: none; }

@@ -8,6 +8,7 @@
 // 只依赖 model.ts 和 DOM，不引游戏代码：它会被单独打包塞进 HTML 文件里。
 
 import css from './viewer.css?inline';
+import { createGraph, graphStatusText, type GraphItemKind } from './graph';
 import type { AiNode, AiScore, AiTreeNode } from '../net/types';
 import {
   COMPOSITE_HINT,
@@ -54,6 +55,25 @@ const COLOR = {
   gap: '#c9cfdb',
 };
 const GAP_SECONDS = 0.4;   // 相邻两帧隔得比这久就当作断档
+const VIEW_STORAGE_KEY = 'btdemo.btview.mode';
+
+type ViewMode = 'graph' | 'timeline';
+
+// 记住上次用的视图（打不开 localStorage 时就用默认的画板）
+function loadViewMode(): ViewMode {
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY) === 'timeline' ? 'timeline' : 'graph';
+  } catch {
+    return 'graph';
+  }
+}
+function saveViewMode(mode: ViewMode) {
+  try {
+    localStorage.setItem(VIEW_STORAGE_KEY, mode);
+  } catch {
+    // 存不了就算了，下次还是默认画板
+  }
+}
 
 interface TreeDef {
   root: number;
@@ -233,7 +253,15 @@ export function createViewer(root: HTMLElement, options: { live: boolean }): Vie
   legend.innerHTML =
     '<i class="st-success"></i>成功 <i class="st-failure"></i>失败 <i class="st-running"></i>运行中 ' +
     '<i class="ck-pass"></i>条件通过 <i class="ck-fail"></i>未通过 <i class="ck-changed"></i>改了结果 <i class="ck-service"></i>服务触发 <i class="ck-score"></i>打分';
-  bar2.append(el('span', 'btv-label', '时间轴'), zoomOut, zoomIn, expandButton, collapseButton, pathButton, legend);
+  const graphModeButton = el('button', 'btv-btn', '画板');
+  const timelineModeButton = el('button', 'btv-btn', '时间轴');
+  graphModeButton.title = '像编辑器一样画出整棵树，叠上这一帧的执行流向';
+  timelineModeButton.title = '树 + 逐行对齐的时间轴热力图，看决策什么时候切换';
+  const modeGroup = el('span', 'btv-modes');
+  modeGroup.append(graphModeButton, timelineModeButton);
+  const timelineTools = el('span', 'btv-timeline-tools');
+  timelineTools.append(el('span', 'btv-label', '时间轴'), zoomOut, zoomIn);
+  bar2.append(modeGroup, timelineTools, expandButton, collapseButton, pathButton, legend);
 
   const main = el('div', 'btv-main');
   const board = el('div', 'btv-board');
@@ -265,6 +293,29 @@ export function createViewer(root: HTMLElement, options: { live: boolean }): Vie
 
   const tip = el('div', 'btv-tip hidden');
   root.append(top, bar, bar2, main, tip);
+
+  // 画板视图叠在树 + 热力图上面；树和热力图照常排版（决策带和“当前帧留在视野里”要用它们的尺寸）
+  let viewMode = loadViewMode();
+  const graph = createGraph({
+    select(nodeId) {
+      selected = selected === nodeId ? 0 : nodeId;
+      render();
+    },
+    toggleFold(nodeId) {
+      const tick = currentTick();
+      if (!tick) return;
+      const set = foldSet(tick.tree);
+      if (set.has(nodeId)) set.delete(nodeId);
+      else set.add(nodeId);
+      render();
+    },
+    tipText(kind, itemId, ownerId) {
+      return current >= 0 ? cellTip(ticks[current], kind, itemId, ownerId) : '';
+    },
+    showTip,
+    hideTip: () => tip.classList.add('hidden'),
+  });
+  scrollArea.append(graph.element);
 
   // ---------- 数据 ----------
   function toTreeDef(def: RecTreeDef): TreeDef {
@@ -866,6 +917,7 @@ export function createViewer(root: HTMLElement, options: { live: boolean }): Vie
     followButton.classList.toggle('on', follow);
     spacer.style.width = `${Math.max(1, ticks.length * columnWidth)}px`;
     renderTree();
+    renderGraph();
     renderSide();
     queueDraw();
   }
@@ -886,6 +938,76 @@ export function createViewer(root: HTMLElement, options: { live: boolean }): Vie
     render();
     keepVisible();
   }
+
+  // cellTip 是某一帧里某一行（节点 / 装饰器 / 服务）的悬停说明；热力图和画板共用。
+  function cellTip(tick: Tick, kind: GraphItemKind, itemId: number, ownerId: number): string {
+    const def = trees.get(tick.tree);
+    const node = def?.nodes.get(itemId);
+    const visit = visitsOf(tick).get(ownerId);
+    let text = `${formatTime(tick.time)} · ${node ? nodeTitle(node) : '#' + itemId}\n`;
+    if (kind === 'node') {
+      text += visit ? `${visit.order}. ${graphStatusText(visit.node)}` : '未执行';
+      if (visit?.node.why.length) text += '\n→ ' + visit.node.why.join('；');
+      const childScore = tickScores(tick).get(itemId);
+      if (childScore) text += `\n效用分数 ${scoreText(childScore.score)}`;
+    } else if (kind === 'decorator' && tickScores(tick).has(itemId)) {
+      const score = tickScores(tick).get(itemId);
+      text += `分数 ${scoreText(score.score)}${score.why ? '：' + score.why : ''}`;
+    } else if (kind === 'decorator') {
+      const check = visit?.node.checks.find((item) => item.node === itemId);
+      text += check ? `${check.pass ? '通过' : '未通过'}${check.why ? '：' + check.why : ''}` : visit ? '本帧没检查' : '未执行';
+    } else {
+      const note = node ? serviceNote(visit, node.subType) : null;
+      text += note == null ? '未触发' : `触发${note ? '：' + note : ''}`;
+    }
+    return text;
+  }
+
+  function showTip(text: string, clientX: number, clientY: number) {
+    tip.textContent = text;
+    tip.classList.remove('hidden');
+    const tipX = Math.min(window.innerWidth - tip.offsetWidth - 8, clientX + 14);
+    tip.style.left = `${Math.max(8, tipX)}px`;
+    tip.style.top = `${clientY + 16}px`;
+  }
+
+  // renderGraph 把当前帧交给画板（只在画板视图下画）。
+  function renderGraph() {
+    if (viewMode !== 'graph') return;
+    const tick = currentTick();
+    const def = currentTree();
+    if (!tick || !def) {
+      graph.render(null, options.live ? '等待游戏页发来数据…（在调试面板里选一个怪物）' : '录像里没有数据');
+      return;
+    }
+    const found = decisionOf(tick);
+    graph.render({
+      treeName: tick.tree,
+      root: def.root,
+      nodes: def.nodes,
+      visits: visitsOf(tick),
+      scores: tickScores(tick),
+      pathIds: found?.pathIds || [],
+      paused: pauseReason(tick) || undefined,
+      focus: selected || found?.leafId || 0,
+      folded: foldSet(tick.tree),
+    });
+  }
+
+  function setViewMode(mode: ViewMode) {
+    viewMode = mode;
+    saveViewMode(mode);
+    root.classList.toggle('mode-graph', mode === 'graph');
+    graphModeButton.classList.toggle('on', mode === 'graph');
+    timelineModeButton.classList.toggle('on', mode === 'timeline');
+    tip.classList.add('hidden');
+    rowsKey = '';
+    render();
+    keepVisible();
+    if (mode === 'graph') graph.shown();
+  }
+  graphModeButton.addEventListener('click', () => setViewMode('graph'));
+  timelineModeButton.addEventListener('click', () => setViewMode('timeline'));
 
   // ---------- 交互 ----------
   firstButton.addEventListener('click', () => goTo(0));
@@ -969,33 +1091,12 @@ export function createViewer(root: HTMLElement, options: { live: boolean }): Vie
 
   scroller.addEventListener('mousemove', (event) => {
     const found = hit(event);
-    const def = currentTree();
-    if (!found || !found.row || !def) {
+    if (!found || !found.row || !currentTree()) {
       tip.classList.add('hidden');
       return;
     }
-    const tick = ticks[found.index];
-    const node = def.nodes.get(found.row.id);
-    const visit = visitsOf(tick).get(found.row.owner);
-    let text = `${formatTime(tick.time)} · ${node ? nodeTitle(node) : '#' + found.row.id}\n`;
-    if (found.row.kind === 'node') {
-      text += visit ? `${STATUS_TEXT[visit.node.status]}${visit.node.fresh ? '' : '（接着上一帧）'}` : '未执行';
-      if (visit?.node.why.length) text += '\n→ ' + visit.node.why.join('；');
-    } else if (found.row.kind === 'decorator' && tickScores(tick).has(found.row.id)) {
-      const score = tickScores(tick).get(found.row.id);
-      text += `分数 ${scoreText(score.score)}${score.why ? '：' + score.why : ''}`;
-    } else if (found.row.kind === 'decorator') {
-      const check = visit?.node.checks.find((item) => item.node === found.row.id);
-      text += check ? `${check.pass ? '通过' : '未通过'}${check.why ? '：' + check.why : ''}` : visit ? '本帧没检查' : '未执行';
-    } else {
-      const note = serviceNote(visit, node.subType);
-      text += note == null ? '未触发' : `触发${note ? '：' + note : ''}`;
-    }
-    tip.textContent = text;
-    tip.classList.remove('hidden');
-    const tipX = Math.min(window.innerWidth - tip.offsetWidth - 8, event.clientX + 14);
-    tip.style.left = `${Math.max(8, tipX)}px`;
-    tip.style.top = `${event.clientY + 16}px`;
+    const row = found.row;
+    showTip(cellTip(ticks[found.index], row.kind, row.id, row.owner), event.clientX, event.clientY);
   });
   scroller.addEventListener('mouseleave', () => tip.classList.add('hidden'));
   scroller.addEventListener('scroll', queueDraw, { passive: true });
@@ -1095,7 +1196,7 @@ export function createViewer(root: HTMLElement, options: { live: boolean }): Vie
     else scroller.scrollLeft = 0;
   }
 
-  render();
+  setViewMode(viewMode);
 
   return {
     load,

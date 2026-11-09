@@ -1,0 +1,173 @@
+/* 画板视图：卡片样式照着行为树编辑器（装饰器、服务在上，节点在下，左边一条类型色），换成查看器的深色调。 */
+.gv {
+  --card-bg: #1c222c;
+  --card-border: #2e3644;
+  --card-text: #e6e9ef;
+  --card-text-2: #aab3c3;
+  --card-text-3: #7d8698;
+  --link: #3a4252;
+  position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: grab;
+  background-color: #12161d;
+  background-image: radial-gradient(#252c38 1px, transparent 1px);
+  background-size: 16px 16px;
+  user-select: none;
+}
+.gv:active { cursor: grabbing; }
+.gv-content-layer { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.gv-links { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.gv-cards { position: absolute; left: 0; top: 0; }
+.gv-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--dim); }
+
+/* 连线 */
+.gv-link { fill: none; stroke: var(--link); stroke-width: 1.5px; stroke-linecap: round; }
+.gv-link.success { stroke: var(--success); }
+.gv-link.failure { stroke: var(--failure); stroke-opacity: .7; }
+.gv-link.running { stroke: var(--running); }
+.gv-link.on-path {
+  stroke: var(--gold); stroke-width: 3.5px; stroke-dasharray: 7 6;
+  animation: gvFlow .7s linear infinite;
+  filter: drop-shadow(0 0 4px rgba(240, 200, 110, .6));
+}
+@keyframes gvFlow { to { stroke-dashoffset: -13; } }
+
+/* 卡片 */
+.gv-card {
+  position: absolute; left: 0; top: 0; display: inline-block; min-width: 160px; max-width: 240px;
+  color: var(--card-text); background: var(--card-bg); border: 1px solid var(--card-border);
+  border-left: 4px solid var(--item-color); border-radius: 7px; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+  transition: opacity .15s, filter .15s;
+}
+.gv-card:hover { border-color: #4a5466; border-left-color: var(--item-color); }
+.gv-card > .gv-item:first-of-type { border-top-left-radius: 5px; border-top-right-radius: 5px; }
+.gv-card > .gv-head { border-bottom-left-radius: 5px; border-bottom-right-radius: 5px; }
+
+.gv-item { position: relative; display: flex; align-items: flex-start; gap: 8px; }
+.gv-head { padding: 8px 10px; }
+.gv-decorator, .gv-service {
+  align-items: center; padding: 5px 8px; color: var(--card-text-2);
+  background: color-mix(in srgb, var(--item-color) 10%, var(--card-bg));
+  border-bottom: 1px solid var(--card-border); border-left: 3px solid var(--item-color);
+}
+.gv-tag { flex: none; color: var(--card-text-3); font-size: 9px; font-weight: 650; letter-spacing: .06em; }
+.gv-badge {
+  flex: 0 0 24px; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+  color: var(--item-color); background: color-mix(in srgb, var(--item-color) 18%, transparent);
+  border-radius: 6px; font-size: 13px; font-weight: 700; line-height: 1;
+}
+.gv-decorator .gv-badge, .gv-service .gv-badge { flex-basis: 16px; width: 16px; height: 16px; background: none; font-size: 12px; }
+.gv-content { flex: 1 1 auto; min-width: 0; word-wrap: break-word; }
+.gv-name { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.gv-decorator .gv-name, .gv-service .gv-name { font-size: 12px; font-weight: 550; color: var(--card-text); }
+.gv-namesub { display: block; font-size: 11px; font-weight: 400; color: var(--card-text-3); }
+.gv-label { display: block; }
+.gv-desc { margin-top: 2px; font-size: 11.5px; color: var(--card-text-2); }
+.gv-decorator .gv-desc, .gv-service .gv-desc { font-size: 10.5px; }
+.gv-flags { margin-top: 2px; font-size: 10px; color: var(--card-text-3); }
+.gv-id { position: absolute; right: 3px; bottom: 1px; font: 9px/12px ui-monospace, monospace; color: var(--card-text-3); }
+.gv-state {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px;
+  margin-left: auto; padding: 0 3px; border-radius: 8px; font-size: 10px; font-weight: 700; color: #fff;
+}
+.gv-state:empty { display: none; }
+.gv-item[data-state='pass'] .gv-state { background: var(--success); }
+.gv-item[data-state='fail'] .gv-state { background: var(--failure); }
+.gv-item[data-state='fail'] { background: color-mix(in srgb, var(--failure) 16%, var(--card-bg)); }
+.gv-item[data-state='changed'] .gv-state { background: var(--changed); }
+.gv-item[data-state='ran'] .gv-state { background: var(--service); animation: gvPing .9s ease-out 1; }
+.gv-item[data-state='score'] .gv-state { background: #1f3657; color: #a9c9ff; font-weight: 600; }
+@keyframes gvPing { from { box-shadow: 0 0 0 0 rgba(79, 163, 232, .7); } to { box-shadow: 0 0 0 8px transparent; } }
+
+/* 角标：访问顺序（左上）、导出编号和结果（右上）、效用分数（右下） */
+.gv-order {
+  position: absolute; top: -10px; left: -12px; z-index: 2; min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 10px; font: 700 11px/20px system-ui, sans-serif; text-align: center; color: #0e1117;
+  background: var(--card-text-2); box-shadow: 0 0 0 2px #12161d; font-variant-numeric: tabular-nums;
+}
+.gv-order:empty { display: none; }
+.run-success .gv-order { background: var(--success); }
+.run-failure .gv-order { background: var(--failure); }
+.run-running .gv-order, .run-cont .gv-order { background: var(--running); }
+.gv-nodeid {
+  position: absolute; top: -9px; right: 14px; z-index: 2; padding: 0 5px; border-radius: 4px;
+  font: 10px/14px ui-monospace, monospace; color: var(--card-text-2); background: #12161d; border: 1px solid var(--card-border);
+}
+.gv-result {
+  position: absolute; top: -9px; right: -9px; z-index: 2; display: none; width: 18px; height: 18px;
+  align-items: center; justify-content: center; border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff;
+}
+.gv-result.success { display: inline-flex; background: var(--success); }
+.gv-result.failure { display: inline-flex; background: var(--failure); }
+.gv-scoreb {
+  position: absolute; bottom: -10px; right: 10px; z-index: 2; padding: 0 6px; border-radius: 9px;
+  font: 600 10.5px/17px system-ui, sans-serif; color: #a9c9ff; background: #1a2a44; border: 1px solid #35507a;
+}
+.gv-scoreb:empty { display: none; }
+
+/* 运行状态：外圈 */
+.gv-card.run-idle { opacity: .5; filter: saturate(.35); }
+.gv-card.run-idle:hover { opacity: .8; }
+.gv-card.run-success { box-shadow: 0 0 0 3px var(--success), 0 1px 3px rgba(0, 0, 0, .4); }
+.gv-card.run-failure { box-shadow: 0 0 0 3px var(--failure), 0 1px 3px rgba(0, 0, 0, .4); }
+.gv-card.run-running { box-shadow: 0 0 0 3px var(--running); animation: gvPulse 1.2s ease-in-out infinite; }
+.gv-card.run-cont { outline: 3px dashed var(--running); outline-offset: 1px; }
+@keyframes gvPulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--running), 0 0 0 3px transparent; }
+  50% { box-shadow: 0 0 0 3px var(--running), 0 0 0 9px rgba(239, 181, 64, .28); }
+}
+.gv-card.on-path .gv-head .gv-label, .gv-card.on-path .gv-head .gv-name { color: var(--gold); }
+.gv-card.leaf::after {
+  content: '正在执行'; position: absolute; left: 50%; bottom: -22px; transform: translateX(-50%);
+  padding: 1px 8px; border-radius: 9px; white-space: nowrap; font: 600 10.5px/16px system-ui, sans-serif;
+  color: #0e1117; background: var(--gold);
+}
+.gv-card.sel { border-color: var(--gold); border-left-color: var(--item-color); }
+.gv-card.sel .gv-head { background: rgba(240, 200, 110, .08); }
+@media (prefers-reduced-motion: reduce) {
+  .gv-card.run-running, .gv-link.on-path, .gv-item[data-state='ran'] .gv-state { animation: none; }
+}
+
+/* 折叠按钮（卡片底边中间） */
+.gv-fold {
+  position: absolute; bottom: -9px; left: 50%; z-index: 3; min-width: 18px; height: 18px; padding: 0 5px;
+  transform: translateX(-50%); border-radius: 9px; font: 600 10px/1 system-ui, sans-serif; cursor: pointer;
+  color: var(--card-text-2); background: #12161d; border: 1px solid #4a5466; opacity: 0;
+}
+.gv-card:hover .gv-fold { opacity: 1; }
+.gv-fold.folded { opacity: 1; color: var(--gold); border-color: var(--gold); background: #2a2414; }
+.gv-card.leaf .gv-fold:not(.folded) { display: none; }
+
+/* 右上角工具条和左下角图例 */
+.gv-tools { position: absolute; top: 8px; right: 8px; z-index: 5; display: flex; gap: 4px; }
+.gv-tool {
+  min-height: 26px; padding: 2px 9px; border-radius: 6px; font: inherit; font-size: 12px; cursor: pointer;
+  color: var(--text); background: rgba(27, 33, 43, .92); border: 1px solid var(--line);
+}
+.gv-tool:hover { border-color: var(--gold); }
+.gv-tool.on { color: var(--gold); border-color: var(--gold); background: #3a2f12; }
+.gv-legend {
+  position: absolute; left: 8px; bottom: 8px; z-index: 5; display: flex; flex-wrap: wrap; gap: 4px 12px;
+  max-width: calc(100% - 16px); padding: 4px 9px; border-radius: 6px; font-size: 11.5px; color: var(--dim);
+  background: rgba(18, 22, 29, .9); border: 1px solid var(--line); pointer-events: none;
+}
+.gv-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.gv-legend .ring { width: 12px; height: 12px; border-radius: 3px; box-sizing: border-box; border: 2px solid; }
+.gv-legend .ring.success { border-color: var(--success); }
+.gv-legend .ring.failure { border-color: var(--failure); }
+.gv-legend .ring.running { border-color: var(--running); }
+.gv-legend .ring.cont { border-color: var(--running); border-style: dashed; }
+.gv-legend .num {
+  min-width: 16px; height: 16px; border-radius: 8px; font-size: 10px; line-height: 16px; text-align: center;
+  color: #0e1117; background: var(--success);
+}
+.gv-legend .flow { width: 22px; height: 0; border-top: 3px dashed var(--gold); }
+
+@media (max-width: 900px) {
+  .gv-legend { display: none; }
+}
+.gv-paused {
+  position: absolute; top: 8px; left: 8px; z-index: 5; max-width: calc(100% - 300px); padding: 4px 10px;
+  border-radius: 6px; font-size: 12px; color: #f3d9a0; background: rgba(58, 47, 18, .92); border: 1px solid #6b5626;
+  pointer-events: none;
+}
+@media (max-width: 900px) { .gv-paused { top: 42px; max-width: calc(100% - 16px); } }
