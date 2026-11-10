@@ -7,6 +7,7 @@
 
 import { Assets, Rectangle, Texture } from 'pixi.js';
 import type { Flipbook } from './flipbook';
+import { MUZZLE_OVERRIDE } from './knightActions';
 
 // 角色动画：一张图一行一个动画，每格一样大。
 export interface CharacterArt {
@@ -15,10 +16,24 @@ export interface CharacterArt {
   anchor: [number, number];            // 格子里脚底中心的位置（像素）
   ppu?: number;                        // 每个世界像素对应几个图片像素，默认 2
   refR?: number;                       // 画的时候按哪个碰撞半径画的；实体半径不同时按比例缩放
-  anims: Partial<Record<AnimName, { row: number; frames: number; fps?: number }>>;
+  columns?: number;                    // 一行几格（动画用 start 写起始格时需要）
+  // 换装：键是 "皮肤|武器"（如 "obsidian|blood_blade"），值是那套外观的图。每张图的格子排法都一样。
+  // 没列出的组合用 sheet。用到哪套才加载哪套。
+  variants?: Record<string, string>;
+  // 飞行道具出手点（模型坐标：相对脚底，x 朝前，y 朝下），键是技能的 fx 名；不写就用程序模型算出来的
+  muzzles?: Record<string, [number, number]>;
+  anims: Partial<Record<AnimName, AnimDef>>;
 }
 
-export type AnimName = 'idle' | 'walk' | 'attack' | 'hit' | 'death' | 'block';
+// 一个动画在图里的位置：row 表示占第几行（从行首开始）；或者用 start 写起始格的序号（从 0 数，按行排），
+// 这样短动画可以一个接一个排，不用每个占一整行。
+export interface AnimDef { row?: number; start?: number; frames: number; fps?: number }
+
+// 动画名：基础的六个，加上完美格挡 parry、破防 broken，以及技能专属动作 "act:<技能的 fx 名>"。
+// 缺哪个都可以：技能动作缺了用 attack，parry 缺了用 block，broken 缺了照常站着。
+export type AnimName = 'idle' | 'walk' | 'attack' | 'hit' | 'death' | 'block' | 'parry' | 'broken' | `act:${string}`;
+
+type AnimFrames = Partial<Record<AnimName, Texture[]>>;
 
 // 物件：每个外观变体一张图（或一行动画帧）。
 export interface PropArt {
@@ -48,7 +63,28 @@ export interface Manifest {
 // 加载好的角色：每个动画一组贴图。
 export interface LoadedCharacter {
   def: CharacterArt;
-  anims: Partial<Record<AnimName, Texture[]>>;
+  anims: AnimFrames;
+  variants: Map<string, AnimFrames | null>;   // 已经加载（或正在加载，值为 null）的换装
+}
+
+/**
+ * characterFrames 返回角色某套外观（皮肤 + 武器）的动画贴图。那套图还没加载好时先用默认的，
+ * 加载完下一帧自动换上。
+ */
+export function characterFrames(character: LoadedCharacter, skin?: string, gear?: string): AnimFrames {
+  const variants = character.def.variants;
+  if (!variants) return character.anims;
+  const path = variants[`${skin || ''}|${gear || ''}`];
+  if (!path || path === character.def.sheet) return character.anims;
+  const loaded = character.variants.get(path);
+  if (loaded) return loaded;
+  if (loaded === undefined) {
+    character.variants.set(path, null);
+    Assets.load<Texture>(BASE + path)
+      .then((texture) => character.variants.set(path, sliceSheet(texture, character.def)))
+      .catch((err) => console.error(`美术资源 ${path} 加载失败`, err));
+  }
+  return character.anims;
 }
 
 export interface LoadedProp {
@@ -86,7 +122,10 @@ export async function loadArt(): Promise<void> {
       continue;
     }
     jobs.push(tex(def.sheet).then((t) => {
-      art.characters.set(name, { def, anims: sliceSheet(t, def) });
+      art.characters.set(name, { def, anims: sliceSheet(t, def), variants: new Map() });
+      for (const [action, point] of Object.entries(def.muzzles || {})) {
+        if (pair(point)) MUZZLE_OVERRIDE[action] = { x: point[0], y: point[1] };
+      }
     }).catch((err) => console.error(`美术资源 ${name} 加载失败`, err)));
   }
   for (const [kind, def] of Object.entries(m.props || {})) {
@@ -133,13 +172,16 @@ function sliceImage(img: HTMLImageElement, def: FxArt): HTMLCanvasElement[] {
   });
 }
 
-function sliceSheet(t: Texture, def: CharacterArt): Partial<Record<AnimName, Texture[]>> {
+function sliceSheet(t: Texture, def: CharacterArt): AnimFrames {
   const [fw, fh] = def.frame;
-  const out: Partial<Record<AnimName, Texture[]>> = {};
-  for (const [name, a] of Object.entries(def.anims) as [AnimName, { row: number; frames: number }][]) {
+  const columns = def.columns || Math.max(1, Math.floor(t.width / fw));
+  const out: AnimFrames = {};
+  for (const [name, a] of Object.entries(def.anims) as [AnimName, AnimDef][]) {
     const frames: Texture[] = [];
+    const first = a.start ?? (a.row || 0) * columns;
     for (let i = 0; i < a.frames; i++) {
-      frames.push(new Texture({ source: t.source, frame: new Rectangle(i * fw, a.row * fh, fw, fh) }));
+      const cell = first + i;
+      frames.push(new Texture({ source: t.source, frame: new Rectangle((cell % columns) * fw, Math.floor(cell / columns) * fh, fw, fh) }));
     }
     out[name] = frames;
   }

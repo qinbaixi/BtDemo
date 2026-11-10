@@ -5,7 +5,7 @@
 import { Container, Graphics, Sprite, Texture, type RenderLayer } from 'pixi.js';
 import { MODEL_SCALE, modelBox } from '../../game/config';
 import { SETTINGS } from '../../game/settings';
-import { art, type LoadedCharacter } from '../art';
+import { art, characterFrames, type LoadedCharacter } from '../art';
 import { drawModel } from '../models';
 import { CanvasSprite } from './canvasSprite';
 import { InkFilter } from './inkFilter';
@@ -229,11 +229,21 @@ export class ActorView {
 
   // showFrame 按姿势挑美术动画的一帧：死亡、受击、攻击按进度，走路按步伐相位，待机按时间循环。
   private showFrame(pose: Pose): void {
-    const { def, anims } = this.sheet!;
+    const { def } = this.sheet!;
+    const anims = characterFrames(this.sheet!, pose.skin, pose.gear);
     const pick = (): [Texture[] | undefined, number] => {
       if (pose.dead >= 0 && anims.death) return [anims.death, pose.dead];
+      const broken = pose.broken ?? -1;
+      if (broken >= 0 && anims.broken) return [anims.broken, broken];
       if (pose.hit >= 0 && anims.hit) return [anims.hit, pose.hit];
-      if (pose.attack >= 0 && anims.attack) return [anims.attack, pose.attack];
+      if (pose.attack >= 0) {
+        // 技能有专属动作就播专属的，没有就用普通攻击
+        const action = pose.action ? anims[`act:${pose.action}`] : undefined;
+        if (action) return [action, pose.attack];
+        if (anims.attack) return [anims.attack, pose.attack];
+      }
+      const parry = pose.parry ?? -1;
+      if (pose.blocking && parry >= 0 && anims.parry) return [anims.parry, parry];
       if (pose.blocking && anims.block) return [anims.block, 0];
       if (pose.moving && anims.walk) return [anims.walk, (((pose.walk / (Math.PI * 2)) % 1) + 1) % 1];
       const idle = anims.idle || anims.walk;

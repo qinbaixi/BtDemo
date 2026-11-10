@@ -1,10 +1,11 @@
 # 用 Blender 做骑士（玩家主角）的模型，并渲染成游戏用的动画表（sprite sheet）。
 #
 # 用法（不需要显卡，Blender 以 Python 模块的方式跑，见同目录 README.md）：
-#   python tools/blender/knight.py sheet  <输出目录>     渲染整张动画表 knight.png + 清单片段 knight.json
-#   python tools/blender/knight.py poses  <输出目录>     每个动画挑几帧放大渲染，检查造型用
-#   python tools/blender/knight.py turn   <输出目录>     转一圈的展示图
-#   python tools/blender/knight.py blend  <输出目录>     只保存 knight.blend（可以用 Blender 打开看）
+#   python tools/blender/knight.py sheet  <输出目录> [皮肤] [武器]   渲染一套外观的动画表 <皮肤>-<武器>.webp + 清单片段 knight.json
+#   python tools/blender/knight.py poses  <输出目录> [皮肤] [武器]   挑几帧放大渲染，检查造型用
+#   python tools/blender/knight.py turn   <输出目录> [皮肤] [武器]   转一圈的展示图
+#   python tools/blender/knight.py blend  <输出目录> [皮肤]          保存 knight-<皮肤>.blend（可以用 Blender 打开看）
+# 全部外观一起渲染用 tools/blender/render-all.sh。
 #
 # 整体思路：
 #   1. 模型：全部用代码拼出来（旋转体、椭球、胶囊、挤出的多边形），每个部件挂在一个“关节”空物体下面。
@@ -39,17 +40,35 @@ INK = '#0b0710'                    # 墨线
 SHADOW_TINT = '#2a1438'            # 暗部偏冷紫
 LIGHT_TINT = '#ffe6b0'             # 高光偏暖金
 
-# 默认外观：圣骑士（和 models.ts 的 KNIGHT_SKINS.paladin 同一套配色）
-LOOK = {
-    'player': '#4da3ff',           # 玩家颜色：外袍、袖子、披风、羽饰、盾面
-    'steel': '#c3cbd6',
-    'trim': '#e2b04a',
-    'legs': '#4a5160',
-    'boots': '#2b2f3a',
-    'hand': '#8a6a4c',
-    'skin': '#f0c8a0',
-    'blade': '#e8eef5',
-    'gem': '#ff4a3a',
+# 皮肤：和 web/src/render/models.ts 的 KNIGHT_SKINS 同一套配色。
+#   cloth 外袍和袖子、cape 披风、plume 盔顶羽饰的颜色（None 不要）、helm 头盔样式、
+#   shield 盾面、emblem 盾徽（sun / cross）、eye 眼缝或眼窝里的光
+SKINS = {
+    'paladin': {
+        'steel': '#c3cbd6', 'trim': '#e2b04a', 'legs': '#4a5160', 'boots': '#2b2f3a', 'hand': '#8a6a4c',
+        'cloth': '#4da3ff', 'cape': '#3a7ac4', 'plume': '#4da3ff', 'helm': 'open', 'shield': '#3672b3', 'emblem': 'sun', 'eye': None,
+    },
+    'obsidian': {
+        'steel': '#4a4a58', 'trim': '#c8343a', 'legs': '#26262e', 'boots': '#18181e', 'hand': '#2e2e36',
+        'cloth': '#7a1622', 'cape': '#5c0f18', 'plume': None, 'helm': 'horned', 'shield': '#23232b', 'emblem': 'cross', 'eye': '#ff4a3a',
+    },
+    'gilded': {
+        'steel': '#e6c46c', 'trim': '#fff1c2', 'legs': '#8a7656', 'boots': '#5a4630', 'hand': '#b0905a',
+        'cloth': '#f2efe6', 'cape': '#efe9da', 'plume': None, 'helm': 'winged', 'shield': '#f4f0e4', 'emblem': 'sun', 'eye': None,
+    },
+    'boneguard': {
+        'steel': '#d8d0b8', 'trim': '#5fd8ff', 'legs': '#34363e', 'boots': '#202128', 'hand': '#b8ae96',
+        'cloth': '#2a3440', 'cape': '#1e2a36', 'plume': None, 'helm': 'skull', 'shield': '#2a3038', 'emblem': 'cross', 'eye': '#7fe8ff',
+    },
+}
+FACE_SKIN = '#f0c8a0'
+
+# 武器外观：和 models.ts 的 KNIGHT_SWORDS 对应。length / width 是相对普通骑士剑的比例，
+# guard 护手颜色（None 用皮肤的镶边色）、edge 刃上发光的颜色（None 不发光）
+SWORDS = {
+    'knight_sword': {'length': 1.0, 'width': 1.0, 'blade': '#e8eef5', 'guard': None, 'gem': '#ff4a3a', 'edge': None},
+    'blood_blade': {'length': 1.05, 'width': 0.95, 'blade': '#8a2430', 'guard': '#2a2228', 'gem': '#ff2a3a', 'edge': '#ff5a64'},
+    'flame_greatsword': {'length': 1.25, 'width': 1.37, 'blade': '#5a342a', 'guard': '#e2802a', 'gem': '#ffd27a', 'edge': '#ff8a2a'},
 }
 
 
@@ -87,17 +106,17 @@ def camera_axes():
         -math.cos(CAM_YAW) * math.cos(CAM_PITCH),
         math.sin(CAM_PITCH),
     ))
-    right = Vector((0, 0, 1)).cross(toward).normalized() * -1
-    up = toward.cross(right).normalized() * -1
+    right = Vector((0, 0, 1)).cross(toward).normalized()
+    up = toward.cross(right).normalized()
     return toward, right, up
 
 
 def light_vectors():
-    """主光在画面左上、偏向镜头；背光的亮边来自画面右后方。"""
+    """主光在正上方偏镜头、略偏画面右（角色面朝的方向），脸和盾是亮的；背光的亮边在身后那一侧。"""
     toward, right, up = camera_axes()
-    main = (-0.42 * right + 0.6 * up + 0.8 * toward).normalized()
+    main = (0.42 * right + 0.6 * up + 0.8 * toward).normalized()
     half = (main + toward).normalized()
-    rim = (0.85 * right + 0.1 * up - 0.5 * toward).normalized()
+    rim = (-0.85 * right + 0.1 * up - 0.5 * toward).normalized()
     return main, half, rim
 
 
@@ -377,14 +396,83 @@ SHIELD_R = 7.4
 CAPE_COLS, CAPE_ROWS = 8, 9
 
 
-def build_knight(look):
-    player = look['player']
+def build_helm(look):
+    """头盔按皮肤换样式：open 露脸的圆盔，winged 再加一对金翼，horned 全封闭带角，skull 骷髅面盔。"""
+    steel, trim, style = look['steel'], look['trim'], look['helm']
+    if style in ('open', 'winged'):
+        helmet = add_object('helmet', ellipsoid(HEAD_R + 0.2, HEAD_R + 0.1, HEAD_R + 0.2, 18, 36), 'head', steel, 'metal')
+        cutter = add_object('helmet_cutter', box(12.0, 17.0, 9.6, 1.8), 'head', INK, 'flat', location=(7.7, 0, -3.3))
+        cutter.hide_render = True
+        cutter.display_type = 'WIRE'
+        boolean = helmet.modifiers.new('face_opening', 'BOOLEAN')
+        boolean.operation = 'DIFFERENCE'
+        boolean.object = cutter
+        boolean.solver = 'EXACT'
+        add_object('face', ellipsoid(6.6, 6.3, 6.6, 14, 28), 'head', FACE_SKIN, location=(0.5, 0, -0.4))
+        for side in (-1, 1):
+            name = 'L' if side > 0 else 'R'
+            add_object(f'eye_{name}', ellipsoid(0.55, 0.95, 1.55, 8, 14), 'head', '#1a1420', 'flat', location=(6.55, side * 2.5, -1.3))
+            add_object(f'cheek_{name}', ellipsoid(0.4, 1.0, 0.55, 6, 12), 'head', '#f0a58c', 'flat', location=(6.2, side * 3.9, -3.3))
+        add_object('brow_band', tube(ring_points(HEAD_R + 0.15, HEAD_R + 0.05, 1.7, 40), 0.75, closed=True), 'head', trim, 'metal')
+        add_object('nose_guard', box(1.0, 1.4, 4.4, 0.3), 'head', steel, 'metal', location=(7.2, 0, -0.2), smooth=False)
+        add_object('crest', tube(arc_points(HEAD_R + 0.35, math.radians(20), math.radians(165)), 0.75), 'head', trim, 'metal')
+        if style == 'winged':
+            # 头盔两侧一对往后上方展开的金翼
+            wing = [(1.5, -0.5), (0.5, 4.0), (-2.5, 8.5), (-7.5, 12.0), (-6.0, 8.0), (-9.5, 8.6), (-7.2, 5.0), (-10.0, 4.4), (-6.5, 1.6), (-7.5, -0.6), (-2.5, -1.6)]
+            for side in (-1, 1):
+                name = 'L' if side > 0 else 'R'
+                add_object(f'wing_{name}', slab(wing, 0.9), 'head', trim, 'metal', location=(-0.5, side * (HEAD_R + 0.5), 1.8), rotation=(side * 0.3, 0, 0), smooth=False)
+    elif style == 'horned':
+        # 全封闭头盔：一道眼缝，缝里透出红光；两侧一对往前上方弯的角
+        add_object('helmet', ellipsoid(HEAD_R + 0.2, HEAD_R + 0.1, HEAD_R + 0.2, 18, 36), 'head', steel, 'metal')
+        slit = [(math.cos(a) * (HEAD_R + 0.05), math.sin(a) * (HEAD_R + 0.05), -0.4) for a in [math.radians(-72 + 144 * i / 16) for i in range(17)]]
+        add_object('eye_slit', tube(slit, 0.85), 'head', INK, 'flat')
+        for side in (-1, 1):
+            name = 'L' if side > 0 else 'R'
+            add_object(f'eye_{name}', ellipsoid(0.5, 1.25, 0.6, 6, 12), 'head', look['eye'], 'flat', location=(6.95, side * 2.9, -0.4))
+            horn = [(0.2, side * 6.4, 3.2), (0.4, side * 9.6, 4.6), (1.8, side * 11.4, 7.6), (4.4, side * 11.2, 11.0), (6.6, side * 10.2, 13.0)]
+            add_object(f'horn_{name}', tube(horn, [1.9, 1.75, 1.35, 0.8, 0.15], 10), 'head', '#ddd2bc')
+        add_object('crest', tube(arc_points(HEAD_R + 0.3, math.radians(-8), math.radians(170)), 0.6), 'head', shade(steel, 0.25), 'metal')
+        add_object('jaw_band', tube(ring_points(HEAD_R - 1.2, HEAD_R - 1.3, -5.2, 32), 0.7, closed=True), 'head', trim, 'metal')
+    elif style == 'skull':
+        # 骷髅面盔：骨白的圆颅，深陷的眼窝里燃着灵火，下面是带一排牙的下颌
+        bone = steel
+        add_object('helmet', ellipsoid(HEAD_R + 0.2, HEAD_R + 0.1, HEAD_R + 0.2, 18, 36), 'head', bone)
+        add_object('jaw', box(6.0, 8.8, 3.6, 1.1), 'head', shade(bone, -0.08), location=(3.9, 0, -6.3))
+        for side in (-1, 1):
+            name = 'L' if side > 0 else 'R'
+            add_object(f'socket_{name}', ellipsoid(1.0, 1.9, 2.2, 8, 14), 'head', INK, 'flat', location=(5.75, side * 3.8, -0.2))
+            add_object(f'eye_{name}', ellipsoid(0.6, 0.95, 1.1, 6, 12), 'head', look['eye'], 'flat', location=(6.3, side * 4.2, -0.5))
+        add_object('nose', ellipsoid(0.6, 0.8, 1.1, 6, 10), 'head', '#1a1418', 'flat', location=(7.25, 0, -2.9))
+        for i in range(6):
+            add_object(f'tooth_gap_{i}', box(0.5, 0.3, 1.9), 'head', INK, 'flat', location=(6.75, -3.2 + i * 1.28, -5.4), smooth=False)
+
+
+def build_sword(look, sword):
+    """剑：关节在握把中间，剑身沿 +Z，剑面朝 Y。"""
+    length = SWORD_LENGTH * sword['length']
+    half_width = 2.0 * sword['width']
+    outline = [(-half_width, 3.4), (half_width, 3.4), (half_width, length - 3.2), (0, length + 1.2), (-half_width, length - 3.2)]
+    add_object('blade', slab(outline, 0.5, ridge=0.55), 'sword', sword['blade'], 'blade', smooth=False)
+    add_object('guard', box(6.8 * max(1.0, sword['width'] * 0.9), 1.7, 1.5, 0.35), 'sword', sword['guard'] or look['trim'], 'metal', location=(0, 0, 3.1), smooth=False)
+    add_object('grip', capsule(0.95, 0.95, 4.8), 'sword', '#5a3d28', location=(0, 0, 2.8))
+    add_object('pommel', ellipsoid(1.35, 1.35, 1.35, 8, 14), 'sword', sword['gem'], 'glow', location=(0, 0, -2.6))
+    if sword['edge']:
+        # 发光的刃：沿剑身两边到剑尖各一条亮线
+        for side in (-1, 1):
+            edge = [(side * (half_width - 0.25), 0, 4.2), (side * (half_width - 0.25), 0, length - 3.4), (0, 0, length + 0.6)]
+            add_object(f'edge_{"L" if side > 0 else "R"}', tube(edge, 0.75, 6), 'sword', sword['edge'], 'flat')
+    return length
+
+
+def build_knight(look, sword):
     steel, trim = look['steel'], look['trim']
+    cloth = look['cloth']
 
     # ---- 胯：腰带、战裙
     add_object('belt', lathe([(4.9, -0.2), (5.25, 0.3), (5.25, 1.9), (4.9, 2.4)], squash_y=1.28), 'pelvis', '#5a3d28')
     add_object('buckle', box(1.2, 2.6, 2.4, 0.3), 'pelvis', trim, 'metal', location=(5.2, 0, 1.1), smooth=False)
-    add_object('skirt', lathe([(0.0, -5.6), (6.9, -5.8), (7.1, -5.0), (6.1, -1.5), (5.1, 0.6), (0.0, 0.6)], squash_y=1.22), 'pelvis', player)
+    add_object('skirt', lathe([(0.0, -5.6), (6.9, -5.8), (7.1, -5.0), (6.1, -1.5), (5.1, 0.6), (0.0, 0.6)], squash_y=1.22), 'pelvis', cloth)
     add_object('skirt_trim', tube(ring_points(7.1, 7.1 * 1.22, -5.4), 0.62, closed=True), 'pelvis', trim, 'metal')
 
     # ---- 上身：胸甲、领口
@@ -399,36 +487,24 @@ def build_knight(look):
         add_object(f'pauldron_trim_{name}', tube(ring_points(4.25, 3.95, 0), 0.5, closed=True), 'chest', trim, 'metal',
                    location=(0, side * (SHOULDER_SIDE + 0.9), SHOULDER_UP - 0.6), rotation=(side * -0.35, 0, 0))
 
-    # ---- 头：头盔（前面挖出脸的开口）、脸、眼睛、金箍、盔脊、羽饰
-    helmet = add_object('helmet', ellipsoid(HEAD_R + 0.2, HEAD_R + 0.1, HEAD_R + 0.2, 18, 36), 'head', steel, 'metal')
-    cutter = add_object('helmet_cutter', box(12.0, 17.0, 9.6, 1.8), 'head', INK, 'flat', location=(7.7, 0, -3.3))
-    cutter.hide_render = True
-    cutter.display_type = 'WIRE'
-    boolean = helmet.modifiers.new('face_opening', 'BOOLEAN')
-    boolean.operation = 'DIFFERENCE'
-    boolean.object = cutter
-    boolean.solver = 'EXACT'
-    add_object('face', ellipsoid(6.6, 6.3, 6.6, 14, 28), 'head', look['skin'], location=(0.5, 0, -0.4))
-    for side in (-1, 1):
-        name = 'L' if side > 0 else 'R'
-        add_object(f'eye_{name}', ellipsoid(0.55, 0.95, 1.55, 8, 14), 'head', '#1a1420', 'flat', location=(6.55, side * 2.5, -1.3))
-        add_object(f'cheek_{name}', ellipsoid(0.4, 1.0, 0.55, 6, 12), 'head', '#f0a58c', 'flat', location=(6.2, side * 3.9, -3.3))
-    add_object('brow_band', tube(ring_points(HEAD_R + 0.15, HEAD_R + 0.05, 1.7, 40), 0.75, closed=True), 'head', trim, 'metal')
-    add_object('nose_guard', box(1.0, 1.4, 4.4, 0.3), 'head', steel, 'metal', location=(7.2, 0, -0.2), smooth=False)
-    add_object('crest', tube(arc_points(HEAD_R + 0.35, math.radians(20), math.radians(165)), 0.75), 'head', trim, 'metal')
-    plume_path, plume_radius = [], []
-    for i in range(15):
-        t = i / 14
-        angle = math.radians(62 + 150 * t)                    # 从盔顶前面绕到脑后
-        reach = HEAD_R + 2.2 + 3.2 * math.sin(t * math.pi) + 2.4 * t
-        plume_path.append((math.cos(angle) * reach + 0.5, 0, math.sin(angle) * reach - 7.0 + 1.5 * t))
-        plume_radius.append(0.5 + 2.9 * math.sin(min(1.0, t * 1.6) * math.pi / 2) * (1 - t) ** 0.55)
-    add_object('plume', tube(plume_path, plume_radius, 12), 'plume', player, scale=(1, 0.62, 1))
+    # ---- 头：头盔、脸、羽饰
+    build_helm(look)
+    if look['plume']:
+        plume_path, plume_radius = [], []
+        for i in range(15):
+            t = i / 14
+            angle = math.radians(62 + 150 * t)                    # 从盔顶前面绕到脑后
+            reach = HEAD_R + 2.2 + 3.2 * math.sin(t * math.pi) + 2.4 * t
+            plume_path.append((math.cos(angle) * reach + 0.5, 0, math.sin(angle) * reach - 7.0 + 1.5 * t))
+            plume_radius.append(0.5 + 2.9 * math.sin(min(1.0, t * 1.6) * math.pi / 2) * (1 - t) ** 0.55)
+        add_object('plume', tube(plume_path, plume_radius, 12), 'plume', look['plume'], scale=(1, 0.62, 1))
+    else:
+        joint('plume')
 
     # ---- 手臂：大臂（袖子）、肘甲、小臂甲、手套
     for side in (-1, 1):
         name = 'L' if side > 0 else 'R'
-        add_object(f'upper_arm_{name}', capsule(2.5, 2.3, UPPER_ARM), f'upper_arm_{name}', player)
+        add_object(f'upper_arm_{name}', capsule(2.5, 2.3, UPPER_ARM), f'upper_arm_{name}', cloth)
         add_object(f'elbow_{name}', ellipsoid(2.95, 2.95, 2.95, 8, 16), f'forearm_{name}', steel, 'metal')
         add_object(f'forearm_{name}', capsule(2.5, 2.25, FOREARM - 1.2), f'forearm_{name}', steel, 'metal')
         add_object(f'cuff_{name}', tube(ring_points(2.45, 2.45, -FOREARM + 1.9, 20), 0.5, closed=True), f'forearm_{name}', trim, 'metal')
@@ -445,24 +521,29 @@ def build_knight(look):
         add_object(f'toe_{name}', ellipsoid(3.7, 3.0, 2.0, 8, 16), f'foot_{name}', look['boots'], location=(2.7, 0, -1.1))
         add_object(f'boot_trim_{name}', tube(ring_points(3.45, 3.45, 4.2, 20), 0.5, closed=True), f'foot_{name}', trim, 'metal')
 
-    # ---- 剑：关节在握把中间，剑身沿 +Z，剑面朝 Y
-    blade_width = 2.0
-    blade_outline = [(-blade_width, 3.4), (blade_width, 3.4), (blade_width, SWORD_LENGTH - 3.2), (0, SWORD_LENGTH + 1.2), (-blade_width, SWORD_LENGTH - 3.2)]
-    add_object('blade', slab(blade_outline, 0.5, ridge=0.55), 'sword', look['blade'], 'blade', smooth=False)
-    add_object('guard', box(6.8, 1.7, 1.5, 0.35), 'sword', trim, 'metal', location=(0, 0, 3.1), smooth=False)
-    add_object('grip', capsule(0.95, 0.95, 4.8), 'sword', '#5a3d28', location=(0, 0, 2.8))
-    add_object('pommel', ellipsoid(1.35, 1.35, 1.35, 8, 14), 'sword', look['gem'], 'glow', location=(0, 0, -2.6))
+    sword_length = build_sword(look, sword)
+
+    # ---- 飞斧：只在“飞斧”动作出手前拿在空着的那只手里
+    axe_parts = [
+        add_object('axe_handle', capsule(0.6, 0.6, 9.0), 'axe', '#6a4a30', location=(0, 0, 6.5)),
+        add_object('axe_head', slab([(0.3, 3.6), (4.6, 2.6), (5.4, 5.4), (4.6, 8.2), (0.3, 7.2)], 0.9), 'axe', '#c9d2de', 'blade', smooth=False),
+    ]
 
     # ---- 盾：关节在盾心，盾面朝 +X
     dome = [(0.0, 1.9), (SHIELD_R * 0.3, 1.75), (SHIELD_R * 0.64, 1.25), (SHIELD_R * 0.88, 0.6), (SHIELD_R, 0.0), (SHIELD_R, -0.9), (0.0, -0.9)]
     face_rotation = (0, math.pi / 2, 0)
-    add_object('shield_face', lathe(dome, 36), 'shield', shade(player, -0.3), rotation=face_rotation)
+    add_object('shield_face', lathe(dome, 36), 'shield', look['shield'], rotation=face_rotation)
     add_object('shield_rim', tube(ring_points(SHIELD_R, SHIELD_R, 0.0, 40), 1.0, closed=True), 'shield', trim, 'metal', rotation=face_rotation)
-    add_object('shield_ring', tube(ring_points(SHIELD_R * 0.58, SHIELD_R * 0.58, 1.4, 32), 0.5, closed=True), 'shield', trim, 'metal', rotation=face_rotation)
-    add_object('shield_boss', ellipsoid(2.3, 2.3, 1.5, 8, 20), 'shield', '#ffd76a', 'metal', rotation=face_rotation, location=(1.9, 0, 0))
+    if look['emblem'] == 'sun':
+        add_object('shield_ring', tube(ring_points(SHIELD_R * 0.58, SHIELD_R * 0.58, 1.4, 32), 0.5, closed=True), 'shield', trim, 'metal', rotation=face_rotation)
+        add_object('shield_boss', ellipsoid(2.3, 2.3, 1.5, 8, 20), 'shield', shade(trim, 0.25), 'metal', rotation=face_rotation, location=(1.9, 0, 0))
+    else:
+        # 十字盾徽
+        add_object('shield_cross_v', box(1.0, 2.0, SHIELD_R * 1.5, 0.3), 'shield', trim, 'metal', location=(1.35, 0, 0), smooth=False)
+        add_object('shield_cross_h', box(1.0, SHIELD_R * 1.5, 2.0, 0.3), 'shield', trim, 'metal', location=(1.35, 0, 0), smooth=False)
     for i in range(8):                      # 盾沿的一圈铆钉
         angle = i / 8 * math.tau + math.pi / 8
-        add_object(f'shield_stud_{i}', ellipsoid(0.75, 0.75, 0.6, 6, 10), 'shield', '#fff1c2', 'metal', rotation=face_rotation,
+        add_object(f'shield_stud_{i}', ellipsoid(0.75, 0.75, 0.6, 6, 10), 'shield', shade(trim, 0.4), 'metal', rotation=face_rotation,
                    location=(0.75, math.cos(angle) * SHIELD_R * 0.79, math.sin(angle) * SHIELD_R * 0.79))
 
     # ---- 披风：每帧按姿势重新算顶点（见 update_cape）
@@ -476,12 +557,12 @@ def build_knight(look):
     bm.free()
     for polygon in cape_mesh.polygons:
         polygon.use_smooth = True
-    cape_mesh.materials.append(cel_material(shade(player, -0.28), 'matte'))
+    cape_mesh.materials.append(cel_material(look['cape'], 'matte'))
     cape = bpy.data.objects.new('cape', cape_mesh)
     bpy.context.scene.collection.objects.link(cape)
     thickness = cape.modifiers.new('thickness', 'SOLIDIFY')
     thickness.thickness = 0.5
-    return cape
+    return {'cape': cape, 'axe': axe_parts, 'sword_length': sword_length}
 
 
 # ---------------------------------------------------------------- 姿势
@@ -545,8 +626,12 @@ REST = {
     'foot_R': (V(-2.6, -HIP_SIDE - 0.4, 0), 0.0),
     'cape': (0.0, 0.0),             # (往后扬起的程度 0..1, 摆动的相位)
     'plume': 0.0,                   # 羽饰往后甩的角度
-    'sword_free': None,             # 剑脱手后的世界矩阵（死亡），None = 握在手里
-    'shield_free': None,
+    'sword_free': None,             # 剑脱手后落到哪儿（死亡），None = 握在手里
+    'spin': 0.0,                    # 整个人绕竖轴转的角度（旋风斩）
+    'stretch': 0.0,                 # 横向拉伸（闪现到达）
+    'slung': False,                 # 盾背在背上，空出持盾的手
+    'free_hand': None,              # 盾背着时那只空手的位置（躯干坐标）
+    'axe': False,                   # 空手里拿着飞斧
 }
 
 
@@ -615,8 +700,19 @@ def keyed(keys, k):
     result = {}
     for name in REST:
         a, b = before[name], after[name]
-        result[name] = b if (a is None or b is None) else blend(a, b, t)
+        result[name] = mix_value(a, b, t)
     return result
+
+
+def mix_value(a, b, t):
+    """混合一个姿势参数：数和向量插值，开关和可能为空的参数过半就切换。"""
+    if a is None or b is None or isinstance(a, bool):
+        return b if t >= 0.5 else a
+    return blend(a, b, t)
+
+
+def mix_pose(a, b, t):
+    return {name: mix_value(a[name], b[name], t) for name in REST}
 
 
 ATTACK_KEYS = [
@@ -719,6 +815,122 @@ def pose_death(k):
     return result
 
 
+def pose_parry(k):
+    """完美格挡：在格挡架势上把盾猛地往前一顶，再收回来。"""
+    push = smooth(k / 0.2) if k < 0.2 else 1 - smooth((k - 0.2) / 0.8)
+    direction = V(0.95, -0.3, 0.08)
+    return pose(
+        lean=0.16 + 0.16 * push, twist=0.22 + 0.2 * push, drop=2.0 + 0.8 * push, head=(-0.1, 0.0),
+        sword_hand=V(-4.6, -9.6, 1.2), sword_dir=V(-0.5, -0.12, 0.86),
+        shield_pos=shield_at(direction, 10.6 + 4.6 * push, 1.6, -3.0)[0], shield_dir=direction,
+        foot_L=(V(-4.4 - 1.0 * push, HIP_SIDE, 0), 0.0), foot_R=(V(4.2 + 1.6 * push, -HIP_SIDE, 0), 0.0),
+        cape=(0.12 + 0.3 * push, 0.5 + k * 4),
+    )
+
+
+BROKEN_OPEN = pose(
+    move=V(-2.0, 0, 0), lean=-0.32, twist=0.25, drop=1.2, head=(0.25, 0.0),
+    sword_hand=V(0.5, -13.0, -11.0), sword_dir=V(0.45, -0.45, -0.77),
+    shield_pos=shield_at(V(-0.25, 0.95, 0.2), 10.4, -1.0, -3.6)[0], shield_dir=V(-0.25, 0.95, 0.2),
+    foot_L=(V(-3.6, HIP_SIDE + 0.6, 0), 0.0), foot_R=(V(-1.0, -HIP_SIDE - 0.6, 0), 0.3),
+    cape=(0.45, 2.0), plume=-0.3,
+)
+
+
+def pose_broken(k):
+    """破防：盾被砸得甩到身后、两臂张开、剑垂下来，后三成慢慢收回站姿。"""
+    back = smooth(k / 0.12) if k < 0.12 else 1 - smooth((k - 0.7) / 0.3)
+    result = mix_pose(pose(), BROKEN_OPEN, back)
+    result['lean'] += 0.05 * math.sin(k * 14) * back
+    return result
+
+
+# ---- 技能动作：关键帧来自 web/src/render/knightActions.ts（用 export-actions.mjs 导出），这里换成 3D 的姿势
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'knight-actions.json'), encoding='utf-8') as actions_file:
+    ACTION_DATA = json.load(actions_file)
+
+
+def sample_action(name, k):
+    """取动作在进度 k 时的一帧数据（相邻两个采样之间线性插值）。"""
+    samples = ACTION_DATA[name]['samples']
+    position = max(0.0, min(1.0, k)) * len(samples)
+    index = min(len(samples) - 1, int(position))
+    after = samples[min(len(samples) - 1, index + 1)]
+    before = samples[index]
+    t = position - index
+    result = {}
+    for key, value in before.items():
+        other = after[key]
+        if value is None or other is None:
+            result[key] = value if value is not None else other
+        elif isinstance(value, list):
+            result[key] = [[x + (y - x) * t for x, y in zip(first, second)] if isinstance(first, list) else first + (second - first) * t
+                           for first, second in zip(value, other)]
+        else:
+            result[key] = value + (other - value) * t
+    return result
+
+
+def pose_action(name, k):
+    """
+    把 2D 关键帧换成 3D 姿势。2D 里的“拿武器的手”对应这里持剑的近侧手，“另一只手”对应持盾的远侧手；
+    手的前后、高低照搬，左右（离镜头远近）按哪只手补上。盾面朝向按手的位置推出来，并保证不插进身体。
+    """
+    data = ACTION_DATA[name]
+    frame = sample_action(name, k)
+    weapon_x, weapon_down = frame['weapon']
+    other_x, other_down = frame['other']
+    blade = frame['blade']
+    spinning = 0.05 < frame['spin'] < math.tau - 0.05
+    result = pose(
+        move=V(math.sin(k * 61.0) * frame['jitter'] * 0.45, 0, frame['lift']),
+        lean=frame['lean'], drop=frame['drop'], spin=frame['spin'], stretch=frame['stretch'],
+        head=(-0.25 * frame['lean'], 0.0),
+        sword_hand=V(weapon_x + 0.6, -10.6, -weapon_down),
+        sword_dir=V(math.sin(blade), -0.06, -math.cos(blade)),
+        cape=(0.7 if (spinning or frame['stretch'] > 0.05 or name == 'haste') else 0.1 + 0.5 * abs(frame['lean']), k * 9.0),
+        plume=-0.8 * frame['lean'] + (0.4 if spinning else 0.0),
+    )
+    if data['slung']:
+        result['slung'] = True
+        result['free_hand'] = V(other_x, 9.2, -other_down)
+        result['axe'] = name == 'axe' and k < data['lead'] / data['ms']
+    else:
+        # 手在身前时盾面转向镜头，手甩到身后时盾面朝外；举高时盾面朝上
+        front = max(0.0, min(1.0, (other_x + 2.0) / 7.0))
+        side = 9.5 - 5.5 * front
+        angle = math.atan2(side, other_x) - 0.95 * front
+        up = max(0.08, min(0.85, (-other_down + 3.0) / 12.0))
+        flat = math.sqrt(1 - up * up)
+        direction = V(math.cos(angle) * flat, math.sin(angle) * flat, up)
+        center = V(other_x, side, -other_down) + direction * 2.2
+        if center.z < 5.0:
+            # 盾在胸口以下：盾面离身体中轴至少一个胸甲半径
+            outward = Vector((direction.x, direction.y, 0)).normalized()
+            gap = Vector((center.x, center.y, 0)).dot(outward)
+            if gap < 9.6:
+                center += outward * (9.6 - gap)
+        result['shield_pos'], result['shield_dir'] = center, direction
+    if frame['feet']:
+        weight = frame['feetWeight']
+        for key, side, (foot_x, foot_up) in (('foot_L', 1, frame['feet'][0]), ('foot_R', -1, frame['feet'][1])):
+            target = V(foot_x, side * (HIP_SIDE + 0.4), -foot_up)
+            result[key] = (REST[key][0].lerp(target, weight), 0.0)
+    # 开头和结尾过渡到站姿（闪现一上来就是扑出去的姿势，不过渡）
+    weight = smooth((1 - k) / 0.16)
+    if name != 'blink':
+        weight = min(weight, smooth(k / 0.1))
+    if weight < 1:
+        mixed = mix_pose(pose(), result, weight)
+        mixed['spin'], mixed['axe'] = result['spin'], result['axe']
+        return mixed
+    return result
+
+
+def action_frames(name):
+    return max(7, min(14, round(ACTION_DATA[name]['ms'] / 50)))
+
+
 ANIMS = {
     # 名字: (帧数, 姿势函数, 是否循环)
     'idle': (8, pose_idle, True),
@@ -727,12 +939,18 @@ ANIMS = {
     'hit': (4, pose_hit, False),
     'death': (8, pose_death, False),
     'block': (1, pose_block, False),
+    'parry': (6, pose_parry, False),
+    'broken': (8, pose_broken, False),
 }
+for action_name in ACTION_DATA:
+    # 技能动作在清单里叫 act:<技能的 fx 名>
+    ANIMS[f'act:{action_name}'] = (action_frames(action_name), (lambda k, name=action_name: pose_action(name, k)), False)
 ANIM_FPS = {'idle': 6}
+SHEET_COLUMNS = 16
 
 
 def frame_progress(name, index):
-    """第 index 帧对应的动画进度。循环动画不重复首帧；一次性的动画取每格时间段的中点（最后一帧取终点）。"""
+    """第 index 帧对应的动画进度。循环动画不重复首帧；一次性的动画取每格时间段的中点（死亡的最后一帧取终点）。"""
     count, _, loop = ANIMS[name]
     if loop:
         return index / count
@@ -782,7 +1000,8 @@ def solve(p):
     """算出一帧里每个关节的世界矩阵。"""
     out = {}
     # 整个人：先绕脚底往后倒，再平移
-    root = Matrix.Translation(p['move']) @ rotation_y(-p['pitch'])
+    stretch = Matrix.Diagonal((1 + 0.2 * p['stretch'], 1, 1 - 0.1 * p['stretch'], 1))
+    root = Matrix.Translation(p['move']) @ stretch @ Matrix.Rotation(-p['spin'], 4, 'Z') @ rotation_y(-p['pitch'])
     hip = Vector((0, 0, HIP_Z - p['drop']))
     pelvis = Matrix.Translation(hip) @ Matrix.Rotation(p['twist'] * 0.35, 4, 'Z') @ rotation_y(p['lean'] * 0.3)
     torso = Matrix.Translation(hip) @ Matrix.Rotation(p['twist'], 4, 'Z') @ rotation_y(p['lean'])
@@ -814,12 +1033,23 @@ def solve(p):
     out['sword'] = root @ sword
 
     # 持盾的手（远侧）：手在盾背后
-    shield_center = shoulders @ p['shield_pos']
-    shield_dir = (torso.to_3x3() @ p['shield_dir']).normalized()
-    arm('L', 1, shield_center - shield_dir * 2.2, torso.to_3x3() @ Vector((-0.3, 0.7, -0.65)))
+    left_pole = torso.to_3x3() @ Vector((-0.3, 0.7, -0.65))
+    if p['slung'] and p['free_hand'] is not None:
+        # 盾背在背上，空手自己动
+        free_hand = arm('L', 1, shoulders @ p['free_hand'], left_pole)
+        shield_center = torso @ Vector((-7.6, 0.5, 7.0))
+        shield_dir = (torso.to_3x3() @ Vector((-1, 0, 0.12))).normalized()
+    else:
+        shield_center = shoulders @ p['shield_pos']
+        shield_dir = (torso.to_3x3() @ p['shield_dir']).normalized()
+        free_hand = arm('L', 1, shield_center - shield_dir * 2.2, left_pole)
     shield_up = Vector((0, 0, 1)) - shield_dir * shield_dir.z
+    if shield_up.length < 1e-3:
+        shield_up = Vector((1, 0, 0))
     shield = frame_from(shield_center, shield_up, shield_dir)
     out['shield'] = root @ shield
+    # 飞斧握在空手里，斧刃朝前
+    out['axe'] = root @ frame_from(free_hand, torso.to_3x3() @ Vector((-0.25, 0, 1)), torso.to_3x3() @ Vector((1, 0, 0)))
 
     # 腿：胯关节跟着胯走，脚踩在给定的位置上，膝盖朝前弯
     for name, side in (('L', 1), ('R', -1)):
@@ -851,6 +1081,8 @@ def update_cape(cape, frames, p):
     length = 22.5
     mesh = cape.data
     back = (torso.to_3x3() @ Vector((-1, 0, 0)))
+    if p['slung']:
+        flare *= 0.3          # 盾背在背上压着披风
     back.z = 0
     back = back.normalized() if back.length > 1e-4 else Vector((-1, 0, 0))
     lying = min(1.0, p['pitch'] / math.radians(80))
@@ -875,11 +1107,14 @@ def update_cape(cape, frames, p):
     mesh.update()
 
 
-def apply_pose(cape, p):
+def apply_pose(rig, p):
     frames = solve(p)
     for name, empty in FRAMES.items():
         empty.matrix_world = frames[name]
-    update_cape(cape, frames, p)
+    for part in rig['axe']:
+        part.hide_render = not p['axe']
+    update_cape(rig['cape'], frames, p)
+    return frames
 
 
 # ---------------------------------------------------------------- 场景、渲染
@@ -918,7 +1153,7 @@ def setup_scene(width, height, px_per_unit, anchor, yaw=None):
         spin = Matrix.Rotation(yaw, 3, 'Z')
         toward, right, up = spin @ toward, spin @ right, spin @ up
     # 让脚底中心（原点）正好落在格子里的锚点上
-    offset_right = (width / 2 - anchor[0]) / px_per_unit
+    offset_right = (anchor[0] - width / 2) / px_per_unit * -1
     offset_up = (anchor[1] - height / 2) / px_per_unit
     target = right * offset_right + up * offset_up
     camera.location = target + toward * 200
@@ -966,41 +1201,83 @@ def load_frame(path, width, height):
     return image
 
 
-def build(look=LOOK):
+def build(skin='paladin', sword='knight_sword'):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     MATERIALS.clear()
     FRAMES.clear()
-    return build_knight(look)
+    return build_knight(SKINS[skin], SWORDS[sword])
 
 
-def render_sheet(out_dir):
+def screen_point(point):
+    """世界坐标换成游戏里的模型坐标：相对脚底，x 朝前（画面右），y 朝下。"""
+    _, right, up = camera_axes()
+    return [round(point.dot(right), 2), round(-point.dot(up), 2)]
+
+
+def muzzles(rig):
+    """飞行道具出手那一刻的出发点（火球从剑尖、飞斧从手里），写进清单，特效按它对位置。"""
+    result = {}
+    for name, part, local in (('projectile', 'sword', Vector((0, 0, rig['sword_length'] + 1.0))), ('axe', 'axe', Vector((2.5, 0, 5.5)))):
+        data = ACTION_DATA[name]
+        frames = solve(pose_action(name, data['lead'] / data['ms']))
+        result[name] = screen_point(frames[part] @ local)
+    return result
+
+
+def sheet_layout():
+    """动画一个接一个排进 SHEET_COLUMNS 列的格子里，返回 {名字: 起始格} 和总行数。"""
+    starts, cursor = {}, 0
+    for name, (count, _, _) in ANIMS.items():
+        starts[name] = cursor
+        cursor += count
+    return starts, (cursor + SHEET_COLUMNS - 1) // SHEET_COLUMNS
+
+
+def render_sheet(out_dir, skin='paladin', sword='knight_sword'):
+    """渲染一套外观（皮肤 + 武器）的整张动画表：<皮肤>-<武器>.webp，外加清单片段 knight.json。"""
     from PIL import Image
-    cape = build()
+    rig = build(skin, sword)
     setup_scene(FRAME_W, FRAME_H, PX_PER_UNIT, ANCHOR)
-    columns = max(count for count, _, _ in ANIMS.values())
-    sheet = Image.new('RGBA', (columns * FRAME_W, len(ANIMS) * FRAME_H), (0, 0, 0, 0))
-    manifest = {'sheet': 'characters/knight.png', 'frame': [FRAME_W, FRAME_H], 'anchor': list(ANCHOR), 'ppu': 2, 'refR': 16, 'anims': {}}
-    temp = os.path.join(out_dir, '_frame.png')
-    for row, (name, (count, function, _)) in enumerate(ANIMS.items()):
-        entry = {'row': row, 'frames': count}
-        if name in ANIM_FPS:
-            entry['fps'] = ANIM_FPS[name]
-        manifest['anims'][name] = entry
+    starts, rows = sheet_layout()
+    sheet = Image.new('RGBA', (SHEET_COLUMNS * FRAME_W, rows * FRAME_H), (0, 0, 0, 0))
+    temp = os.path.join(out_dir, f'_frame-{skin}-{sword}.png')
+    only = os.environ.get('ANIMS')
+    for name, (count, function, _) in ANIMS.items():
+        if only and name not in only.split(','):
+            continue
         for index in range(count):
-            apply_pose(cape, function(frame_progress(name, index)))
+            apply_pose(rig, function(frame_progress(name, index)))
             render_to(temp)
-            sheet.paste(load_frame(temp, FRAME_W, FRAME_H), (index * FRAME_W, row * FRAME_H))
-            print(f'[knight] {name} {index + 1}/{count}', flush=True)
+            cell = starts[name] + index
+            sheet.paste(load_frame(temp, FRAME_W, FRAME_H), ((cell % SHEET_COLUMNS) * FRAME_W, (cell // SHEET_COLUMNS) * FRAME_H))
+        print(f'[knight] {skin} {sword} {name}', flush=True)
     os.remove(temp)
-    sheet.save(os.path.join(out_dir, 'knight.png'))
+    sheet.save(os.path.join(out_dir, f'{skin}-{sword}.webp'), 'WEBP', quality=92, method=6, exact=True)
+    write_manifest(out_dir, rig)
+
+
+def write_manifest(out_dir, rig):
+    starts, _ = sheet_layout()
+    anims = {}
+    for name, (count, _, _) in ANIMS.items():
+        anims[name] = {'start': starts[name], 'frames': count}
+        if name in ANIM_FPS:
+            anims[name]['fps'] = ANIM_FPS[name]
+    manifest = {
+        'sheet': 'characters/knight/paladin-knight_sword.webp',
+        'variants': {f'{skin}|{sword}': f'characters/knight/{skin}-{sword}.webp' for skin in SKINS for sword in SWORDS},
+        'frame': [FRAME_W, FRAME_H], 'columns': SHEET_COLUMNS, 'anchor': list(ANCHOR), 'ppu': 2, 'refR': 16,
+        'muzzles': muzzles(rig),
+        'anims': anims,
+    }
     with open(os.path.join(out_dir, 'knight.json'), 'w', encoding='utf-8') as file:
         json.dump(manifest, file, ensure_ascii=False, indent=2)
 
 
-def render_poses(out_dir, scale=int(os.environ.get('SCALE', '3'))):
-    """每个动画挑几帧，按 scale 倍放大渲染后拼成一张图，检查造型和姿势用。"""
+def render_poses(out_dir, skin='paladin', sword='knight_sword', scale=int(os.environ.get('SCALE', '3'))):
+    """挑几帧按 scale 倍放大渲染后拼成一张图，检查造型和姿势用。ONLY=动画:进度,... 指定要看哪些帧。"""
     from PIL import Image
-    cape = build()
+    rig = build(skin, sword)
     width, height = FRAME_W * scale // 2, FRAME_H * scale // 2
     anchor = (ANCHOR[0] * scale // 2, ANCHOR[1] * scale // 2)
     setup_scene(width, height, PX_PER_UNIT * scale / 2, anchor)
@@ -1008,18 +1285,18 @@ def render_poses(out_dir, scale=int(os.environ.get('SCALE', '3'))):
              ('hit', 0.3), ('block', 0.0), ('death', 0.35), ('death', 0.7), ('death', 1.0)]
     only = os.environ.get('ONLY')
     if only:
-        picks = [(name, float(k)) for name, k in (item.split(':') for item in only.split(','))]
-    columns = min(4, len(picks))
+        picks = [(item.rsplit('@', 1)[0], float(item.rsplit('@', 1)[1])) for item in only.split(',')]
+    columns = min(int(os.environ.get('COLS', '4')), len(picks))
     rows = (len(picks) + columns - 1) // columns
     sheet = Image.new('RGBA', (columns * width, rows * height), (38, 30, 46, 255))
-    temp = os.path.join(out_dir, '_frame.png')
+    temp = os.path.join(out_dir, f'_frame-{skin}-{sword}.png')
     for index, (name, k) in enumerate(picks):
-        apply_pose(cape, ANIMS[name][1](k))
+        apply_pose(rig, ANIMS[name][1](k))
         render_to(temp)
         frame = load_frame(temp, width, height)
         sheet.alpha_composite(with_outline(frame, 2 * scale // 2), ((index % columns) * width, (index // columns) * height))
     os.remove(temp)
-    sheet.save(os.path.join(out_dir, 'poses.png'))
+    sheet.save(os.path.join(out_dir, os.environ.get('NAME', 'poses') + '.png'))
 
 
 def with_outline(frame, width):
@@ -1032,14 +1309,14 @@ def with_outline(frame, width):
     return outline
 
 
-def render_turn(out_dir, views=8, scale=3):
+def render_turn(out_dir, skin='paladin', sword='knight_sword', views=8, scale=3):
     from PIL import Image
-    cape = build()
+    rig = build(skin, sword)
     width, height = 150 * scale // 2, FRAME_H * scale // 2
     anchor = (width // 2, ANCHOR[1] * scale // 2)
     sheet = Image.new('RGBA', (views * width, height), (38, 30, 46, 255))
     temp = os.path.join(out_dir, '_frame.png')
-    apply_pose(cape, pose_idle(0.0))
+    apply_pose(rig, pose_idle(0.0))
     for index in range(views):
         setup_scene(width, height, PX_PER_UNIT * scale / 2, anchor, yaw=index / views * math.tau)
         render_to(temp)
@@ -1048,18 +1325,23 @@ def render_turn(out_dir, views=8, scale=3):
     sheet.save(os.path.join(out_dir, 'turn.png'))
 
 
-def save_blend(out_dir):
-    cape = build()
+def save_blend(out_dir, skin='paladin', sword='knight_sword'):
+    rig = build(skin, sword)
     setup_scene(FRAME_W, FRAME_H, PX_PER_UNIT, ANCHOR)
-    apply_pose(cape, pose_idle(0.0))
-    bpy.ops.wm.save_as_mainfile(filepath=os.path.join(os.path.abspath(out_dir), 'knight.blend'))
+    apply_pose(rig, pose_idle(0.0))
+    bpy.ops.wm.save_as_mainfile(filepath=os.path.join(os.path.abspath(out_dir), f'knight-{skin}.blend'))
 
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else 'poses'
     out_dir = sys.argv[2] if len(sys.argv) > 2 else '.'
+    skin = sys.argv[3] if len(sys.argv) > 3 else 'paladin'
+    sword = sys.argv[4] if len(sys.argv) > 4 else 'knight_sword'
     os.makedirs(out_dir, exist_ok=True)
-    {'sheet': render_sheet, 'poses': render_poses, 'turn': render_turn, 'blend': save_blend}[mode](out_dir)
+    if mode == 'manifest':
+        write_manifest(out_dir, build(skin, sword))      # 只重写清单片段，不渲染
+        return
+    {'sheet': render_sheet, 'poses': render_poses, 'turn': render_turn, 'blend': save_blend}[mode](out_dir, skin, sword)
 
 
 if __name__ == '__main__':

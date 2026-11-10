@@ -505,11 +505,15 @@ export function actionPose(name: string | undefined, k: number): ActionPose | nu
   };
 }
 
+// 用美术动画表的角色，出手点以清单里写的为准（render/art.ts 加载时填进来），键是技能的 fx 名。
+export const MUZZLE_OVERRIDE: Record<string, { x: number; y: number }> = {};
+
 // muzzleOffset 是动作出手那一刻飞行道具的出发点（剑尖或手），模型单位，相对脚底、朝 +x。
 // 没有飞行道具的动作返回 null。game/events.ts 按实体大小和朝向换成世界坐标交给特效。
 export function muzzleOffset(name: string): { x: number; y: number } | null {
   const spec = SPECS[name];
   if (!spec?.muzzle) return null;
+  if (MUZZLE_OVERRIDE[name]) return MUZZLE_OVERRIDE[name];
   const pose = actionPose(name, spec.release);
   if (!pose) return null;
   // 躯干坐标里的手：近侧肩 + 大臂 + 小臂
