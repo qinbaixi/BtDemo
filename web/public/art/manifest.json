@@ -1,5 +1,46 @@
 {
   "_说明": "美术资源清单，格式见 docs/art-spec.md。这里列出的角色、物件、地表、LUT 用美术图，没列出的继续用程序画。",
-  "characters": {},
+  "characters": {
+    "knight": {
+      "sheet": "characters/knight.png",
+      "frame": [
+        240,
+        212
+      ],
+      "anchor": [
+        120,
+        140
+      ],
+      "ppu": 2,
+      "refR": 16,
+      "anims": {
+        "idle": {
+          "row": 0,
+          "frames": 8,
+          "fps": 6
+        },
+        "walk": {
+          "row": 1,
+          "frames": 8
+        },
+        "attack": {
+          "row": 2,
+          "frames": 8
+        },
+        "hit": {
+          "row": 3,
+          "frames": 4
+        },
+        "death": {
+          "row": 4,
+          "frames": 8
+        },
+        "block": {
+          "row": 5,
+          "frames": 1
+        }
+      }
+    }
+  },
   "props": {}
 }

@@ -9,3 +9,4 @@
 !/web/dist/.gitkeep
 /web/src/net/pb.js
 /web/src/net/pb.d.ts
+__pycache__/
