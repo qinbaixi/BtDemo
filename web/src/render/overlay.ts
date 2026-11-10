@@ -22,7 +22,7 @@ export function resizeOverlay(dpr: number): void {
 
 /**
  * drawOverlay 画一帧叠加层。shake 是镜头冲击偏移，zoom 是缩放冲击，ents 是本帧可见实体和它们的绘制位置。
- * 顺序：目标连线 → 碰撞体 → AI 路径 → 头顶文字 → 气泡 → 飘字 → 暗角 → 受伤红边 → 连击数。
+ * 顺序：目标连线 → 碰撞体 → AI 路径 → 头顶文字 → 气泡 → 飘字 → 调试跟踪标记 → 暗角 → 受伤红边 → 连击数。
  * 技能特效和环境粒子都在 Pixi 里画（world.ts 的 drawOverFx），这里只画文字和线条。
  */
 export function drawOverlay(
@@ -46,6 +46,7 @@ export function drawOverlay(
   for (const it of ents) drawLabels(it.e, it.p, now);
   drawBubbles(now);
   drawFloats(now);
+  if (state.debugWatch) drawWatchMark(ents, now);   // 画在名字、气泡、飘字上面，不会被挡住
   drawVignette();
   drawHurt(now);
   drawCombo(now);
@@ -116,6 +117,103 @@ function drawObstacles(): void {
     ctx.fill();
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+// drawWatchMark 把调试面板正在跟踪的那个实体标出来：脚下一圈转动的青色虚线、四角的取景框、
+// 头顶一个上下跳的箭头和“跟踪中”的牌子。开着行为树监视窗口时，一眼就能在场上找到它。
+// 它走出屏幕时，在屏幕边上画一个指向它的箭头。
+function drawWatchMark(ents: { e: ClientEntity; p: Point }[], now: number): void {
+  const entity = state.ents.get(state.debugWatch);
+  if (!entity) return;
+  const shown = ents.find((it) => it.e.id === entity.id);
+  const p = shown ? shown.p : posOf(entity, now);
+  const color = '#5ff0ff';
+  const cam = state.cam;
+  const margin = 26;
+  const offscreen = p.x < cam.x + margin || p.x > cam.x + cam.w - margin || p.y < cam.y + margin || p.y > cam.y + cam.h - margin;
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  if (offscreen) {
+    // 不在屏幕里：屏幕边上一个指向它的箭头
+    const x = clamp(p.x, cam.x + margin, cam.x + cam.w - margin);
+    const y = clamp(p.y, cam.y + margin, cam.y + cam.h - margin);
+    const angle = Math.atan2(p.y - y, p.x - x);
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.translate(Math.sin(now / 160) * 3, 0);
+    ctx.beginPath();
+    ctx.moveTo(12, 0); ctx.lineTo(-8, -10); ctx.lineTo(-3, 0); ctx.lineTo(-8, 10);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#0b0710';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+  const r = (entity.r || 14) * 1.25;
+  const top = headY(entity, p);
+  const pulse = 0.5 + 0.5 * Math.sin(now / 220);
+
+  // 脚下：一圈转动的虚线（压扁成地面上的椭圆）
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.scale(1, 0.45);
+  ctx.setLineDash([9, 7]);
+  ctx.lineDashOffset = -now / 30;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  ctx.arc(0, 0, r + 12 + pulse * 3, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // 身体四角的取景框，随呼吸一张一合
+  const half = r + 10 + pulse * 3;
+  const boxTop = top - 4 - pulse * 3;
+  const boxBottom = p.y + 8 + pulse * 3;
+  const arm = 9;
+  const corner = (x: number, y: number, dx: number, dy: number) => {
+    ctx.moveTo(x + dx * arm, y); ctx.lineTo(x, y); ctx.lineTo(x, y + dy * arm);
+  };
+  for (const [stroke, width] of [['#0b0710', 5.5], [color, 2.5]] as const) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    corner(p.x - half, boxTop, 1, 1);
+    corner(p.x + half, boxTop, -1, 1);
+    corner(p.x - half, boxBottom, 1, -1);
+    corner(p.x + half, boxBottom, -1, -1);
+    ctx.stroke();
+  }
+
+  // 头顶：牌子和往下指的箭头（在名字和血条上面），一起上下跳
+  const bob = Math.abs(Math.sin(now / 260)) * 6;
+  const tipY = top - 34 - bob;
+  ctx.font = `bold 11px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const text = '跟踪中';
+  const tagWidth = ctx.measureText(text).width + 14;
+  const tagY = tipY - 22;
+  ctx.fillStyle = color;
+  ctx.strokeStyle = '#0b0710';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.rect(p.x - tagWidth / 2, tagY - 9, tagWidth, 18);
+  ctx.moveTo(p.x - 7, tagY + 9); ctx.lineTo(p.x, tipY); ctx.lineTo(p.x + 7, tagY + 9);
+  ctx.stroke();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(p.x - 7, tagY + 8); ctx.lineTo(p.x, tipY); ctx.lineTo(p.x + 7, tagY + 8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#0b0710';
+  ctx.fillText(text, p.x, tagY + 0.5);
   ctx.restore();
 }
 

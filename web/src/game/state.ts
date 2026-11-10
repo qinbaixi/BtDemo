@@ -128,6 +128,7 @@ export interface State {
   sceneKey: string;
   obstacles: Obstacle[];
   aiPath: { id: number; pts: number[]; at: number } | null;
+  debugWatch: number;             // 调试面板正在跟踪行为树的实体 id（0 = 没有），画面上把它标出来
   vignette: { w: number; h: number; g: CanvasGradient } | null;
   lands: Map<number, { at: number; color?: string }>;   // 施法者 id -> 最近一次施法命中的时间和颜色
   zones: ClientZone[];            // 地上的回血区（见 render/zones.ts）
@@ -212,6 +213,7 @@ export const state: State = {
   sceneKey: '',
   obstacles: [],
   aiPath: null,
+  debugWatch: 0,
   vignette: null,
   lands: new Map(),
   zones: [],

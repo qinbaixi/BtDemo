@@ -81,6 +81,7 @@ function frame(): void {
   debug.setTarget(state.target);
   debug.update(now);
   updateCamera(now, dt);
+  state.debugWatch = debug.watching;
   drawWorld(now, dt, debug.open);
   updateAmbience(now, dt);
   updateMusic();

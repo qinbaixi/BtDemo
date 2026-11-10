@@ -121,6 +121,8 @@ export function createDebug({ send, entity }: {
       stale = quiet;
     },
     get open() { return open; },
+    // 服务端正在跟踪行为树的实体 id（0 = 没有），画面上会把它标出来（render/overlay.ts 的 drawWatchMark）
+    get watching() { return watching; },
 
     // frame is the protocol tap: every sent and received message.
     frame(dir, type, bytes, obj) { proto.log(dir, type, bytes, obj); },
