@@ -372,8 +372,8 @@ UPPER_ARM, FOREARM = 7.2, 6.8
 THIGH, SHIN = 8.6, 8.4
 HEAD_UP = 20.6          # 头的中心在胯上面多少
 HEAD_R = 7.4
-SWORD_LENGTH = 20.0
-SHIELD_R = 8.4
+SWORD_LENGTH = 22.0
+SHIELD_R = 7.4
 CAPE_COLS, CAPE_ROWS = 8, 9
 
 
@@ -454,16 +454,16 @@ def build_knight(look):
     add_object('pommel', ellipsoid(1.35, 1.35, 1.35, 8, 14), 'sword', look['gem'], 'glow', location=(0, 0, -2.6))
 
     # ---- 盾：关节在盾心，盾面朝 +X
-    dome = [(0.0, 2.0), (2.6, 1.85), (5.4, 1.3), (7.4, 0.6), (SHIELD_R, 0.0), (SHIELD_R, -0.9), (0.0, -0.9)]
+    dome = [(0.0, 1.9), (SHIELD_R * 0.3, 1.75), (SHIELD_R * 0.64, 1.25), (SHIELD_R * 0.88, 0.6), (SHIELD_R, 0.0), (SHIELD_R, -0.9), (0.0, -0.9)]
     face_rotation = (0, math.pi / 2, 0)
     add_object('shield_face', lathe(dome, 36), 'shield', shade(player, -0.3), rotation=face_rotation)
     add_object('shield_rim', tube(ring_points(SHIELD_R, SHIELD_R, 0.0, 40), 1.0, closed=True), 'shield', trim, 'metal', rotation=face_rotation)
-    add_object('shield_ring', tube(ring_points(4.9, 4.9, 1.45, 32), 0.5, closed=True), 'shield', trim, 'metal', rotation=face_rotation)
-    add_object('shield_boss', ellipsoid(2.5, 2.5, 1.5, 8, 20), 'shield', '#ffd76a', 'metal', rotation=face_rotation, location=(1.9, 0, 0))
+    add_object('shield_ring', tube(ring_points(SHIELD_R * 0.58, SHIELD_R * 0.58, 1.4, 32), 0.5, closed=True), 'shield', trim, 'metal', rotation=face_rotation)
+    add_object('shield_boss', ellipsoid(2.3, 2.3, 1.5, 8, 20), 'shield', '#ffd76a', 'metal', rotation=face_rotation, location=(1.9, 0, 0))
     for i in range(8):                      # 盾沿的一圈铆钉
         angle = i / 8 * math.tau + math.pi / 8
         add_object(f'shield_stud_{i}', ellipsoid(0.75, 0.75, 0.6, 6, 10), 'shield', '#fff1c2', 'metal', rotation=face_rotation,
-                   location=(0.75, math.cos(angle) * 6.6, math.sin(angle) * 6.6))
+                   location=(0.75, math.cos(angle) * SHIELD_R * 0.79, math.sin(angle) * SHIELD_R * 0.79))
 
     # ---- 披风：每帧按姿势重新算顶点（见 update_cape）
     cape_mesh = bpy.data.meshes.new('cape')
@@ -517,6 +517,17 @@ def V(x, y, z):
     return Vector((x, y, z))
 
 
+def shield_at(direction, distance, shift, height):
+    """按盾面朝向算盾心的位置：盾面离身体中轴 distance 远（要大于胸甲的半径，盾才不会插进身体），
+    再沿盾面横向挪 shift（正数往远侧），height 是相对两肩的高度。返回 (盾心, 朝向)。"""
+    flat = Vector((direction.x, direction.y, 0)).normalized()
+    across = Vector((-flat.y, flat.x, 0))
+    center = flat * distance + across * shift
+    return Vector((center.x, center.y, height)), direction
+
+
+SHIELD_REST = shield_at(Vector((0.88, -0.45, 0.12)), 9.6, 4.2, -8.4)
+
 # 一帧的姿势参数。手的位置用“躯干坐标”：原点在两肩中点，X 朝前、Y 朝左（远侧）、Z 朝上。
 # 右手（近侧，离镜头近）持剑，左手（远侧）持盾；镜头从侧前方看，盾举在身前也看得见。
 REST = {
@@ -526,10 +537,10 @@ REST = {
     'lean': 0.0,                    # 上身前倾（弧度）
     'twist': 0.0,                   # 上身绕竖轴转（正数：左肩往前）
     'head': (0.0, 0.0),             # 头相对上身：(低头, 往镜头转)
-    'sword_hand': V(-2.0, -10.6, -11.0),
-    'sword_dir': V(-0.8, -0.16, 0.46),   # 剑尖指向（上身坐标）
-    'shield_pos': V(8.2, 3.2, -5.8),     # 盾心
-    'shield_dir': V(0.8, -0.58, 0.12),   # 盾面朝向
+    'sword_hand': V(8.6, -10.6, -4.6),      # 持剑的手伸在身前，剑尖指向前上方，剑身从盾的上沿探出去
+    'sword_dir': V(0.74, -0.05, 0.67),   # 剑尖指向（上身坐标）
+    'shield_pos': SHIELD_REST[0],        # 盾心
+    'shield_dir': SHIELD_REST[1],        # 盾面朝向
     'foot_L': (V(2.8, HIP_SIDE + 0.4, 0), 0.0),    # (脚底位置, 脚尖上翘的角度)；远侧脚在前，两条腿在画面上才分得开
     'foot_R': (V(-2.6, -HIP_SIDE - 0.4, 0), 0.0),
     'cape': (0.0, 0.0),             # (往后扬起的程度 0..1, 摆动的相位)
@@ -614,7 +625,7 @@ ATTACK_KEYS = [
     (0.3, 'out', pose(
         lean=-0.2, twist=-0.3, drop=0.8, head=(0.08, 0.0),
         sword_hand=V(-3.0, -8.4, 9.5), sword_dir=V(-0.62, -0.1, 0.78),
-        shield_pos=V(7.4, 4.6, -6.2),
+        shield_pos=shield_at(V(0.8, -0.2, 0.1), 9.4, 3.6, -6.0)[0], shield_dir=V(0.8, -0.2, 0.1),
         foot_L=(V(-3.4, HIP_SIDE, 0), 0.0), foot_R=(V(2.0, -HIP_SIDE, 0), 0.0),
         cape=(0.15, 1.0), plume=-0.12,
     )),
@@ -622,14 +633,14 @@ ATTACK_KEYS = [
     (0.42, 'in', pose(
         lean=0.12, twist=0.1, drop=1.4, head=(-0.05, 0.0),
         sword_hand=V(9.0, -8.2, 5.0), sword_dir=V(0.72, -0.05, 0.69),
-        shield_pos=V(4.6, 6.4, -6.8), shield_dir=V(0.5, -0.82, 0.1),
+        shield_pos=shield_at(V(0.7, 0.4, 0.1), 9.2, 2.0, -6.4)[0], shield_dir=V(0.7, 0.4, 0.1),
         foot_L=(V(-5.0, HIP_SIDE, 0), -0.25), foot_R=(V(5.2, -HIP_SIDE, 0), 0.0),
         cape=(0.5, 2.0), plume=0.3,
     )),
     (0.55, 'out', pose(
         lean=0.3, twist=0.32, drop=2.6, head=(-0.12, 0.0),
         sword_hand=V(13.2, -7.4, -6.6), sword_dir=V(0.86, -0.02, -0.5),
-        shield_pos=V(1.4, 7.6, -7.4), shield_dir=V(0.3, -0.94, 0.1),
+        shield_pos=shield_at(V(0.45, 0.88, 0.1), 9.4, 0.5, -7.0)[0], shield_dir=V(0.45, 0.88, 0.1),
         foot_L=(V(-5.6, HIP_SIDE, 0), -0.35), foot_R=(V(6.0, -HIP_SIDE, 0), 0.0),
         cape=(0.75, 3.0), plume=0.5,
     )),
@@ -637,7 +648,7 @@ ATTACK_KEYS = [
     (0.74, 'smooth', pose(
         lean=0.24, twist=0.26, drop=2.2, head=(-0.1, 0.0),
         sword_hand=V(12.2, -7.8, -8.2), sword_dir=V(0.8, -0.05, -0.6),
-        shield_pos=V(2.4, 7.2, -7.2), shield_dir=V(0.4, -0.9, 0.1),
+        shield_pos=shield_at(V(0.55, 0.8, 0.1), 9.4, 0.8, -6.8)[0], shield_dir=V(0.55, 0.8, 0.1),
         foot_L=(V(-5.2, HIP_SIDE, 0), -0.2), foot_R=(V(5.8, -HIP_SIDE, 0), 0.0),
         cape=(0.4, 4.0), plume=0.2,
     )),
@@ -653,8 +664,8 @@ HIT_KEYS = [
     (0.0, 'out', pose()),
     (0.3, 'out', pose(
         move=V(-2.4, 0, 0), lean=-0.3, twist=-0.15, drop=1.6, head=(0.22, 0.0),
-        sword_hand=V(-4.0, -11.5, -7.0), sword_dir=V(0.2, -0.3, 0.93),
-        shield_pos=V(6.6, 2.0, -2.6), shield_dir=V(0.7, -0.6, 0.38),
+        sword_hand=V(1.0, -11.8, -6.0), sword_dir=V(0.38, -0.2, 0.9),
+        shield_pos=shield_at(V(0.85, -0.4, 0.35), 9.6, 3.0, -2.8)[0], shield_dir=V(0.85, -0.4, 0.35),
         foot_L=(V(-4.2, HIP_SIDE, 0), 0.0), foot_R=(V(1.2, -HIP_SIDE, 0), 0.25),
         cape=(0.4, 1.5), plume=-0.3,
     )),
@@ -671,7 +682,7 @@ def pose_block(_k=0.0):
     return pose(
         lean=0.16, twist=0.22, drop=2.0, head=(-0.1, 0.0),
         sword_hand=V(-4.6, -9.6, 1.2), sword_dir=V(-0.5, -0.12, 0.86),
-        shield_pos=V(10.6, 0.6, -2.8), shield_dir=V(0.9, -0.42, 0.1),
+        shield_pos=shield_at(V(0.93, -0.36, 0.08), 10.6, 1.6, -3.0)[0], shield_dir=V(0.93, -0.36, 0.08),
         foot_L=(V(-4.4, HIP_SIDE, 0), 0.0), foot_R=(V(4.2, -HIP_SIDE, 0), 0.0),
         cape=(0.12, 0.5),
     )
@@ -694,8 +705,8 @@ def pose_death(k):
         # 两臂摊开
         sword_hand=blend(REST['sword_hand'], V(-2.0, -15.0, 2.0), fall),
         sword_dir=blend(REST['sword_dir'], V(0.1, -0.9, 0.4), fall),
-        shield_pos=blend(REST['shield_pos'], V(1.0, 13.5, 1.0), fall),
-        shield_dir=blend(REST['shield_dir'], V(0.95, 0.2, 0.2), fall),
+        shield_pos=blend(REST['shield_pos'], V(1.8, 20.5, 0.5), fall),
+        shield_dir=blend(REST['shield_dir'], V(1.0, 0.05, 0.0), fall),
         foot_L=(blend(REST['foot_L'][0], V(1.0, HIP_SIDE + 2.2, 0.5), fall), 0.5 * fall),
         foot_R=(blend(REST['foot_R'][0], V(3.6, -HIP_SIDE - 2.6, 3.4 * math.sin(fall * math.pi) + 0.5), fall), 0.4 * fall),
         cape=(0.3 * stagger, 1.0),
